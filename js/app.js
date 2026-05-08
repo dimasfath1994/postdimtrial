@@ -1000,7 +1000,7 @@ document.getElementById("closeEnvPanel")?.addEventListener("click", () => {
 
 
 function initMonaco() {
-  require.config({ paths: { vs: "./node_modules/monaco-editor/min/vs" } });
+  require.config({ paths: { vs: "./lib/js/monaco-editor/min/vs" } });
 
   require(["vs/editor/editor.main"], function () {
 
