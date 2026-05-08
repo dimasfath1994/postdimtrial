@@ -1,12 +1,12 @@
-import { Tabs } from "./ui/tabs.js";
-import { RequestEngine } from "./core/request-engine.js";
-import { CollectionManager } from "./core/collection.js";
-import { Environment } from "./core/environment.js";
-import { ContextMenu } from "./ui/context-menu.js";
-import { Globals } from "./core/globals.js";
-import { createVariables } from "./core/variables.js";
-import { createPM } from "./core/pm-helpers.js";
-import { SyncService } from "./core/sync/sync-service.js";
+import { Tabs } from "ui/tabs.js";
+import { RequestEngine } from "core/request-engine.js";
+import { CollectionManager } from "core/collection.js";
+import { Environment } from "core/environment.js";
+import { ContextMenu } from "ui/context-menu.js";
+import { Globals } from "core/globals.js";
+import { createVariables } from "core/variables.js";
+import { createPM } from "core/pm-helpers.js";
+import { SyncService } from "core/sync/sync-service.js";
 
 // ================= UI =================
 const ui = {
@@ -1000,7 +1000,7 @@ document.getElementById("closeEnvPanel")?.addEventListener("click", () => {
 
 
 function initMonaco() {
-  require.config({ paths: { vs: "./node_modules/monaco-editor/min/vs" } });
+  require.config({ paths: { vs: "node_modules/monaco-editor/min/vs" } });
 
   require(["vs/editor/editor.main"], function () {
 

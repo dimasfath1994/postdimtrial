@@ -1,4 +1,4 @@
-import { Environment } from "./environment.js";
+import { Environment } from "environment.js";
 
 export class EnvResolver {
 
