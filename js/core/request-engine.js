@@ -1,4 +1,4 @@
-import { EnvResolver } from "env-resolver.js";
+import { EnvResolver } from "./env-resolver.js";
 
 export class RequestEngine {
 
