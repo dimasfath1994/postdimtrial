@@ -7,6 +7,7 @@ import { Globals } from "./core/globals.js";
 import { createVariables } from "./core/variables.js";
 import { createPM } from "./core/pm-helpers.js";
 import { SyncService } from "./core/sync/sync-service.js";
+import { exportPostmanCollection } from "./core/exporters/postman-exporter.js";
 
 // ================= UI =================
 const ui = {
@@ -23,6 +24,8 @@ const ui = {
 
   tabsEl: document.getElementById("tabs"),
   newTab: document.getElementById("newTab"),
+
+  addRequest: document.getElementById("addRequest"),
 
   headersBox: document.getElementById("headersBox"),
   addHeader: document.getElementById("addHeader"),
@@ -55,6 +58,7 @@ const sync = new SyncService({
 let viewMode = "tree";
 let lastResponse = null;
 let activeCollectionId = null;
+let expandedCollections = {};
 let syncTimer = null;
 let runtimeVariables = null;
 let preEditor = null;
@@ -212,16 +216,58 @@ function renderResponse(res, time) {
 
 // ================= COLLECTION =================
 function renderCollections() {
+
   ui.collectionList.innerHTML = "";
 
   collections.getCollections().forEach(col => {
+
+    const wrap = document.createElement("div");
+
+    // ================= COLLECTION HEADER =================
+
     const div = document.createElement("div");
     div.className = "collection";
-    div.textContent = col.name;
 
-    div.onclick = () => {
-      activeCollectionId = col.id;
-    };
+    const expanded = expandedCollections[col.id];
+
+    div.innerHTML = `
+      <span>${expanded ? "▼" : "▶"}</span>
+      <span>${col.name}</span>
+    `;
+
+    div.style.display = "flex";
+    div.style.alignItems = "center";
+    div.style.gap = "6px";
+
+    // ================= CLICK =================
+
+   div.onclick = () => {
+
+  const isSameCollection =
+    activeCollectionId === col.id;
+
+  // expand/collapse ONLY
+  if (isSameCollection) {
+    expandedCollections[col.id] =
+      !expandedCollections[col.id];
+
+    renderCollections();
+    return;
+  }
+
+  // save current collection
+  saveActiveCollectionState();
+
+  // load clicked collection
+  loadCollectionState(col.id);
+
+  // auto expand collection yg dibuka
+  expandedCollections[col.id] = true;
+
+  renderCollections();
+};
+
+    // ================= CONTEXT MENU =================
 
     div.oncontextmenu = (e) => {
       e.preventDefault();
@@ -243,18 +289,127 @@ function renderCollections() {
             collections.deleteCollection(col.id);
             renderCollections();
           }
+        },
+        {
+          label: "Export Postman",
+          action: () => {
+            exportCollectionAsPostman(col.id);
+          }
         }
       ]);
     };
 
-    ui.collectionList.appendChild(div);
-  });
-}
+    wrap.appendChild(div);
 
-ui.newCollection.onclick = () => {
-  collections.createCollection("Collection " + Date.now());
-  renderCollections();
-};
+    // ================= REQUEST LIST =================
+
+    if (expanded && col.tabs?.length) {
+
+      const reqWrap = document.createElement("div");
+
+      reqWrap.style.marginLeft = "18px";
+      reqWrap.style.marginTop = "4px";
+
+      col.tabs.forEach(tab => {
+
+        const req = document.createElement("div");
+
+        req.className = "collection-request";
+
+        req.textContent =
+          `${tab.method || "GET"} ${tab.name}`;
+
+        req.style.fontSize = "12px";
+        req.style.padding = "4px 6px";
+        req.style.opacity = ".8";
+        req.style.cursor = "pointer";
+
+        req.onclick = (e) => {
+
+            e.stopPropagation();
+
+            saveActiveCollectionState();
+
+            loadCollectionState(col.id);
+
+            tabs.setActive(tab.id);
+
+            renderCollections();
+          };
+
+          req.oncontextmenu = (e) => {
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            ctx.show(e.clientX, e.clientY, [
+              {
+                label: "Rename",
+                action: () => {
+
+                  const name = prompt("Rename tab:");
+
+                  if (name) {
+                    tabs.rename(tab, name);
+
+                    saveActiveCollectionState();
+                    renderCollections();
+                  }
+                }
+              },
+              {
+                label: "Duplicate",
+                action: () => {
+
+                  tabs.duplicate(tab);
+
+                  saveActiveCollectionState();
+                  renderCollections();
+                }
+              },
+              {
+                label: tab.pinned ? "Unpin" : "Pin",
+                action: () => {
+
+                  tabs.togglePin(tab);
+
+                  saveActiveCollectionState();
+                  renderCollections();
+                }
+              },
+              {
+                label: "Close",
+                action: () => {
+
+                  tabs.close(tab.id);
+
+                  saveActiveCollectionState();
+                  renderCollections();
+                }
+              },
+              {
+                label: "Delete",
+                action: () => {
+
+                  tabs.delete(tab.id);
+
+                  saveActiveCollectionState();
+                  renderCollections();
+                }
+              }
+            ]);
+          };
+
+        reqWrap.appendChild(req);
+      });
+
+      wrap.appendChild(reqWrap);
+    }
+
+    ui.collectionList.appendChild(wrap);
+  });
+  
+}
 
 // ================= HEADERS =================
 function renderHeaders() {
@@ -350,9 +505,22 @@ ui.addEnv?.addEventListener("click", () => {
 
     if (k) {
         Environment.set(k, v);
+        saveActiveCollectionEnv();
         renderEnvViewer(); // 🔥 penting
     }
 });
+function saveActiveCollectionEnv() {
+  const active = collections
+    .getCollections()
+    .find(c => c.id === activeCollectionId);
+
+  if (!active) return;
+
+  active.environment = structuredClone(
+    Environment.getAll()
+  );
+  collections.save?.();
+}
 
 // ================= VIEW TOGGLE =================
 ui.viewToggle?.addEventListener("click", (e) => {
@@ -476,12 +644,114 @@ ui.tabsEl?.addEventListener("contextmenu", (e) => {
     {
       label: "Close",
       action: () => tabs.close(tab.id)
+    },
+    {
+      label: "Delete",
+      action: () => {
+        tabs.delete(tab.id);
+        saveActiveCollectionState();
+        renderCollections();
+      }
     }
   ]);
 });
 
+
+function saveActiveCollectionState() {
+
+  const active = collections
+    .getCollections()
+    .find(c => c.id === activeCollectionId);
+
+  if (!active) return;
+
+  active.tabs = structuredClone(tabs.tabs);
+  active.activeTabId = tabs.activeId;
+  active.environment = structuredClone(Environment.getAll());
+
+  collections.save?.();
+}
+function loadCollectionState(collectionId) {
+
+  const col = collections
+    .getCollections()
+    .find(c => c.id === collectionId);
+
+  if (!col) return;
+
+  if (!col.tabs) col.tabs = [];
+  if (!col.environment) col.environment = {};
+
+  activeCollectionId = col.id;
+
+  // restore tabs
+  tabs.tabs = structuredClone(col.tabs);
+  tabs.activeId = col.activeTabId;
+
+  tabs.render();
+  tabs.syncForm();
+
+  // restore env
+  Environment.clear?.();
+
+  Object.entries(col.environment).forEach(([k, v]) => {
+    Environment.set(k, v);
+  });
+
+  renderEnvViewer();
+
+  renderParams();
+  renderHeaders();
+  renderScripts();
+}
+ui.newCollection.onclick = () => {
+
+  // save current collection dulu
+  saveActiveCollectionState();
+
+  // create collection baru
+  const col = collections.createCollection(
+    "Collection " + Date.now()
+  );
+
+  // set active
+  activeCollectionId = col.id;
+
+  // init kosong
+  col.tabs = [];
+  col.activeTabId = null;
+  col.environment = {};
+
+  // reset workspace
+  tabs.tabs = [];
+  tabs.activeId = null;
+
+  Environment.clear?.();
+
+  collections.save?.();
+
+  tabs.render();
+  tabs.syncForm();
+
+  renderEnvViewer();
+  renderCollections();
+};
+
 ui.newTab?.addEventListener("click", () => {
+
+  saveActiveCollectionState();
+
   tabs.create();
+
+  saveActiveCollectionState();
+});
+ui.addRequest?.addEventListener("click", () => {
+
+  saveActiveCollectionState();
+
+  tabs.create();
+
+  saveActiveCollectionState();
 });
 
 ui.method?.addEventListener("change", scheduleSync);
@@ -816,14 +1086,31 @@ function getParams() {
 const originalSetActive = tabs.setActive.bind(tabs);
 
 tabs.setActive = (id) => {
-  originalSetActive(id);
 
-  const params = getParams();
+  // save current dulu
+  saveActiveCollectionState();
+
+  // cari collection pemilik tab
+  const owner = collections
+    .getCollections()
+    .find(c =>
+      c.tabs?.some(t => t.id === id)
+    );
+
+  // kalau beda collection → load env collection tsb
+  if (owner && owner.id !== activeCollectionId) {
+    loadCollectionState(owner.id);
+  }
+
+  originalSetActive(id);
 
   renderParams();
   renderHeaders();
-  syncScriptToTab(); 
+
+  syncScriptToTab();
   renderScripts();
+
+  saveActiveCollectionState();
 };
 
 function buildFinalHeaders() {
@@ -909,9 +1196,11 @@ function renderEnvViewer() {
     `;
 
     // update value
-    row.querySelector(".v").oninput = (e) => {
-      Environment.set(key, e.target.value);
-    };
+row.querySelector(".v").oninput = (e) => {
+  Environment.set(key, e.target.value);
+
+  saveActiveCollectionEnv();
+};
 
     // rename key
     row.querySelector(".k").onblur = (e) => {
@@ -922,13 +1211,14 @@ function renderEnvViewer() {
 
       Environment.set(newKey, val);
       Environment.remove(key); // 🔥 FIX IMPORTANT
-
+      saveActiveCollectionEnv();
       renderEnvViewer();
     };
 
     // delete
     row.querySelector(".del").onclick = () => {
       Environment.remove(key);
+       saveActiveCollectionEnv();
       renderEnvViewer();
     };
 
@@ -1128,4 +1418,39 @@ function pushSync() {
     collections: collections.getCollections(),
     environment: Environment.getAll()
   });
+}
+
+function downloadJSON(data, filename) {
+
+  const blob = new Blob(
+    [JSON.stringify(data, null, 2)],
+    { type: "application/json" }
+  );
+
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = filename;
+
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+function exportCollectionAsPostman(collectionId) {
+
+  const collection = collections
+    .getCollections()
+    .find(c => c.id === collectionId);
+
+  if (!collection) return;
+
+  const data =
+    exportPostmanCollection(collection);
+
+  downloadJSON(
+    data,
+    `${collection.name}.postman_collection.json`
+  );
 }

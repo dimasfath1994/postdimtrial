@@ -21,6 +21,18 @@ export class Tabs {
     this.commit();
     this.setActive(tab.id);
   }
+  delete(tabId) {
+
+  this.tabs = this.tabs.filter(t => t.id !== tabId);
+
+  if (this.activeId === tabId) {
+    this.activeId = this.tabs[0]?.id || null;
+  }
+
+  this.save();
+  this.render();
+  this.syncForm();
+}
 
   _createDefaultTab() {
     return {
