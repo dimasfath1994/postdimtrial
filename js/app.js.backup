@@ -9,11 +9,16 @@ import { createPM } from "./core/pm-helpers.js";
 import { SyncService } from "./core/sync/sync-service.js";
 import { exportPostmanCollection } from "./core/exporters/postman-exporter.js";
 import { importPostmanCollection } from "./core/importers/postman-importer.js";
+import { Auth } from "./auth.js";
+import { AppMode } from "./core/app-mode.js";
+
+import { initWorkspaceUI } from "./collab/workspace-ui.js";
+import { Workspace } from "./collab/workspace.js";
+import { WorkspaceService } from "./collab/workspace-service.js";
 
 
-
-
-
+AppMode.load();
+initWorkspaceUI();
 // ================= UI =================
 const ui = {
   method: document.getElementById("method"),
@@ -50,21 +55,213 @@ const ui = {
   exportBtn: document.getElementById("exportBtn"),
   importFile: document.getElementById("importFile")
 };
+
+let isApplyingRemoteState = false;
+const userBar = document.getElementById("collabUserBar");
+const userEmail = document.getElementById("collabUserEmail");
 const bodyMode = document.getElementById("bodyMode");
-
-// ================= STATE =================
-const APP_STATE = {
-  collabMode: false
+const collabBtn = document.getElementById("collabModeBtn");
+const logoutBtn = document.getElementById("collabLogoutBtn");
+function isCollabMode() {
+  return CollabState.enabled && Auth.isLoggedIn?.();
+}
+const CollabState = {
+  enabled: false,
+  workspaceId: null,
+  user: null
 };
-const tabs = new Tabs(ui);
-const collections = new CollectionManager();
-const ctx = new ContextMenu();
+logoutBtn?.addEventListener("click", () => {
 
+  Auth.logout?.();
+
+  CollabState.enabled = false;
+  CollabState.workspaceId = null;
+
+  userBar.style.display = "none";
+  logoutBtn.style.display = "none";
+
+  collabBtn.textContent = "Collaboration Mode";
+
+  // optional cleanup UI state
+  tabs.tabs = [];
+  tabs.activeId = null;
+
+  collections.clear?.();
+  Environment.clear?.();
+
+  window.location.href = "/login.html";
+});
+document.getElementById("collabModeBtn")?.addEventListener("click", () => {
+
+  if (!Auth.isLoggedIn()) {
+    window.location.href = "/login.html";
+    return;
+  }
+
+  initAuthUI();
+  enableCollabMode();
+});
 const sync = new SyncService({
   onUpdate: (data) => {
     applyRemoteState(data);
   }
 });
+const originalSend = sync.send.bind(sync);
+
+// ===== INIT AUTH STATE =====
+function initAuthUI() {
+
+  const token = Auth.token;
+
+  if (!token) {
+    userBar.style.display = "none";
+    return;
+  }
+
+  userBar.style.display = "block";
+  userEmail.textContent = "Logged in (collab mode)";
+}
+collabBtn.onclick = () => {
+
+  if (!Auth.isLoggedIn()) {
+    window.location.href = "/login.html";
+    return;
+  }
+
+  if (CollabState.enabled) {
+    console.log("Already in collab mode");
+    return;
+  }
+
+  enableCollabMode();
+};
+logoutBtn.onclick = () => {
+
+  Auth.clear?.();
+
+  CollabState.enabled = false;
+
+  logoutBtn.style.display = "none";
+
+  collabBtn.textContent = "Collaboration Mode";
+
+  window.location.href = "/login.html";
+};
+function safeSync() {
+  if (!CollabState.enabled) return;
+  if (!Auth.isLoggedIn()) return;
+  if (isApplyingRemoteState) return;
+
+  clearTimeout(syncTimer);
+
+  syncTimer = setTimeout(() => {
+    pushSync();
+  }, 250);
+}
+
+async function initCollabFromAuth() {
+
+  const token = Auth.token;
+
+  if (!token) return;
+
+  await enableCollabMode();
+}
+async function enableCollabMode() {
+
+  if (CollabState.enabled) return;
+
+  CollabState.enabled = true;
+
+  const logoutBtn = document.getElementById("collabLogoutBtn");
+  const collabBtn = document.getElementById("collabModeBtn");
+
+  if (logoutBtn) {
+    logoutBtn.style.display = "inline-block";
+  }
+
+  if (collabBtn) {
+    collabBtn.textContent = "Collaboration Mode (ON)";
+  }
+
+  enableCollabModeUI();
+
+  tabs.tabs = [];
+  tabs.activeId = null;
+
+  collections.clear?.();
+  Environment.clear?.();
+
+  await loadInitialWorkspace();
+}
+async function loadInitialWorkspace() {
+
+  try {
+
+    const list =
+      await WorkspaceService.getMyWorkspaces();
+
+    // belum punya workspace
+    if (!list.length) {
+
+      const ws =
+        await WorkspaceService.createWorkspace(
+          "My Workspace"
+        );
+
+      APP_STATE.workspaceId = ws.id;
+      APP_STATE.workspace = ws;
+
+      await loadWorkspace(ws.id);
+
+      return;
+    }
+
+    // ambil workspace pertama
+    const first = list[0];
+
+    APP_STATE.workspaceId = first.id;
+
+    await loadWorkspace(first.id);
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+async function loadWorkspace(id) {
+
+  try {
+
+    const ws =
+      await WorkspaceService.getWorkspace(id);
+
+    APP_STATE.workspace = ws;
+
+    const data = ws.data || {};
+
+    applyRemoteState(data);
+
+    console.log("[Workspace Loaded]", ws.name);
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+function enableCollabModeUI() {
+  document.body.classList.add("collab-mode");
+
+  console.log("Collab mode enabled");
+}
+
+// ================= STATE =================
+const APP_STATE = {
+  collabMode: false,
+  workspaceId: null,
+  workspace: null
+};
+const tabs = new Tabs(ui);
+const collections = new CollectionManager();
+const ctx = new ContextMenu();
 
 let viewMode = "tree";
 let lastResponse = null;
@@ -76,39 +273,45 @@ let preEditor = null;
 let postEditor = null;
 
 
-
-document.getElementById("collabModeBtn").onclick = () => {
-  APP_STATE.collabMode = true;
-
-  // sementara: arahkan ke login page
-  window.location.href = "/login.html";
-};
-
 function applyRemoteState(data) {
   if (!data) return;
 
-  // tabs
-  if (data.tabs) {
-    tabs.tabs = data.tabs;
-    tabs.save();
-    tabs.render();
-    tabs.syncForm();
-  }
+  isApplyingRemoteState = true;
 
-  // collections
-  if (data.collections) {
-    collections.importWorkspace(JSON.stringify({
-      collections: data.collections
-    }));
-    renderCollections();
-  }
+  try {
 
-  // env
-  if (data.environment) {
-    Object.entries(data.environment).forEach(([k, v]) => {
-      Environment.set(k, v);
-    });
-    renderEnvViewer();
+    // tabs
+    if (Array.isArray(data.tabs)) {
+      tabs.tabs = structuredClone(data.tabs);
+      tabs.activeId = data.activeId || data.tabs[0]?.id || null;
+
+      tabs.render();
+      tabs.syncForm();
+    }
+
+    // collections
+    if (Array.isArray(data.collections)) {
+      collections.importWorkspace(JSON.stringify({
+        collections: data.collections
+      }));
+
+      renderCollections();
+    }
+
+    // env
+    if (data.environment) {
+
+      Environment.clear?.();
+
+      Object.entries(data.environment).forEach(([k, v]) => {
+        Environment.set(k, v);
+      });
+
+      renderEnvViewer();
+    }
+
+  } finally {
+    isApplyingRemoteState = false;
   }
 }
 
@@ -213,7 +416,10 @@ function renderResponse(res, time) {
     return;
   }
 
-  lastResponse = { data: res.data, time };
+  lastResponse = {
+  data: structuredClone(res.data),
+  time
+};
 
   const meta = document.createElement("div");
   meta.style.fontSize = "12px";
@@ -262,8 +468,8 @@ function renderCollections() {
 
    div.onclick = () => {
 
-  const isSameCollection =
-    activeCollectionId === col.id;
+const isSameCollection =
+  String(activeCollectionId) === String(col.id);
 
   // expand/collapse ONLY
   if (isSameCollection) {
@@ -294,18 +500,36 @@ function renderCollections() {
       ctx.show(e.clientX, e.clientY, [
         {
           label: "Rename",
-          action: () => {
+          action: async () => {
+
             const name = prompt("Collection name:");
-            if (name) {
+            if (!name) return;
+
+            if (isCollabMode()) {
+
+              await CollectionAPI.update(col.id, {
+                name
+              });
+
+              col.name = name;
+
+            } else {
+
               collections.renameCollection(col.id, name);
-              renderCollections();
+
             }
+
+            commitState();
+            renderCollections();
           }
         },
         {
           label: "Delete",
-          action: () => {
-            collections.deleteCollection(col.id);
+          action: async () => {
+            // collections.deleteCollection(col.id);
+            await CollectionAPI.delete(id);
+
+            collections.deleteCollection(id);
             renderCollections();
           }
         },
@@ -361,62 +585,110 @@ function renderCollections() {
             e.preventDefault();
             e.stopPropagation();
 
-            ctx.show(e.clientX, e.clientY, [
-              {
-                label: "Rename",
-                action: () => {
+           ctx.show(e.clientX, e.clientY, [
 
-                  const name = prompt("Rename tab:");
+                {
+                  label: "Rename",
 
-                  if (name) {
+                  action: async () => {
+
+                    const name = prompt("Rename tab:");
+
+                    if (!name) return;
+
                     tabs.rename(tab, name);
 
+                    tabs.syncTab?.();
+
                     saveActiveCollectionState();
+
+                    commitState();
+
+                    tabs.render();
                     renderCollections();
+
+                    if (isCollabMode()) {
+                      await pushSync();
+                    }
+                  }
+                },
+
+                {
+                  label: "Duplicate",
+
+                  action: async () => {
+
+                    tabs.duplicate(tab);
+
+                    saveActiveCollectionState();
+
+                    commitState();
+
+                    renderCollections();
+
+                    if (isCollabMode()) {
+                      await pushSync();
+                    }
+                  }
+                },
+
+                {
+                  label: tab.pinned ? "Unpin" : "Pin",
+
+                  action: async () => {
+
+                    tabs.togglePin(tab);
+
+                    saveActiveCollectionState();
+
+                    commitState();
+
+                    renderCollections();
+
+                    if (isCollabMode()) {
+                      await pushSync();
+                    }
+                  }
+                },
+
+                {
+                  label: "Close",
+
+                  action: async () => {
+
+                    tabs.close(tab.id);
+
+                    saveActiveCollectionState();
+
+                    commitState();
+
+                    renderCollections();
+
+                    if (isCollabMode()) {
+                      await pushSync();
+                    }
+                  }
+                },
+
+                {
+                  label: "Delete",
+
+                  action: async () => {
+
+                    tabs.delete(tab.id);
+
+                    saveActiveCollectionState();
+
+                    commitState();
+
+                    renderCollections();
+
+                    if (isCollabMode()) {
+                      await pushSync();
+                    }
                   }
                 }
-              },
-              {
-                label: "Duplicate",
-                action: () => {
-
-                  tabs.duplicate(tab);
-
-                  saveActiveCollectionState();
-                  renderCollections();
-                }
-              },
-              {
-                label: tab.pinned ? "Unpin" : "Pin",
-                action: () => {
-
-                  tabs.togglePin(tab);
-
-                  saveActiveCollectionState();
-                  renderCollections();
-                }
-              },
-              {
-                label: "Close",
-                action: () => {
-
-                  tabs.close(tab.id);
-
-                  saveActiveCollectionState();
-                  renderCollections();
-                }
-              },
-              {
-                label: "Delete",
-                action: () => {
-
-                  tabs.delete(tab.id);
-
-                  saveActiveCollectionState();
-                  renderCollections();
-                }
-              }
-            ]);
+              ]);
           };
 
         reqWrap.appendChild(req);
@@ -463,14 +735,14 @@ function renderHeaders() {
     // ❌ delete
     row.querySelector("button").onclick = () => {
       delete headers[key];
-      tabs.save();
+      commitState();
       renderHeaders();
     };
 
     // ✅ toggle
     row.querySelector(".en").onchange = (e) => {
       item.enabled = e.target.checked;
-      tabs.save();
+      commitState();
     };
 
     // ✅ rename key
@@ -483,14 +755,14 @@ function renderHeaders() {
       delete headers[key];
       headers[newKey] = val;
 
-      tabs.save();
+      commitState();
       renderHeaders();
     };
 
     // ✅ value update
     row.querySelector(".v").oninput = (e) => {
       item.value = e.target.value;
-      tabs.save();
+      commitState();
     };
 
     box.appendChild(row);
@@ -526,6 +798,7 @@ ui.addEnv?.addEventListener("click", () => {
         Environment.set(k, v);
         saveActiveCollectionEnv();
         renderEnvViewer(); // 🔥 penting
+        commitState();
     }
 });
 function saveActiveCollectionEnv() {
@@ -538,7 +811,7 @@ function saveActiveCollectionEnv() {
   active.environment = structuredClone(
     Environment.getAll()
   );
-  collections.save?.();
+  commitState();
 }
 
 // ================= VIEW TOGGLE =================
@@ -565,7 +838,7 @@ ui.send.onclick = async () => {
     // ================= SYNC FIRST (WAJIB DI ATAS) =================
     syncScriptToTab();
     tabs.syncTab();
-    tabs.save();
+    commitState();
 
     const runtimeVariables = createVariables();
 
@@ -678,44 +951,122 @@ if (tabBody?.mode === "urlencoded") {
 
 // ================= TAB CONTEXT MENU FIX =================
 ui.tabsEl?.addEventListener("contextmenu", (e) => {
+
   const tabEl = e.target.closest(".tab");
   if (!tabEl) return;
 
   e.preventDefault();
 
   const id = Number(tabEl.dataset.id);
-  const tab = tabs.tabs.find(t => t.id === id);
+
+  const tab =
+    tabs.tabs.find(t => t.id === id);
+
   if (!tab) return;
 
   ctx.show(e.clientX, e.clientY, [
+
     {
       label: "Rename",
-        action: () => {
-            const name = prompt("Rename tab:");
-            if (name) {
-                tabs.rename(tab, name);
-                tabs.render();
-            }
+
+      action: async () => {
+
+        const name = prompt("Rename tab:");
+
+        if (!name) return;
+
+        tabs.rename(tab, name);
+
+        // save current collection snapshot
+        saveActiveCollectionState();
+
+        // persist local/collab
+        commitState();
+
+        // rerender
+        tabs.render();
+        renderCollections();
+
+        // collab sync
+        if (isCollabMode()) {
+          await pushSync();
         }
+      }
     },
+
     {
       label: "Duplicate",
-      action: () => tabs.duplicate(tab)
+
+      action: async () => {
+
+        tabs.duplicate(tab);
+
+        saveActiveCollectionState();
+
+        commitState();
+
+        renderCollections();
+
+        if (isCollabMode()) {
+          await pushSync();
+        }
+      }
     },
+
     {
       label: tab.pinned ? "Unpin" : "Pin",
-      action: () => tabs.togglePin(tab)
+
+      action: async () => {
+
+        tabs.togglePin(tab);
+
+        saveActiveCollectionState();
+
+        commitState();
+
+        renderCollections();
+
+        if (isCollabMode()) {
+          await pushSync();
+        }
+      }
     },
+
     {
       label: "Close",
-      action: () => tabs.close(tab.id)
+
+      action: async () => {
+
+        tabs.close(tab.id);
+
+        saveActiveCollectionState();
+
+        commitState();
+
+        renderCollections();
+
+        if (isCollabMode()) {
+          await pushSync();
+        }
+      }
     },
+
     {
       label: "Delete",
-      action: () => {
+
+      action: async () => {
+
         tabs.delete(tab.id);
+
         saveActiveCollectionState();
+
+        commitState();
+
         renderCollections();
+
+        if (isCollabMode()) {
+          await pushSync();
+        }
       }
     }
   ]);
@@ -733,8 +1084,7 @@ function saveActiveCollectionState() {
   active.tabs = structuredClone(tabs.tabs);
   active.activeTabId = tabs.activeId;
   active.environment = structuredClone(Environment.getAll());
-
-  collections.save?.();
+   commitState(); 
 }
 function loadCollectionState(collectionId) {
 
@@ -759,9 +1109,9 @@ function loadCollectionState(collectionId) {
   // restore env
   Environment.clear?.();
 
-  Object.entries(col.environment).forEach(([k, v]) => {
-    Environment.set(k, v);
-  });
+Object.entries(col.environment).forEach(([k, v]) => {
+  Environment.set(k, v);
+});
 
   renderEnvViewer();
 
@@ -769,31 +1119,39 @@ function loadCollectionState(collectionId) {
   renderHeaders();
   renderScripts();
 }
-ui.newCollection.onclick = () => {
+ui.newCollection.onclick = async () => {
 
-  // save current collection dulu
   saveActiveCollectionState();
 
-  // create collection baru
-  const col = collections.createCollection(
-    "Collection " + Date.now()
-  );
+  let col;
 
-  // set active
+  // ===== COLLAB =====
+  if (isCollabMode()) {
+
+    col = await CollectionAPI.create({
+      workspace_id: APP_STATE.workspaceId,
+      name: "Collection"
+    });
+
+  } else {
+
+    // ===== LOCAL =====
+    col = collections.createCollection("Collection");
+
+  }
+
   activeCollectionId = col.id;
 
-  // init kosong
   col.tabs = [];
   col.activeTabId = null;
   col.environment = {};
 
-  // reset workspace
   tabs.tabs = [];
   tabs.activeId = null;
 
   Environment.clear?.();
 
-  collections.save?.();
+  commitState();
 
   tabs.render();
   tabs.syncForm();
@@ -829,10 +1187,17 @@ ui.postScript = document.getElementById("postScript");
 
 
 function scheduleSync() {
+
   clearTimeout(syncTimer);
 
   syncTimer = setTimeout(() => {
+
     tabs.syncTab();
+
+    if (isCollabMode()) {
+      commitState();
+    }
+
   }, 300);
 }
 
@@ -929,9 +1294,18 @@ function importWorkspace(file) {
                     }
                 }));
         }
-       const firstId = tabs.tabs[0]?.id;
-       tabs.activeId = tabs.tabs.find(t => t.id === data.activeId)?.id || firstId;
-        tabs.save();
+        const firstId = tabs.tabs[0]?.id || null;
+
+        const activeExists = tabs.tabs.some(
+          t => t.id === data.activeId
+        );
+
+        tabs.activeId = activeExists
+          ? data.activeId
+          : firstId;
+        
+        commitState
+        commitState();
         tabs.render();
         tabs.syncForm();
       }
@@ -949,6 +1323,7 @@ function importWorkspace(file) {
         Environment.clear?.(); // kalau kamu punya
         Object.entries(data.environment).forEach(([k, v]) => {
           Environment.set(k, v);
+          commitState();
         });
       }
 
@@ -1007,9 +1382,31 @@ export function detectFormat(data) {
   return "unknown";
 }
 
-function buildUrlWithParams(url, params) {
-  const query = new URLSearchParams(params).toString();
-  return query ? `${url}?${query}` : url;
+function buildUrlWithParams(url, params = {}) {
+
+  try {
+
+    const u = new URL(url);
+
+    Object.entries(params).forEach(([k, v]) => {
+
+      if (v === undefined || v === null || v === "") {
+        return;
+      }
+
+      u.searchParams.set(k, v);
+    });
+
+    return u.toString();
+
+  } catch {
+
+    const query = new URLSearchParams(params).toString();
+
+    return query
+      ? `${url}?${query}`
+      : url;
+  }
 }
 
 
@@ -1033,7 +1430,7 @@ document.querySelectorAll(".body-tab").forEach(btn => {
 
     tab.body.mode = mode;
 
-    tabs.save();
+    commitState();
 
     renderBodyUI(tab.body);
 
@@ -1097,14 +1494,14 @@ function renderParams() {
 
     row.querySelector("button").onclick = () => {
       delete params[key];
-      tabs.save();
+      commitState();
       renderParams();
       updateURLWithParams();
     };
 
     row.querySelector(".en").onchange = (e) => {
       item.enabled = e.target.checked;
-      tabs.save();
+      commitState();
       updateURLWithParams();
     };
 
@@ -1117,7 +1514,7 @@ function renderParams() {
         delete params[key];
         params[newKey] = val;
 
-        tabs.save();
+        commitState();
         renderParams();
         updateURLWithParams();
     };
@@ -1130,13 +1527,13 @@ function renderParams() {
 
     row.querySelector(".v").oninput = (e) => {
       item.value = e.target.value;
-      tabs.save();
+      commitState();
       updateURLWithParams();
     };
 
     row.querySelector(".d").oninput = (e) => {
       item.desc = e.target.value;
-      tabs.save();
+      commitState();
     };
 
     box.appendChild(row);
@@ -1151,7 +1548,7 @@ ui.addHeader?.addEventListener("click", () => {
     enabled: true
   };
 
-  tabs.save();
+  commitState();
   renderHeaders();
 });
 
@@ -1164,7 +1561,7 @@ document.getElementById("addParam")?.addEventListener("click", () => {
     enabled: true
   };
 
-  tabs.save();
+  commitState();
   renderParams();
 });
 
@@ -1177,34 +1574,61 @@ ui.authValue?.addEventListener("input", () => {
 });
 
 function updateURLWithParams() {
+
   const urlInput = document.getElementById("url");
   const params = getParams();
 
   if (!urlInput) return;
 
   try {
-    const raw = urlInput.value.split("?")[0]; // 🔥 penting: buang query lama
-    if (!raw) return;
+
+    const raw = urlInput.value.split("?")[0];
 
     const url = new URL(raw);
 
     Object.entries(params).forEach(([k, item]) => {
+
       if (!item.enabled) return;
       if (!k) return;
-      if (!item.value) return;
 
-      url.searchParams.set(k, item.value);
+      url.searchParams.delete(k);
+
+      if (item.value !== "") {
+        url.searchParams.set(k, item.value);
+      }
     });
 
     urlInput.value = url.toString();
 
     const tab = tabs.getActive();
+
     if (tab) {
       tab.url = urlInput.value;
-      tabs.save(); // 🔥 WAJIB biar persist
+      commitState();
     }
 
-  } catch {}
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+let persistTimer = null;
+
+function persistState() {
+
+  clearTimeout(persistTimer);
+
+  persistTimer = setTimeout(async () => {
+
+    if (isCollabMode()) {
+      await pushSync();
+      return;
+    }
+
+    tabs.save?.();
+    collections.save?.();
+
+  }, 150);
 }
 
 function getParams() {
@@ -1219,17 +1643,15 @@ const originalSetActive = tabs.setActive.bind(tabs);
 
 tabs.setActive = (id) => {
 
-  // save current dulu
+  const active = tabs.tabs.find(t => t.id === id);
+  if (!active) return;
+
   saveActiveCollectionState();
 
-  // cari collection pemilik tab
   const owner = collections
     .getCollections()
-    .find(c =>
-      c.tabs?.some(t => t.id === id)
-    );
+    .find(c => c.tabs?.some(t => t.id === id));
 
-  // kalau beda collection → load env collection tsb
   if (owner && owner.id !== activeCollectionId) {
     loadCollectionState(owner.id);
   }
@@ -1238,11 +1660,15 @@ tabs.setActive = (id) => {
 
   renderParams();
   renderHeaders();
-
-  syncScriptToTab();
   renderScripts();
 
+  syncScriptToTab();
+
   saveActiveCollectionState();
+
+  if (isCollabMode()) {
+    commitState();
+  }
 };
 
 function buildFinalHeaders() {
@@ -1359,21 +1785,28 @@ row.querySelector(".v").oninput = (e) => {
 }
 
 function resolveVars(str) {
-  if (!str) return str;
+
+  if (typeof str !== "string") return str;
 
   return str.replace(/{{(.*?)}}/g, (_, key) => {
+
     key = key.trim();
 
     const sources = [
-        Environment.get.bind(Environment),
-        Globals.get.bind(Globals),
-        (k) => runtimeVariables?.get?.(k)
+      Environment.get.bind(Environment),
+      Globals.get.bind(Globals),
+      (k) => runtimeVariables?.get?.(k)
     ];
 
     for (const get of sources) {
-        const val = get?.(key);
-        if (val !== undefined && val !== null) return val;
+
+      const val = get?.(key);
+
+      if (val !== undefined && val !== null) {
+        return String(val);
+      }
     }
+
     return "";
   });
 }
@@ -1391,22 +1824,6 @@ function renderScripts() {
     postEditor.setValue(tab.scripts.post || "");
   }
 }
-
-preEditor?.onDidChangeModelContent(() => {
-  const tab = tabs.getActive();
-  if (!tab) return;
-
-  tab.scripts.pre = preEditor.getValue();
-  tabs.save();
-});
-
-postEditor?.onDidChangeModelContent(() => {
-  const tab = tabs.getActive();
-  if (!tab) return;
-
-  tab.scripts.post = postEditor.getValue();
-  tabs.save();
-});
 
 
 const envPanel = document.getElementById("envPanel");
@@ -1517,7 +1934,15 @@ function syncScriptToTab() {
   if (preEditor) tab.scripts.pre = preEditor.getValue() || "";
   if (postEditor) tab.scripts.post = postEditor.getValue() || "";
 
-  tabs.save();
+commitState();
+}
+
+function commitState() {
+  persistState();
+
+  if (isCollabMode()) {
+    safeSync();
+  }
 }
 
 function bindMonacoAutoSave() {
@@ -1529,7 +1954,7 @@ function bindMonacoAutoSave() {
     tab.scripts ||= { pre: "", post: "" };
     tab.scripts.pre = preEditor.getValue();
 
-    tabs.save();
+commitState();
   });
 
   postEditor?.onDidChangeModelContent(() => {
@@ -1539,18 +1964,70 @@ function bindMonacoAutoSave() {
     tab.scripts ||= { pre: "", post: "" };
     tab.scripts.post = postEditor.getValue();
 
-    tabs.save();
+commitState();
   });
+}
+// function pushSync() {
+//   if (!CollabState.enabled) return;
+
+//   sync.send({
+//     workspaceId: CollabState.workspaceId,
+//     tabs: tabs.tabs,
+//     activeId: tabs.activeId,
+//     collections: collections.getCollections(),
+//     environment: Environment.getAll()
+//   });
+// }
+document.getElementById("inviteBtn")
+?.addEventListener("click", async () => {
+
+  const email =
+    prompt("User email");
+
+  if (!email) return;
+
+  await WorkspaceService.inviteUser(
+    APP_STATE.workspaceId,
+    email
+  );
+
+  alert("User invited");
+});
+
+let pushingSync = false;
+async function pushSync() {
+
+  if (!CollabState.enabled) return;
+  if (!APP_STATE.workspaceId) return;
+  if (pushingSync) return;
+
+  pushingSync = true;
+
+  try {
+
+    const payload = {
+      tabs: structuredClone(tabs.tabs),
+      activeId: tabs.activeId,
+      collections: structuredClone(collections.getCollections()),
+      environment: structuredClone(Environment.getAll())
+    };
+
+    if (sync?.connected) {
+  sync.send(payload);
 }
 
-function pushSync() {
-  sync.send({
-    tabs: tabs.tabs,
-    activeId: tabs.activeId,
-    collections: collections.getCollections(),
-    environment: Environment.getAll()
-  });
+    await WorkspaceService.updateWorkspace(
+      APP_STATE.workspaceId,
+      { data: payload }
+    );
+
+  } catch (err) {
+    console.error(err);
+  } finally {
+    pushingSync = false;
+  }
 }
+
 
 function downloadJSON(data, filename) {
 
@@ -1664,24 +2141,24 @@ function renderUrlEncoded(body) {
 
     toggle.onchange = (e) => {
       item.enabled = e.target.checked;
-      tabs.save();
+      commitState();
     };
 
     key.oninput = (e) => {
       item.key = e.target.value;
-      tabs.save();
+      commitState();
     };
 
     value && (value.oninput = (e) => {
   item.value = e.target.value;
-  tabs.save();
+    commitState();
 });
 
     row.querySelector(".del").onclick = () => {
       tab.body.urlencoded.splice(i, 1);
       
       renderUrlEncoded();
-      tabs.save();
+      commitState();
     };
 
     box.appendChild(row);
@@ -1756,17 +2233,17 @@ function renderFormData(body) {
     // ENABLE / DISABLE
     toggle.onchange = (e) => {
       item.enabled = e.target.checked;
-      tabs.save();
+      commitState();
     };
 
     // KEY
     key.oninput = (e) => {
       item.key = e.target.value;
-      tabs.save();
+      commitState();
     };
     value && (value.oninput = (e) => {
   item.value = e.target.value;
-  tabs.save();
+  commitState();
 });
 
     // FILE (UNCHANGED LOGIC)
@@ -1776,7 +2253,7 @@ function renderFormData(body) {
 
       item.file = f;
       item.value = f.name;
-      tabs.save();
+      commitState();
     });
 
     // TYPE SWITCH
@@ -1788,7 +2265,7 @@ function renderFormData(body) {
 
       
       renderFormData(tab.body);
-      tabs.save();
+      commitState();
     };
 
     // DELETE
@@ -1796,7 +2273,7 @@ function renderFormData(body) {
       tab.body.formData.splice(i, 1);
     
       renderFormData(tab.body);
-        tabs.save();
+        commitState();
     };
 
     box.appendChild(row);
@@ -1821,7 +2298,7 @@ document.getElementById("addFormData")?.addEventListener("click", () => {
   tab.body.formData.push({ key: "", value: "" });
 
   renderBodyUI(tab.body);
-  tabs.save();
+  commitState();
 });
 function renderBodyUI(body) {
 
@@ -1858,7 +2335,7 @@ bodyMode?.addEventListener("change", () => {
   tab.body.mode = bodyMode.value;
 
   renderBodyUI(tab.body);
-  tabs.save();
+  commitState();
 });
 
 
@@ -1866,3 +2343,23 @@ function normalizeValue(item) {
   if (item.enabled === false) return null;
   return item.value ?? "";
 }
+function normalizeBody(tab) {
+
+  if (!tab.body || typeof tab.body !== "object") {
+    tab.body = {};
+  }
+
+  tab.body.mode ||= "none";
+  tab.body.raw ||= "";
+
+  if (!Array.isArray(tab.body.formData)) {
+    tab.body.formData = [];
+  }
+
+  if (!Array.isArray(tab.body.urlencoded)) {
+    tab.body.urlencoded = [];
+  }
+}
+
+initAuthUI();
+initCollabFromAuth();

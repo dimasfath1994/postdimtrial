@@ -1,4 +1,18 @@
 import { Storage } from "../core/storage.js";
+import { normalizeBody } from "../core/normalize-body.js";
+
+function safeClone(obj) {
+  return structuredClone(obj || {});
+}
+
+function defaultBody() {
+  return {
+    mode: "none",
+    raw: "",
+    formData: [],
+    urlencoded: []
+  };
+}
 
 export class Tabs {
 
@@ -7,7 +21,6 @@ export class Tabs {
     this.tabs = [];
     this.activeId = null;
 
-    // 🔥 prevent UI ↔ storage ↔ sync loop
     this._syncing = false;
 
     this.load();
@@ -21,18 +34,18 @@ export class Tabs {
     this.commit();
     this.setActive(tab.id);
   }
+
   delete(tabId) {
+    this.tabs = this.tabs.filter(t => t.id !== tabId);
 
-  this.tabs = this.tabs.filter(t => t.id !== tabId);
+    if (this.activeId === tabId) {
+      this.activeId = this.tabs[0]?.id || null;
+    }
 
-  if (this.activeId === tabId) {
-    this.activeId = this.tabs[0]?.id || null;
+    this.save();
+    this.render();
+    this.syncForm();
   }
-
-  this.save();
-  this.render();
-  this.syncForm();
-}
 
   _createDefaultTab() {
     return {
@@ -40,7 +53,10 @@ export class Tabs {
       name: `Request ${this.tabs.length + 1}`,
       method: "GET",
       url: "",
-      body: "",
+
+      body: defaultBody(),
+      bodyMode: "raw",
+
       history: [],
       pinned: false,
 
@@ -63,6 +79,9 @@ export class Tabs {
   setActive(id) {
     this.activeId = id;
 
+    const tab = this.getActive();
+    normalizeBody(tab);
+
     this.commit();
     this.render();
     this.syncForm();
@@ -70,6 +89,92 @@ export class Tabs {
 
   getActive() {
     return this.tabs.find(t => t.id === this.activeId);
+  }
+
+  // ================= DUPLICATE (FIX IMPORTANT) =================
+  duplicate(tab) {
+    const copy = safeClone(tab);
+
+    copy.id = Date.now();
+    copy.name = `${tab.name} copy`;
+
+    copy.body = safeClone(tab.body) || defaultBody();
+    copy.formData = safeClone(tab.formData);
+    copy.urlencoded = safeClone(tab.urlencoded);
+
+    copy.params = safeClone(tab.params);
+    copy.headers = safeClone(tab.headers);
+    copy.auth = safeClone(tab.auth);
+
+    copy.scripts = {
+      pre: tab.scripts?.pre || "",
+      post: tab.scripts?.post || ""
+    };
+
+    copy.history = Array.isArray(tab.history) ? [...tab.history] : [];
+
+    this.tabs.push(copy);
+
+    this.commit();
+    this.render();
+    this.syncForm();
+  }
+
+  // ================= SYNC FORM =================
+  syncForm() {
+    this._syncing = true;
+
+    const tab = this.getActive();
+    if (!tab) return;
+
+    normalizeBody(tab);
+
+    this.ui.method.value = tab.method || "GET";
+    this.ui.url.value = tab.url || "";
+
+    // 🔥 FIX: jangan overwrite raw dari string/object sembarangan
+    this.ui.body.value = tab.body?.raw ?? "";
+
+    if (this.ui.authType)
+      this.ui.authType.value = tab.auth?.type || "";
+
+    if (this.ui.authValue)
+      this.ui.authValue.value = tab.auth?.value || "";
+
+    window.__syncMonacoFromTab?.();
+
+    this._syncing = false;
+  }
+
+  // ================= SYNC TAB =================
+  syncTab() {
+    if (this._syncing) return;
+
+    const tab = this.getActive();
+    if (!tab) return;
+
+    normalizeBody(tab);
+
+    tab.method = this.ui.method?.value || "GET";
+    tab.url = this.ui.url?.value || "";
+
+    if (!tab.body || typeof tab.body !== "object") {
+      tab.body = defaultBody();
+    }
+
+    if (tab.body.mode === "raw") {
+      tab.body.raw = this.ui.body?.value || "";
+    }
+
+    tab.auth = {
+      type: this.ui.authType?.value || "",
+      value: this.ui.authValue?.value || ""
+    };
+
+    tab.scripts ||= { pre: "", post: "" };
+    tab.bodyMode ||= "raw";
+
+    this.commit();
   }
 
   // ================= HISTORY =================
@@ -112,55 +217,6 @@ export class Tabs {
     this.syncForm();
   }
 
-  // ================= RENAME =================
-  rename(tab, name) {
-    tab.name = name?.trim() || "Untitled";
-    this.commit();
-  }
-
-  renameById(id, name) {
-    const tab = this.tabs.find(t => t.id === id);
-    if (!tab) return;
-
-    tab.name = name?.trim() || "Untitled";
-    this.commit();
-    this.render();
-  }
-
-  // ================= DUPLICATE =================
-  duplicate(tab) {
-    const copy = {
-      ...tab,
-      id: Date.now(),
-      name: `${tab.name} copy`,
-
-      params: structuredClone(tab.params || {}),
-      headers: structuredClone(tab.headers || {}),
-      auth: structuredClone(tab.auth || { type: "", value: "" }),
-
-      scripts: {
-        pre: tab.scripts?.pre || "",
-        post: tab.scripts?.post || ""
-      },
-
-      history: Array.isArray(tab.history) ? [...tab.history] : []
-    };
-
-    this.tabs.push(copy);
-
-    this.commit();
-    this.render();
-    this.syncForm();
-  }
-
-  // ================= PIN =================
-  togglePin(tab) {
-    tab.pinned = !tab.pinned;
-
-    this.commit();
-    this.render();
-  }
-
   // ================= RENDER =================
   render() {
     const el = this.ui.tabsEl;
@@ -198,50 +254,11 @@ export class Tabs {
     });
   }
 
-  // ================= SYNC FORM =================
-  syncForm() {
-    this._syncing = true;
-
-    const tab = this.getActive();
-    if (!tab) return;
-
-    this.ui.method.value = tab.method || "GET";
-    this.ui.url.value = tab.url || "";
-    this.ui.body.value = tab.body || "";
-
-    if (this.ui.authType)
-      this.ui.authType.value = tab.auth?.type || "";
-
-    if (this.ui.authValue)
-      this.ui.authValue.value = tab.auth?.value || "";
-
-    window.__syncMonacoFromTab?.();
-
-    this._syncing = false;
-  }
-
-  // ================= SYNC TAB =================
-  syncTab() {
-    if (this._syncing) return;
-
-    const tab = this.getActive();
-    if (!tab) return;
-
-    tab.method = this.ui.method?.value || "GET";
-    tab.url = this.ui.url?.value || "";
-    tab.body = this.ui.body?.value || "";
-
-    tab.auth = {
-      type: this.ui.authType?.value || "",
-      value: this.ui.authValue?.value || ""
-    };
-
-    tab.scripts ||= { pre: "", post: "" };
-
+  rename(tab, name) {
+    tab.name = name?.trim() || "Untitled";
     this.commit();
   }
 
-  // ================= STORAGE =================
   save() {
     Storage.save({
       tabs: this.tabs || [],
@@ -249,15 +266,12 @@ export class Tabs {
     });
   }
 
-  // ================= COMMIT (IMPORTANT) =================
   commit() {
     this.save();
-
-    // 🔥 hook for sync-service
     window.__pushSync?.();
   }
 
-  // ================= LOAD =================
+  // ================= LOAD (FIX ISOLATION BODY) =================
   load() {
     const data = Storage.load();
 
@@ -268,12 +282,21 @@ export class Tabs {
         name: tab.name || "Untitled",
         method: tab.method || "GET",
         url: tab.url || "",
-        body: tab.body || "",
+
+        body: {
+          mode: tab.body?.mode || "none",
+          raw: tab.body?.raw || "",
+          formData: safeClone(tab.body?.formData || []),
+          urlencoded: safeClone(tab.body?.urlencoded || [])
+        },
+
+        bodyMode: tab.bodyMode || "raw",
+
         history: Array.isArray(tab.history) ? tab.history : [],
         pinned: !!tab.pinned,
 
-        params: tab.params || {},
-        headers: tab.headers || {},
+        params: safeClone(tab.params),
+        headers: safeClone(tab.headers),
 
         auth: tab.auth || { type: "", value: "" },
 

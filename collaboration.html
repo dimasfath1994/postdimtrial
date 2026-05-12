@@ -2,22 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Postdim</title>
+  <title>Postdim - Collaboration</title>
   <link rel="stylesheet" href="./css/app.css">
 </head>
 
-<body>
+<body class="collab-mode">
 
-<!-- SIDEBAR -->
+<!-- ================= SIDEBAR ================= -->
 <aside id="sidebar">
 
+  <div class="collab-header">
+    <h3>Collaboration Mode</h3>
+
+    <!-- USER STATUS -->
+    <div id="collabUserBar" class="user-bar">
+      <span id="collabUserEmail"></span>
+      <button id="collabLogoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- WORKSPACE ACTIONS -->
   <button id="newCollection">+ Collection</button>
   <button id="addRequest">+ Request</button>
 
   <div id="collectionList"></div>
 
-  <!-- VARIABLES (POSTMAN STYLE) -->
-  <button id="openEnvModal" style="margin-top:20px;">
+  <hr>
+
+  <!-- VARIABLES -->
+  <button id="openEnvModal">
     Variables
   </button>
 
@@ -26,40 +41,52 @@
     <button id="exportBtn">Export</button>
     <input type="file" id="importFile">
   </div>
-<button id="collabModeBtn" style="margin-top:20px;">
-  Collaboration Mode
-</button>
 
+  <hr>
 
-<div id="collabUserBar" style="display:none; margin-top:10px;">
-  <span id="collabUserEmail"></span>
-  <button id="collabLogoutBtn" style="margin-top:20px; display:none;">
-  Logout
-</button>
-</div>
+  <!-- INVITE COLLAB -->
+  <button id="inviteBtn">
+    Invite User
+  </button>
+
+  <!-- ================= WORKSPACE SWITCH (NEW) ================= -->
+  <hr>
+
+  <div style="margin-top:10px;">
+    <label style="font-size:12px; opacity:0.7;">Workspace</label>
+
+    <select id="workspaceSwitcher" style="width:100%; margin-top:5px;">
+      <option>Loading...</option>
+    </select>
+  </div>
+
+  <button id="createWorkspaceBtn" style="margin-top:10px;">
+    + Workspace
+  </button>
+
 </aside>
 
-<!-- MAIN -->
+<!-- ================= MAIN ================= -->
 <main class="container">
 
-  <h2>Postdim</h2>
+  <h2>Postdim (Collaboration)</h2>
 
-  <!-- TABS -->
+  <!-- ================= TABS ================= -->
   <div class="topbar">
     <div id="tabs" class="tabs-container"></div>
     <button id="newTab">+ Tab</button>
   </div>
 
-  <!-- REQUEST -->
+  <!-- ================= REQUEST BAR ================= -->
   <div class="request-bar">
     <select id="method">
       <option>GET</option>
       <option>POST</option>
       <option>PUT</option>
-      <option value="PATCH">PATCH</option>
+      <option>PATCH</option>
       <option>DELETE</option>
-      <option value="HEAD">HEAD</option>
-      <option value="OPTIONS">OPTIONS</option>
+      <option>HEAD</option>
+      <option>OPTIONS</option>
     </select>
 
     <input id="url" placeholder="https://api.example.com" />
@@ -67,7 +94,7 @@
 
   <button id="send">Send Request</button>
 
-  <!-- POSTMAN STYLE TABS -->
+  <!-- ================= REQUEST TABS ================= -->
   <div id="reqTabs" class="req-tabs">
     <span class="req-tab active" data-tab="params">Params</span>
     <span class="req-tab" data-tab="body">Body</span>
@@ -76,7 +103,7 @@
     <span class="req-tab" data-tab="scripts">Scripts</span>
   </div>
 
-  <!-- DYNAMIC CONTENT -->
+  <!-- ================= CONTENT ================= -->
   <div id="reqContent">
 
     <!-- PARAMS -->
@@ -85,41 +112,31 @@
       <button id="addParam">+ Param</button>
     </div>
 
-     <!-- BODY -->
+    <!-- BODY -->
     <div class="tab-panel hidden" data-panel="body">
 
-      <!-- BODY MODE TABS (POSTMAN STYLE) -->
       <div class="body-tabs">
-
         <button class="body-tab active" data-mode="none">none</button>
         <button class="body-tab" data-mode="raw">raw</button>
         <button class="body-tab" data-mode="form-data">form-data</button>
         <button class="body-tab" data-mode="urlencoded">x-www-form-urlencoded</button>
-
       </div>
 
-      <!-- RAW BODY -->
       <div id="rawBodyBox">
-        <textarea id="body" placeholder="Raw JSON / text"></textarea>
+        <textarea id="body"></textarea>
       </div>
 
-      <!-- FORM DATA -->
       <div id="formDataBox" class="hidden">
         <div id="formDataList"></div>
-        <input type="file" class="file-input hidden">
-        <button class="choose-file">Choose File</button>
-        <span class="file-name"></span>
         <button id="addFormData">+ Add Field</button>
       </div>
 
-      <!-- URL ENCODED -->
       <div id="urlencodedBox" class="hidden">
         <div id="urlencodedList"></div>
         <button id="addUrlEncoded">+ Add Field</button>
       </div>
 
     </div>
-
 
     <!-- HEADERS -->
     <div class="tab-panel hidden" data-panel="headers">
@@ -129,7 +146,6 @@
 
     <!-- AUTH -->
     <div class="tab-panel hidden" data-panel="auth">
-      <h4>Auth</h4>
       <select id="authType">
         <option value="none">No Auth</option>
         <option value="bearer">Bearer</option>
@@ -138,24 +154,20 @@
       <input id="authValue" placeholder="token / key">
     </div>
 
-<!-- SCRIPTS (MONACO VERSION) -->
-<div class="tab-panel hidden" data-panel="scripts">
+    <!-- SCRIPTS -->
+    <div class="tab-panel hidden" data-panel="scripts">
 
-  <div class="script-section">
+      <div class="script-section">
+        <div class="script-header">Pre Script</div>
+        <div id="preEditor" class="monaco-editor"></div>
+      </div>
 
-    <div class="script-header">Pre Script</div>
-    <div id="preEditor" class="monaco-editor"></div>
+      <div class="script-section">
+        <div class="script-header">Post Script</div>
+        <div id="postEditor" class="monaco-editor"></div>
+      </div>
 
-  </div>
-
-  <div class="script-section">
-
-    <div class="script-header">Post Script</div>
-    <div id="postEditor" class="monaco-editor"></div>
-
-  </div>
-
-</div>
+    </div>
 
   </div>
 
@@ -173,31 +185,11 @@
 
 </main>
 
-<!-- ================= ENV MODAL (NEW) ================= -->
-<!-- <div id="envModal" class="modal hidden">
-  <div class="modal-content">
-
-    <h3>Environment Variables</h3>
-
-    <div id="envList"></div>
-
-    <div class="env-form">
-      <input id="envKey" placeholder="key">
-      <input id="envValue" placeholder="value">
-      <button id="addEnv">Add</button>
-    </div>
-
-    <button id="closeEnvModal">Close</button>
-
-  </div>
-</div> -->
-
-
-<!-- ================= ENV SIDE PANEL ================= -->
+<!-- ================= ENV PANEL ================= -->
 <div id="envPanel" class="env-panel hidden">
 
   <div class="env-header">
-    <h3>Variables</h3>
+    <h3>Workspace Variables</h3>
     <button id="closeEnvPanel">✕</button>
   </div>
 
@@ -210,6 +202,8 @@
   </div>
 
 </div>
+
+<!-- ================= MONACO ================= -->
 <script>
   window.MonacoEnvironment = {
     getWorkerUrl: function () {
@@ -219,7 +213,9 @@
 </script>
 
 <script src="./lib/js/monaco-editor/min/vs/loader.js"></script>
-<script type="module" src="./js/app.js"></script>
+
+<!-- ================= ENTRY POINT ================= -->
+<script type="module" src="./js/collab/collab-app.js"></script>
 
 </body>
 </html>
