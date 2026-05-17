@@ -43,6 +43,7 @@ export class Tabs {
       body: "",
       history: [],
       pinned: false,
+      opened: true,
 
       params: {},
       headers: {},
@@ -91,22 +92,28 @@ export class Tabs {
     this.commit();
   }
 
-  // ================= CLOSE =================
 close(id) {
-  // hanya hapus dari tabs UI
-  this.tabs = this.tabs.filter(t => t.id !== id);
+  const tab = this.tabs.find(t => t.id === id);
+  if (!tab) return;
 
-  // kalau tab aktif ditutup
+  tab.opened = false;
+
   if (this.activeId === id) {
-    this.activeId = this.tabs[this.tabs.length - 1]?.id
-      || this.tabs[0]?.id
-      || null;
+
+    const next =
+      this.tabs.find(
+        t => t.opened !== false
+      );
+
+    this.activeId = next?.id || null;
   }
 
-   this.render();
-  // this.syncForm();
-}
+  this.commit(); // save + sync
 
+  window.saveActiveCollectionState?.();
+
+  this.render();
+}
   // ================= RENAME =================
   rename(tab, name) {
     tab.name = name?.trim() || "Untitled";
@@ -163,7 +170,7 @@ close(id) {
 
     el.innerHTML = "";
 
-    this.tabs.forEach(tab => {
+    this.tabs.filter(tab => tab.opened !== false).forEach(tab => {
       const div = document.createElement("div");
       div.className = "tab" + (tab.id === this.activeId ? " active" : "");
       div.dataset.id = tab.id;
@@ -202,7 +209,12 @@ close(id) {
 
     this.ui.method.value = tab.method || "GET";
     this.ui.url.value = tab.url || "";
+
+      if (typeof tab.body === "object") {
+    this.ui.body.value = tab.body.raw || "";
+  } else {
     this.ui.body.value = tab.body || "";
+  }
 
     if (this.ui.authType)
       this.ui.authType.value = tab.auth?.type || "";
@@ -224,7 +236,22 @@ close(id) {
 
     tab.method = this.ui.method?.value || "GET";
     tab.url = this.ui.url?.value || "";
-    tab.body = this.ui.body?.value || "";
+    tab.body ||= {
+    mode: "none",
+    raw: "",
+    formData: [],
+    urlencoded: []
+  };
+
+   // HANYA RAW YANG DISYNC DARI TEXTAREA
+  if (tab.body.mode === "raw") {
+    tab.body.raw =
+      this.ui.body?.value || "";
+  }
+
+  // form-data & urlencoded BIAR TETAP
+  tab.formData ||= [];
+  tab.urlencoded ||= [];
 
     tab.auth = {
       type: this.ui.authType?.value || "",
@@ -263,9 +290,24 @@ close(id) {
         name: tab.name || "Untitled",
         method: tab.method || "GET",
         url: tab.url || "",
-        body: tab.body || "",
+        body:
+  typeof tab.body === "object"
+    ? tab.body
+    : {
+        mode:"raw",
+        raw: tab.body || "",
+        formData:
+   tab.body?.formData || [],
+        urlencoded:[]
+      },
         history: Array.isArray(tab.history) ? tab.history : [],
         pinned: !!tab.pinned,
+
+
+         opened:
+    tab.opened === undefined
+      ? true
+      : tab.opened,
 
         params: tab.params || {},
         headers: tab.headers || {},

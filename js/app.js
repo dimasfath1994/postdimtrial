@@ -351,7 +351,17 @@ function renderCollections() {
 
             loadCollectionState(col.id);
 
+            // cari ulang tab sesudah load
+            const openedTab =
+              tabs.tabs.find(t => t.id === tab.id);
+
+            if (openedTab) {
+              openedTab.opened = true;
+            }
+
             tabs.setActive(tab.id);
+
+            tabs.render();
 
             renderCollections();
           };
@@ -736,6 +746,10 @@ function saveActiveCollectionState() {
 
   collections.save?.();
 }
+
+window.saveActiveCollectionState =
+  saveActiveCollectionState;
+
 function loadCollectionState(collectionId) {
 
   const col = collections
@@ -823,6 +837,14 @@ ui.method?.addEventListener("change", scheduleSync);
 ui.url?.addEventListener("input", scheduleSync);
 ui.body?.addEventListener("input", scheduleSync);
 
+ui.body?.addEventListener(
+   "blur",
+   () => {
+      tabs.syncTab();
+      tabs.save();
+   }
+);
+
 ui.preScript = document.getElementById("preScript");
 ui.postScript = document.getElementById("postScript");
 
@@ -833,6 +855,9 @@ function scheduleSync() {
 
   syncTimer = setTimeout(() => {
     tabs.syncTab();
+
+    tabs.commit();
+    saveActiveCollectionState();
   }, 300);
 }
 
@@ -1219,18 +1244,21 @@ const originalSetActive = tabs.setActive.bind(tabs);
 
 tabs.setActive = (id) => {
 
-  // save current dulu
+  // save current collection dulu
   saveActiveCollectionState();
 
-  // cari collection pemilik tab
+  // cari owner collection
   const owner = collections
     .getCollections()
     .find(c =>
       c.tabs?.some(t => t.id === id)
     );
 
-  // kalau beda collection → load env collection tsb
-  if (owner && owner.id !== activeCollectionId) {
+  // kalau pindah collection → restore workspace collection tsb
+  if (
+    owner &&
+    owner.id !== activeCollectionId
+  ) {
     loadCollectionState(owner.id);
   }
 
@@ -1238,6 +1266,43 @@ tabs.setActive = (id) => {
 
   renderParams();
   renderHeaders();
+
+  const tab = tabs.getActive();
+
+  if (tab) {
+
+    // normalize body
+    tab.body ||= {
+      mode: "none",
+      raw: "",
+      formData: [],
+      urlencoded: []
+    };
+
+    tab.body.formData ||= [];
+    tab.body.urlencoded ||= [];
+
+    // restore raw editor
+    ui.body.value =
+      tab.body.raw || "";
+
+    // restore body mode
+    document
+      .querySelectorAll(".body-tab")
+      .forEach(x =>
+        x.classList.remove("active")
+      );
+
+    document
+      .querySelector(
+        `.body-tab[data-mode="${
+          tab.body.mode || "none"
+        }"]`
+      )
+      ?.classList.add("active");
+
+    renderBodyUI(tab.body);
+  }
 
   syncScriptToTab();
   renderScripts();
@@ -1664,24 +1729,28 @@ function renderUrlEncoded(body) {
 
     toggle.onchange = (e) => {
       item.enabled = e.target.checked;
-      tabs.save();
+        tabs.commit();
+  saveActiveCollectionState();
     };
 
     key.oninput = (e) => {
       item.key = e.target.value;
-      tabs.save();
+        tabs.commit();
+  saveActiveCollectionState();
     };
 
     value && (value.oninput = (e) => {
   item.value = e.target.value;
-  tabs.save();
+   tabs.commit();
+  saveActiveCollectionState();
 });
 
     row.querySelector(".del").onclick = () => {
       tab.body.urlencoded.splice(i, 1);
       
       renderUrlEncoded();
-      tabs.save();
+        tabs.commit();
+  saveActiveCollectionState();
     };
 
     box.appendChild(row);
@@ -1729,23 +1798,54 @@ function renderFormData(body) {
     row.className = "row";
 
     row.innerHTML = `
-      <input type="checkbox" class="toggle" ${item.enabled !== false ? "checked" : ""}>
+  <input type="checkbox" class="toggle"
+    ${item.enabled !== false ? "checked" : ""}>
 
-      <input class="key" value="${item.key || ""}">
+  <input class="key"
+    value="${item.key || ""}">
 
-      ${
-        item.type === "file"
-          ? `<input type="file" class="file">`
-          : `<input class="value" value="${item.value ?? ""}">`
-      }
+ ${
+  item.type === "file"
+    ? `
+      <div class="file-cell">
 
-      <select class="type">
-        <option value="text" ${!item.type || item.type === "text" ? "selected" : ""}>Text</option>
-        <option value="file" ${item.type === "file" ? "selected" : ""}>File</option>
-      </select>
+        <input type="file"
+          class="file">
 
-      <button class="del">x</button>
-    `;
+        <input
+          class="value"
+          value="${item.fileName || ""}"
+          readonly
+          placeholder="No file selected">
+
+      </div>
+    `
+    : `
+      <input class="value"
+        value="${item.value ?? ""}">
+    `
+}
+
+  <select class="type">
+
+    <option value="text"
+      ${!item.type || item.type === "text"
+        ? "selected"
+        : ""}>
+      Text
+    </option>
+
+    <option value="file"
+      ${item.type === "file"
+        ? "selected"
+        : ""}>
+      File
+    </option>
+
+  </select>
+
+  <button class="del">x</button>
+`;
 
     const toggle = row.querySelector(".toggle");
     const key = row.querySelector(".key");
@@ -1756,28 +1856,56 @@ function renderFormData(body) {
     // ENABLE / DISABLE
     toggle.onchange = (e) => {
       item.enabled = e.target.checked;
-      tabs.save();
+      tabs.commit();
+saveActiveCollectionState();
     };
 
     // KEY
     key.oninput = (e) => {
       item.key = e.target.value;
-      tabs.save();
+      tabs.commit();
+saveActiveCollectionState();
     };
     value && (value.oninput = (e) => {
   item.value = e.target.value;
-  tabs.save();
+  tabs.commit();
+saveActiveCollectionState();
 });
 
     // FILE (UNCHANGED LOGIC)
-    file?.addEventListener("change", (e) => {
-      const f = e.target.files?.[0];
-      if (!f) return;
+    // file?.addEventListener("change", (e) => {
+    //   const f = e.target.files?.[0];
+    //   if (!f) return;
 
-      item.file = f;
-      item.value = f.name;
-      tabs.save();
-    });
+    //   item.file = f;
+    //   item.value = f.name;
+    //   tabs.save();
+    // });
+
+file?.addEventListener("change", (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+
+  // runtime only
+  item.file = f;
+
+  // persist metadata
+  item.fileName = f.name;
+  item.fileSize = f.size;
+  item.fileType = f.type;
+
+  item.value = f.name;
+
+  tabs.commit();
+  saveActiveCollectionState();
+});
+
+if (item.type === "file" && item.fileName) {
+  const info = document.createElement("div");
+  info.textContent = item.fileName;
+
+  row.appendChild(info);
+}
 
     // TYPE SWITCH
     type.onchange = (e) => {
@@ -1788,7 +1916,8 @@ function renderFormData(body) {
 
       
       renderFormData(tab.body);
-      tabs.save();
+      tabs.commit();
+saveActiveCollectionState();
     };
 
     // DELETE
@@ -1796,7 +1925,8 @@ function renderFormData(body) {
       tab.body.formData.splice(i, 1);
     
       renderFormData(tab.body);
-        tabs.save();
+        tabs.commit();
+saveActiveCollectionState();
     };
 
     box.appendChild(row);
@@ -1821,7 +1951,8 @@ document.getElementById("addFormData")?.addEventListener("click", () => {
   tab.body.formData.push({ key: "", value: "" });
 
   renderBodyUI(tab.body);
-  tabs.save();
+  tabs.commit();
+saveActiveCollectionState();
 });
 function renderBodyUI(body) {
 
@@ -1866,3 +1997,8 @@ function normalizeValue(item) {
   if (item.enabled === false) return null;
   return item.value ?? "";
 }
+
+ui.body?.addEventListener("blur", () => {
+   tabs.syncTab();
+   tabs.save();
+});
