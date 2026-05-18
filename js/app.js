@@ -81,7 +81,7 @@ document.getElementById("collabModeBtn").onclick = () => {
   APP_STATE.collabMode = true;
 
   // sementara: arahkan ke login page
-  window.location.href = "/login.html";
+  window.location.href = "login.html";
 };
 
 function applyRemoteState(data) {
