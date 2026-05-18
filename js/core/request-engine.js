@@ -3,6 +3,31 @@ import { AuthStore } from "../collab/auth-store.js";
 
 export class RequestEngine {
 
+  static cookieJar = {};
+  static storeCookies(setCookieHeaders) {
+  if (!setCookieHeaders) return;
+
+  const cookies = Array.isArray(setCookieHeaders)
+    ? setCookieHeaders
+    : [setCookieHeaders];
+
+  for (const cookie of cookies) {
+    if (typeof cookie !== "string") continue;
+
+    const [main] = cookie.split(";");
+    const idx = main.indexOf("=");
+
+    if (idx === -1) continue;
+
+    const key = main.slice(0, idx).trim();
+    const value = main.slice(idx + 1).trim();
+
+    if (!key) continue;
+
+    this.cookieJar[key] = value;
+  }
+}
+
   static async send({ method, url, body, headers = {}, bodyType = "json" }) {
 
     url = EnvResolver.resolve(url);
@@ -11,18 +36,27 @@ export class RequestEngine {
     let finalHeaders = { ...headers };
 
     // ================= JSON =================
-    if (bodyType === "json") {
+    if (
+  bodyType === "raw" ||
+  bodyType === "json"
+) {
 
-      finalHeaders["Content-Type"] =
-        finalHeaders["Content-Type"] || "application/json";
+  finalHeaders["Content-Type"] =
+    finalHeaders["Content-Type"] ||
+    "application/json";
 
-      finalBody =
-        typeof body === "string"
-          ? body
-          : body
-            ? JSON.stringify(body)
-            : undefined;
-    }
+  finalBody =
+    typeof body === "string"
+      ? body
+      : body
+        ? JSON.stringify(body)
+        : undefined;
+
+  console.log(
+    "RAW BODY",
+    finalBody
+  );
+}
 
     // ================= FORM DATA =================
     else if (bodyType === "form-data") {
@@ -116,12 +150,48 @@ export class RequestEngine {
       finalHeaders["Authorization"] = `Bearer ${token}`;
     }
 
+
+    // ================= FETCH PREPARATION =================
+
+const cookieHeader = Object.entries(RequestEngine.cookieJar)
+  .map(([k, v]) => `${k}=${v}`)
+  .join("; ");
+
+if (cookieHeader) {
+  if (!finalHeaders["Cookie"] && cookieHeader) {
+  finalHeaders["Cookie"] = cookieHeader;
+}
+}
     // ================= FETCH =================
+
+
     const res = await fetch(url, {
       method,
       headers: finalHeaders,
-      body: ["GET", "HEAD"].includes(method) ? undefined : finalBody
+      body: ["GET", "HEAD"].includes(method) ? undefined : finalBody,
+      //credentials: "include"
     });
+
+    const rawHeaders = Object.fromEntries(res.headers.entries());
+
+  
+
+  const rawSetCookie =
+  res.headers.get("set-cookie") ||
+  res.headers.get("Set-Cookie");
+
+const cookies = rawSetCookie
+  ? Array.isArray(rawSetCookie)
+    ? rawSetCookie
+    : [rawSetCookie]
+  : [];
+
+RequestEngine.storeCookies(cookies);
+
+const cookieJarString = Object.entries(RequestEngine.cookieJar)
+  .map(([k, v]) => `${k}=${v}`)
+  .join("; ");
+
 
     const type = res.headers.get("content-type") || "";
 
@@ -134,8 +204,19 @@ export class RequestEngine {
     }
 
     return {
-      status: res.status,
-      data
+    status: res.status,
+    data,
+
+    headers: {
+      ...rawHeaders,
+
+      // pseudo header biar mirip Postman
+      "cookie-jar": cookieJarString  || null
+    },
+
+    cookies
     };
+
+
   }
 }

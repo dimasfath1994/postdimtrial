@@ -162,14 +162,56 @@
   <!-- STATUS -->
   <div id="statusBar"></div>
 
+
+  <div id="responseTabs" class="response-tabs">
+
+  <span class="response-tab active"
+        data-tab="body">
+    Body
+  </span>
+
+    <span class="response-tab"
+        data-tab="cookies">
+    Cookies
+  </span>
+
+  <span class="response-tab"
+        data-tab="headers">
+    Headers
+  </span>
+
+
+
+</div>
+
   <!-- VIEW TOGGLE -->
   <div id="viewToggle" class="toggle">
-    <span class="opt active" data-mode="tree">Tree</span>
-    <span class="opt" data-mode="raw">Raw</span>
+    <span class="opt active" data-mode="raw">Raw</span>
+    <span class="opt " data-mode="tree">Tree</span>
   </div>
 
   <!-- RESPONSE -->
-  <div id="response"></div>
+  <div id="responsePanels">
+
+  <div
+    id="responseBody"
+    class="response-panel">
+
+  </div>
+
+  <div
+    id="responseHeaders"
+    class="response-panel hidden">
+
+  </div>
+
+  <div
+    id="responseCookies"
+    class="response-panel hidden">
+
+  </div>
+
+</div>
 
 </main>
 

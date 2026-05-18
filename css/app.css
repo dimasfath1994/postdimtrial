@@ -724,3 +724,90 @@ pre {
 
 
 
+/* ================= RESPONSE TABS ================= */
+
+.response-tabs{
+  display:flex;
+  gap:8px;
+
+  margin-top:16px;
+  margin-bottom:10px;
+
+  border-bottom:1px solid #2b2b2b;
+
+  padding-bottom:8px;
+}
+
+.response-tab{
+
+  padding:8px 14px;
+
+  cursor:pointer;
+
+  color:#999;
+
+  border-radius:6px;
+
+  transition:.2s;
+}
+
+.response-tab:hover{
+  background:#1e1e1e;
+}
+
+.response-tab.active{
+
+  color:#fff;
+
+  background:#252526;
+
+  border:1px solid #3a3a3a;
+}
+
+/* ================= RESPONSE PANELS ================= */
+
+.response-panel{
+
+  background:#1e1e1e;
+
+  border:1px solid #2b2b2b;
+
+  border-radius:8px;
+
+  padding:12px;
+
+  min-height:120px;
+
+  overflow:auto;
+}
+
+.response-panel.hidden{
+  display:none;
+}
+
+/* header / cookies viewer */
+
+.response-panel pre{
+
+  margin:0;
+
+  padding:10px;
+
+  background:#111;
+
+  border-radius:6px;
+
+  overflow:auto;
+
+  white-space:pre-wrap;
+
+  word-break:break-word;
+
+  font-size:12px;
+}
+
+/* optional */
+
+#responsePanels{
+  margin-top:10px;
+}

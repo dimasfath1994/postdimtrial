@@ -66,7 +66,7 @@ const sync = new SyncService({
   }
 });
 
-let viewMode = "tree";
+let viewMode = "raw";
 let lastResponse = null;
 let activeCollectionId = null;
 let expandedCollections = {};
@@ -206,7 +206,24 @@ function addCopy(data) {
 
 // ================= RESPONSE =================
 function renderResponse(res, time) {
-  ui.response.innerHTML = "";
+  const bodyBox =
+  document.getElementById(
+    "responseBody"
+  );
+
+const headerBox =
+  document.getElementById(
+    "responseHeaders"
+  );
+
+const cookieBox =
+  document.getElementById(
+    "responseCookies"
+  );
+
+bodyBox.innerHTML = "";
+headerBox.innerHTML = "";
+cookieBox.innerHTML = "";
 
   if (res.error) {
     ui.response.textContent = res.message;
@@ -220,17 +237,52 @@ function renderResponse(res, time) {
   meta.style.color = "#aaa";
   meta.textContent = `${time} ms`;
 
-  ui.response.appendChild(meta);
+  bodyBox.appendChild(meta);
 
   if (viewMode === "tree") {
-    ui.response.appendChild(renderTree(res.data));
+    bodyBox.appendChild(renderTree(res.data));
   } else {
     const pre = document.createElement("pre");
     pre.textContent = JSON.stringify(res.data, null, 2);
-    ui.response.appendChild(pre);
+    bodyBox.appendChild(pre);
   }
 
-  ui.response.appendChild(addCopy(res.data));
+  bodyBox.appendChild(addCopy(res.data));
+
+
+  // ================= RESPONSE HEADERS =================
+if (res.headers) {
+
+  const pre =
+    document.createElement("pre");
+
+  pre.textContent =
+    JSON.stringify(
+      res.headers,
+      null,
+      2
+    );
+
+  headerBox.appendChild(pre);
+}
+
+// ================= RESPONSE COOKIES =================
+const cookies =
+  res.headers?.["set-cookie"] ||
+  res.headers?.["Set-Cookie"];
+
+if (cookies) {
+
+  const pre =
+    document.createElement("pre");
+
+  pre.textContent =
+    Array.isArray(cookies)
+      ? cookies.join("\n")
+      : cookies;
+
+  cookieBox.appendChild(pre);
+}
 }
 
 // ================= COLLECTION =================
@@ -656,6 +708,10 @@ if (tabBody?.mode === "urlencoded") {
     // }
 
     const start = performance.now();
+
+console.log("BODY MODE", tabBody?.mode);
+console.log("BODY RAW", tabBody?.raw);
+console.log("FINAL BODY", body);
 
     const res = await RequestEngine.send({
       method: ui.method.value,
@@ -1087,7 +1143,64 @@ document.querySelectorAll(".req-tab").forEach(tab => {
     document.querySelector(`[data-panel="${target}"]`)
       ?.classList.remove("hidden");
   });
+  
 });
+
+
+
+// ================= RESPONSE TABS =================
+document
+  .querySelectorAll(".response-tab")
+  .forEach(tab => {
+
+    tab.addEventListener(
+      "click",
+      () => {
+
+        document
+          .querySelectorAll(
+            ".response-tab"
+          )
+          .forEach(x =>
+            x.classList.remove(
+              "active"
+            )
+          );
+
+        tab.classList.add(
+          "active"
+        );
+
+        document
+          .querySelectorAll(
+            ".response-panel"
+          )
+          .forEach(x =>
+            x.classList.add(
+              "hidden"
+            )
+          );
+
+        document
+          .getElementById(
+            "response" +
+            tab.dataset.tab
+              .charAt(0)
+              .toUpperCase() +
+            tab.dataset.tab
+              .slice(1)
+          )
+          ?.classList.remove(
+            "hidden"
+          );
+
+      }
+    );
+
+  });
+
+
+
 
 function renderParams() {
   const box = document.getElementById("paramsBox");
@@ -1477,12 +1590,14 @@ postEditor?.onDidChangeModelContent(() => {
 const envPanel = document.getElementById("envPanel");
 
 document.getElementById("openEnvModal")?.addEventListener("click", () => {
+  envPanel.classList.remove("hidden");
   envPanel.classList.add("show");
   renderEnvViewer();
 });
 
 document.getElementById("closeEnvPanel")?.addEventListener("click", () => {
   envPanel.classList.remove("show");
+  envPanel.classList.add("hidden");
 });
 
 
