@@ -1,9 +1,11 @@
 import { guardCollaborationAccess } from "./collab-auth-guard.js";
 import { initWorkspaceUI } from "./workspace-ui.js";
 
-initWorkspaceUI();
+document.addEventListener("DOMContentLoaded", () => {
+  initWorkspaceUI();
+});
 
-import { Tabs } from "../ui/tabs.js";
+import { Tabs } from "../ui/tabs-collab.js";
 import { RequestEngine } from "../core/request-engine.js";
 import { CollectionManager } from "../core/collection.js";
 import { Environment } from "../core/environment.js";
@@ -11,6 +13,7 @@ import { ContextMenu } from "../ui/context-menu.js";
 import { SyncService } from "../core/sync/sync-service.js";
 import { WorkspaceService } from "./workspace-service.js";
 import { CollectionService } from "./collection-service.js";
+import { CollabTabsController } from "./collab-tabs-controller.js";
 import { Auth } from "../auth.js";
 
 // ================= UI =================
@@ -24,12 +27,6 @@ const ui = {
   tabsEl: document.getElementById("tabs"),
   collectionList: document.getElementById("collectionList")
 };
-
-// ================= CORE =================
-const ctx = new ContextMenu();
-const tabs = new Tabs(ui);
-const collections = new CollectionManager();
-
 // ================= STATE =================
 const State = {
   workspaceId: null,
@@ -38,6 +35,83 @@ const State = {
   saveTimer: null,
   collections: []
 };
+
+// ================= CORE =================
+const ctx = new ContextMenu();
+const tabs = new Tabs(ui);
+const oldSetActive =
+  tabs.setActive.bind(tabs);
+
+tabs.setActive = function(id) {
+
+  scheduleSave();
+
+  oldSetActive(id);
+
+};
+
+const collections = new CollectionManager();
+const tabsController = new CollabTabsController({
+  tabs,
+  state: State,
+  collectionService: CollectionService,
+  environment: Environment
+});
+
+
+
+// ================= SAFE ID =================
+function extractId(value) {
+
+  if (value == null) return null;
+
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (typeof value === "object") {
+    const candidates = [
+      value.id,
+      value.workspace_id,
+      value.activeId,
+      value.value,
+      value._id,
+      value?.id?.value,
+      value?.id?.$numberLong
+    ];
+
+    for (const c of candidates) {
+      const n = Number(c);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+
+  return null;
+}
+
+// ================= RENDER ACTIVE WORKSPACE UI (FIX UTAMA) =================
+function renderActiveWorkspace(ws) {
+
+  const el = document.getElementById("activeWorkspaceName");
+  if (!el) return;
+
+  const fromList = State.workspaceList?.find(
+    w => Number(w.id) === Number(ws?.id)
+  );
+
+  const name =
+    fromList?.name ??
+    ws?.name ??
+    ws?.title ??
+    ws?.workspace_name ??
+    ws?.data?.name ??
+    null;
+
+  el.textContent = name || "Unnamed Workspace";
+}
 
 // ================= SYNC =================
 const sync = new SyncService({
@@ -60,8 +134,9 @@ async function bootstrap() {
   startAutoSync();
 }
 
-// ================= USER UI =================
+// ================= USER =================
 async function loadUserUI() {
+
   const bar = document.getElementById("collabUserBar");
   const email = document.getElementById("collabUserEmail");
 
@@ -74,82 +149,298 @@ async function loadUserUI() {
 
 // ================= WORKSPACE =================
 async function loadWorkspaceFlow() {
-  const list = await WorkspaceService.getMyWorkspaces();
 
-  console.log("[RAW WORKSPACE LIST]", list);
+  const list =
+    await WorkspaceService
+      .getMyWorkspaces();
 
-  let ws;
+  State.workspaceList =
+    list;
 
+  let workspaceMeta;
+
+  // ================= CREATE FIRST =================
   if (!list.length) {
-    ws = await WorkspaceService.createWorkspace("My Workspace");
-  } else {
-    ws = await WorkspaceService.getWorkspace(list[0].id);
+
+    workspaceMeta =
+      await WorkspaceService
+        .createWorkspace(
+          "My Workspace"
+        );
+
+  }
+  else {
+
+    workspaceMeta =
+      list[0];
+
   }
 
-  console.log("[WORKSPACE SELECTED]", ws);
-
-  State.workspaceId = ws.id;
-  State.workspace = ws;
-
-  hydrateState(ws.data || {});
-
-  await loadCollections(State.workspaceId);
-}
-
-// ================= COLLECTION =================
-async function loadCollections(workspaceId) {
+  const workspaceId =
+    extractId(
+      workspaceMeta?.id
+    );
 
   if (!workspaceId) {
-    console.warn("[COLLECTION] workspaceId missing");
+
+    console.error(
+      "[FATAL] workspace meta invalid:",
+      workspaceMeta
+    );
+
     return;
+
   }
 
-  try {
-    const cols = await CollectionService.getByWorkspace(workspaceId);
+  // ================= LOAD DETAIL =================
+  const ws =
+    await WorkspaceService
+      .getWorkspace(
+        workspaceId
+      );
 
-    console.log("[COLLECTION API]", cols);
+  State.workspaceId =
+    workspaceId;
 
-    State.collections = cols;
-    renderCollections(cols);
+  State.workspace = {
+    ...(ws || {}),
 
-  } catch (err) {
-    console.error("[COLLECTION LOAD ERROR]", err);
+    id:
+      workspaceId,
+
+    name:
+      workspaceMeta?.name
+      || ws?.name
+      || `Workspace ${workspaceId}`
+  };
+
+  // ================= UI =================
+  renderActiveWorkspace({
+
+    id:
+      workspaceId,
+
+    name:
+      workspaceMeta?.name
+      || ws?.name
+      || `Workspace ${workspaceId}`
+
+  });
+
+  // hydrate app state
+  hydrateState(
+    ws?.data || {}
+  );
+
+  // ================= COLLECTION =================
+  await loadCollections(
+    workspaceId
+  );
+
+  const cols =
+    State.collections
+    || [];
+
+  if (cols.length) {
+
+    State.activeCollection =
+      cols[0];
+
+    await tabsController
+      .loadCollection(
+        cols[0].id
+      );
+
+  }
+  else {
+
+    tabs.tabs = [];
+
+    tabs.activeId =
+      null;
+
+    tabs.render();
+
+  }
+
+  console.log(
+    "[WORKSPACE LOADED]",
+    workspaceId
+  );
+
+}
+// ================= COLLECTION =================
+async function loadCollections(workspaceId) {
+  const id = extractId(workspaceId);
+
+  if (!id) return;
+
+  const cols = (await CollectionService.getByWorkspace(Number(id)))
+    .filter(c => Number(c.workspace_id) === Number(id));
+
+  State.collections = cols;
+
+  // SET ACTIVE COLLECTION
+  State.activeCollection = cols[0] || null;
+
+  tabsController.setCollections(cols);
+
+  tabsController.renderCollections(
+    document.getElementById("collectionList")
+  );
+
+  // CRITICAL: LOAD TABS DARI COLLECTION AKTIF
+  if (State.activeCollection) {
+    tabsController.loadCollection(State.activeCollection.id);
   }
 }
 
-// ================= SWITCH WORKSPACE =================
+// ================= WORKSPACE SWITCH =================
 async function loadWorkspaceSwitcher() {
-  const select = document.getElementById("workspaceSwitcher");
+
+  const select =
+    document.getElementById(
+      "workspaceSwitcher"
+    );
+
   if (!select) return;
 
-  const list = await WorkspaceService.getMyWorkspaces();
+  // pakai cache dulu
+  const list =
+    State.workspaceList
+    || await WorkspaceService
+      .getMyWorkspaces();
+
+  State.workspaceList = list;
 
   select.innerHTML = "";
 
   list.forEach(ws => {
-    const opt = document.createElement("option");
-    opt.value = ws.id;
-    opt.textContent = ws.name;
-    if (ws.id === State.workspaceId) opt.selected = true;
-    select.appendChild(opt);
-  });
 
-  select.onchange = async (e) => {
+    const id =
+      extractId(ws.id);
 
-    const id = Number(e.target.value);
     if (!id) return;
 
-    const ws = await WorkspaceService.getWorkspace(id);
+    const opt =
+      document.createElement(
+        "option"
+      );
 
-    State.workspaceId = ws.id;
-    State.workspace = ws;
+    opt.value = id;
 
-    hydrateState(ws.data || {});
+    opt.textContent =
+      ws.name
+      || ws.title
+      || `Workspace ${id}`;
 
-    await loadCollections(State.workspaceId);
+    if (
+      Number(id)
+      === Number(
+        State.workspaceId
+      )
+    ) {
+      opt.selected = true;
+    }
 
-    console.log("[WORKSPACE SWITCHED]", ws);
+    select.appendChild(opt);
+
+  });
+
+  select.onchange =
+    async (e) => {
+
+    const id =
+      extractId(
+        e.target.value
+      );
+
+    if (!id) return;
+
+    try {
+
+      // metadata workspace
+      const meta =
+        State.workspaceList
+          ?.find(
+            w =>
+              Number(w.id)
+              === Number(id)
+          );
+
+      // detail workspace
+      const ws =
+        await WorkspaceService
+          .getWorkspace(id);
+
+      State.workspaceId =
+        id;
+
+      State.workspace = {
+        ...(ws || {}),
+        id,
+        name:
+          meta?.name
+          || ws?.name
+          || `Workspace ${id}`
+      };
+
+      renderActiveWorkspace({
+        id,
+        name:
+          meta?.name
+          || ws?.name
+          || `Workspace ${id}`
+      });
+
+      hydrateState(
+        ws?.data || {}
+      );
+
+      // reload collection
+      await loadCollections(
+        id
+      );
+
+      // auto buka collection pertama
+      if (
+        State.activeCollection
+      ) {
+
+        await tabsController
+          .loadCollection(
+            State.activeCollection
+              .id
+          );
+
+      }
+      else {
+
+        tabs.tabs = [];
+        tabs.activeId =
+          null;
+
+        tabs.render();
+
+      }
+
+      console.log(
+        "[WORKSPACE SWITCHED]",
+        id
+      );
+
+    }
+    catch (err) {
+
+      console.error(
+        "[SWITCH FAILED]",
+        err
+      );
+
+    }
+
   };
+
 }
 
 // ================= RENDER =================
@@ -205,47 +496,119 @@ function bindUI() {
     ?.addEventListener("click", logout);
 
   document.getElementById("newTab")
-    ?.addEventListener("click", () => {
+  ?.addEventListener(
+    "click",
+    async () => {
+
+      await tabsController
+        .addTabToActiveCollection();
+
       scheduleSave();
-      tabs.create();
-    });
+
+    }
+  );
 
   ui.send?.addEventListener("click", sendRequest);
 
-  // ================= FIX CREATE COLLECTION =================
+  // ================= LIVE TAB SYNC =================
+
+    ui.method?.addEventListener(
+      "change",
+      onTabChanged
+    );
+
+    ui.url?.addEventListener(
+      "input",
+      onTabChanged
+    );
+
+    ui.body?.addEventListener(
+      "input",
+      onTabChanged
+    );
+
+  // ================= COLLECTION =================
   document.getElementById("newCollection")
     ?.addEventListener("click", async () => {
-
-      if (!State.workspaceId) {
-        alert("Workspace belum siap");
-        return;
-      }
 
       const name = prompt("Collection name?");
       if (!name) return;
 
-      await CollectionService.create(State.workspaceId, name);
+      const id = extractId(State.workspaceId);
 
-      await loadCollections(State.workspaceId);
-      scheduleSave();
+      if (!id) {
+        alert("Workspace belum valid");
+        return;
+      }
+
+      try {
+        await CollectionService.create(Number(State.workspaceId), name);
+
+        await loadCollections(id);
+        scheduleSave();
+
+      } catch (err) {
+        console.error("[CREATE COLLECTION FAILED]", err);
+        alert("Gagal membuat collection");
+      }
     });
 
   // ================= REQUEST =================
   document.getElementById("addRequest")
     ?.addEventListener("click", () => {
 
-      const active = tabs.getActive?.();
-      if (!active) return;
+     document.getElementById("addRequest")
+      ?.addEventListener(
+        "click",
+        async () => {
 
-      active.requests = active.requests || [];
+          await tabsController
+            .addTabToActiveCollection();
 
-      active.requests.push({
-        id: Date.now(),
-        name: "New Request"
-      });
+          scheduleSave();
 
-      tabs.render?.();
-      scheduleSave();
+        }
+      );
+    });
+
+  // ================= WORKSPACE CREATE =================
+  document.getElementById("createWorkspaceBtn")
+    ?.addEventListener("click", async () => {
+
+      const name = prompt("Workspace name?");
+      if (!name) return;
+
+      try {
+        const ws = await WorkspaceService.createWorkspace(name);
+
+        console.log("[WORKSPACE CREATED]", ws);
+
+        const id = extractId(ws?.id);
+
+        if (!id) {
+          console.error("[CREATE WORKSPACE ERROR] invalid id", ws);
+          return;
+        }
+
+        State.workspaceId = id;
+        State.workspace = ws;
+
+        renderActiveWorkspace({
+  name: ws?.name ?? ws?.title ?? ws?.data?.name,
+  id: ws?.id
+}); // 🔥 FIX UI NAME
+
+        hydrateState(ws.data || {});
+
+        await loadWorkspaceSwitcher();
+        await loadCollections(id);
+
+        console.log("[WORKSPACE SWITCHED TO NEW]", ws);
+
+      } catch (err) {
+        console.error("[CREATE WORKSPACE FAILED]", err);
+        alert("Gagal membuat workspace");
+      }
     });
 }
 
@@ -271,8 +634,11 @@ function scheduleSave() {
 }
 
 function save() {
+
   if (State.applyingRemote) return;
   if (!State.workspaceId) return;
+
+  tabsController?.saveActiveCollection?.();
 
   const payload = buildState();
 
@@ -280,7 +646,9 @@ function save() {
     data: payload
   }).catch(console.error);
 
-  sync.send(payload);
+  if (sync?.send) {
+    sync.send(payload);
+  }
 }
 
 // ================= BUILD =================
@@ -288,7 +656,7 @@ function buildState() {
   return {
     tabs: tabs.tabs,
     activeId: tabs.activeId,
-    collections: State.collections || [],
+    collections: State.collections,
     environment: Environment.getAll()
   };
 }
@@ -298,7 +666,19 @@ function startAutoSync() {
   setInterval(() => scheduleSave(), 2000);
 }
 
+
+// ================= TAB CHANGE =================
+
+function onTabChanged() {
+
+  tabs.syncTab();
+
+  scheduleSave();
+
+}
+
 // ================= HELPERS =================
+
 function getBody() {
   const tab = tabs.getActive?.();
   return tab?.body || null;

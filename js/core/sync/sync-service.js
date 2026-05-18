@@ -7,20 +7,43 @@ export class SyncService {
 
     this.deviceId = crypto.randomUUID();
 
-    // optional internal listener registry
     this.listeners = [];
+  }
+
+  // ================= SAFE ID =================
+  extractId(ws) {
+    if (!ws) return null;
+
+    const candidates = [
+      ws.id,
+      ws.workspace_id,
+      ws.activeId,
+      ws.data?.activeId,
+      ws.data?.id
+    ];
+
+    for (const c of candidates) {
+      const n = Number(c);
+      if (Number.isFinite(n)) return n;
+    }
+
+    return null;
   }
 
   // ================= LOAD =================
   async loadWorkspace() {
-    const data = await this.api.getWorkspace();
+
+    const data = await this.api.getWorkspace?.();
 
     this.workspace = data;
+    this.workspaceId = this.extractId(data);
+
     return data;
   }
 
   // ================= SAVE =================
   async saveWorkspace(patch) {
+
     if (!this.workspace) {
       this.workspace = patch;
     } else {
@@ -32,71 +55,55 @@ export class SyncService {
       };
     }
 
-    const result = await this.api.updateWorkspace(this.workspace);
+    if (!this.workspaceId) {
+      this.workspaceId = this.extractId(this.workspace);
+    }
 
-    // notify local listeners after save
-    this.emit({
-      type: "workspace:update",
-      data: this.workspace,
-      deviceId: this.deviceId
-    });
+    if (this.api?.updateWorkspace && this.workspaceId) {
+      return this.api.updateWorkspace(this.workspaceId, this.workspace);
+    }
 
-    return result;
+    console.warn("[SyncService] No sync method available");
   }
 
-  // ================= REALTIME =================
-  subscribe(callback) {
-    const unsub = this.api.onChange((event) => {
-
-      // inject device filter biar gak loop sendiri
-      if (event.deviceId === this.deviceId) return;
-
-      callback(event);
-    });
-
-    return unsub;
-  }
-
-  // ================= PATCH UPDATE =================
+  // ================= PATCH =================
   async patch(type, data) {
-    return await this.saveWorkspace({
+    return this.saveWorkspace({
       [type]: data,
       updatedAt: Date.now(),
       deviceId: this.deviceId
     });
   }
 
-  // ================= FIX: SEND (INI YANG KAMU KURANG) =================
+  // ================= SEND (FIXED) =================
   send(payload) {
+
     if (!payload) return;
 
-    // merge + update timestamp
     const finalPayload = {
       ...payload,
       updatedAt: Date.now(),
       deviceId: this.deviceId
     };
 
-    // optional local cache
     this.workspace = {
       ...(this.workspace || {}),
       ...finalPayload
     };
 
-    // push via API kalau ada endpoint sync
+    // optional sync
     if (this.api?.sync) {
       return this.api.sync(finalPayload);
     }
 
-    // fallback: updateWorkspace
-    if (this.api?.updateWorkspace) {
-      return this.api.updateWorkspace(this.workspace);
+    if (this.api?.updateWorkspace && this.workspaceId) {
+      return this.api.updateWorkspace(this.workspaceId, this.workspace);
     }
 
-    console.warn("[SyncService] No sync method available");
+    //console.warn("[SyncService] No sync method available");
   }
 
-  // ================= OPTIONAL: EVENT EMITTER =================
+  // ================= EVENTS =================
   emit(event) {
     this.listeners.forEach(fn => fn(event));
   }

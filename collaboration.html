@@ -11,58 +11,62 @@
 <!-- ================= SIDEBAR ================= -->
 <aside id="sidebar">
 
+  <!-- ================= HEADER ================= -->
   <div class="collab-header">
     <h3>Collaboration Mode</h3>
 
-    <!-- USER STATUS -->
     <div id="collabUserBar" class="user-bar">
       <span id="collabUserEmail"></span>
       <button id="collabLogoutBtn">Logout</button>
     </div>
   </div>
 
-  <hr>
 
-  <!-- WORKSPACE ACTIONS -->
+
+  <!-- ================= WORKSPACE ACTIVE (TOP DISPLAY) ================= -->
+  <div id="activeWorkspaceBox" class="workspace-active">
+    <div class="workspace-title">
+      <span id="activeWorkspaceName">No Workspace</span>
+    </div>
+  </div>
+
+  
+
+  <!-- ================= WORKSPACE SWITCHER ================= -->
+  <label style="font-size:12px; opacity:0.7;">Switch Workspace</label>
+
+  <select id="workspaceSwitcher" style="width:100%; margin-top:5px;">
+    <option>Loading...</option>
+  </select>
+
+  <button id="createWorkspaceBtn" style="margin-top:10px;">
+    + Workspace
+  </button>
+
+ 
+
+  <!-- ================= ACTIONS ================= -->
   <button id="newCollection">+ Collection</button>
   <button id="addRequest">+ Request</button>
 
+  <!-- ================= COLLECTION LIST ================= -->
   <div id="collectionList"></div>
 
-  <hr>
+ 
 
-  <!-- VARIABLES -->
-  <button id="openEnvModal">
-    Variables
-  </button>
+  <!-- ================= VARIABLES ================= -->
+  <button id="openEnvModal">Variables</button>
 
-  <!-- EXPORT / IMPORT -->
+  <!-- ================= EXPORT / IMPORT ================= -->
   <div style="margin-top:20px;">
     <button id="exportBtn">Export</button>
     <input type="file" id="importFile">
   </div>
 
-  <hr>
 
-  <!-- INVITE COLLAB -->
-  <button id="inviteBtn">
-    Invite User
-  </button>
 
-  <!-- ================= WORKSPACE SWITCH (NEW) ================= -->
-  <hr>
-
-  <div style="margin-top:10px;">
-    <label style="font-size:12px; opacity:0.7;">Workspace</label>
-
-    <select id="workspaceSwitcher" style="width:100%; margin-top:5px;">
-      <option>Loading...</option>
-    </select>
-  </div>
-
-  <button id="createWorkspaceBtn" style="margin-top:10px;">
-    + Workspace
-  </button>
+  <!-- ================= INVITE ================= -->
+  <button id="inviteBtn">Invite User</button>
 
 </aside>
 
@@ -106,15 +110,12 @@
   <!-- ================= CONTENT ================= -->
   <div id="reqContent">
 
-    <!-- PARAMS -->
     <div class="tab-panel" data-panel="params">
       <div id="paramsBox"></div>
       <button id="addParam">+ Param</button>
     </div>
 
-    <!-- BODY -->
     <div class="tab-panel hidden" data-panel="body">
-
       <div class="body-tabs">
         <button class="body-tab active" data-mode="none">none</button>
         <button class="body-tab" data-mode="raw">raw</button>
@@ -135,16 +136,13 @@
         <div id="urlencodedList"></div>
         <button id="addUrlEncoded">+ Add Field</button>
       </div>
-
     </div>
 
-    <!-- HEADERS -->
     <div class="tab-panel hidden" data-panel="headers">
       <div id="headersBox"></div>
       <button id="addHeader">+ Header</button>
     </div>
 
-    <!-- AUTH -->
     <div class="tab-panel hidden" data-panel="auth">
       <select id="authType">
         <option value="none">No Auth</option>
@@ -154,9 +152,7 @@
       <input id="authValue" placeholder="token / key">
     </div>
 
-    <!-- SCRIPTS -->
     <div class="tab-panel hidden" data-panel="scripts">
-
       <div class="script-section">
         <div class="script-header">Pre Script</div>
         <div id="preEditor" class="monaco-editor"></div>
@@ -166,21 +162,39 @@
         <div class="script-header">Post Script</div>
         <div id="postEditor" class="monaco-editor"></div>
       </div>
-
     </div>
 
   </div>
 
-  <!-- STATUS -->
   <div id="statusBar"></div>
 
-  <!-- VIEW TOGGLE -->
+
+  <div id="responseTabs" class="response-tabs">
+
+  <span class="response-tab active"
+        data-tab="body">
+    Body
+  </span>
+
+    <span class="response-tab"
+        data-tab="cookies">
+    Cookies
+  </span>
+
+  <span class="response-tab"
+        data-tab="headers">
+    Headers
+  </span>
+
+
+
+</div>
+
   <div id="viewToggle" class="toggle">
-    <span class="opt active" data-mode="tree">Tree</span>
-    <span class="opt" data-mode="raw">Raw</span>
+    <span class="opt active" data-mode="raw">Raw</span>
+    <span class="opt" data-mode="tree">Tree</span>
   </div>
 
-  <!-- RESPONSE -->
   <div id="response"></div>
 
 </main>
@@ -214,7 +228,6 @@
 
 <script src="./lib/js/monaco-editor/min/vs/loader.js"></script>
 
-<!-- ================= ENTRY POINT ================= -->
 <script type="module" src="./js/collab/collab-app.js"></script>
 
 </body>

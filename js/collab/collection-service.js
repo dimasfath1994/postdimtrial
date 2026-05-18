@@ -1,10 +1,12 @@
 import { Auth } from "../auth.js";
 
-const API = "https://skilled-fundamental-acquired-express.trycloudflare.com/api";
+import { API_BASE_URL }
+from "../core/api/api-config.js";
+
+const API = API_BASE_URL;
 
 export class CollectionService {
 
-  // ================= HEADERS =================
   static headers() {
     return {
       "Content-Type": "application/json",
@@ -12,14 +14,14 @@ export class CollectionService {
     };
   }
 
-  // ================= GET BY WORKSPACE =================
+  // ================= GET =================
   static async getByWorkspace(workspaceId) {
 
+    const id = Number(workspaceId);
+
     const res = await fetch(
-      `${API}/collections?workspace_id=${workspaceId}`,
-      {
-        headers: this.headers()
-      }
+      `${API}/collections?workspace_id=${id}`,
+      { headers: this.headers() }
     );
 
     const text = await res.text();
@@ -30,14 +32,18 @@ export class CollectionService {
       throw new Error("Failed to fetch collections");
     }
 
-    return text ? JSON.parse(text) : [];
+    try {
+      return JSON.parse(text);
+    } catch {
+      return [];
+    }
   }
 
-  // ================= CREATE =================
+  // ================= CREATE (FIXED i64) =================
   static async create(workspaceId, name) {
 
     const payload = {
-      workspace_id: String(workspaceId), // FIX: safe type
+      workspace_id: Number(workspaceId), // 🔥 FIX IMPORTANT (i64 fix)
       name: String(name || "").trim()
     };
 
@@ -57,22 +63,20 @@ export class CollectionService {
       throw new Error(`[CREATE COLLECTION FAILED] ${text}`);
     }
 
-    return text ? JSON.parse(text) : null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
 
   // ================= UPDATE =================
   static async update(id, payload) {
 
-    const safePayload = {
-      ...payload
-    };
-
-    console.log("[UPDATE COLLECTION]", id, safePayload);
-
     const res = await fetch(`${API}/collections/${id}`, {
       method: "PUT",
       headers: this.headers(),
-      body: JSON.stringify(safePayload)
+      body: JSON.stringify(payload)
     });
 
     const text = await res.text();
@@ -86,8 +90,6 @@ export class CollectionService {
 
   // ================= DELETE =================
   static async remove(id) {
-
-    console.log("[DELETE COLLECTION]", id);
 
     const res = await fetch(`${API}/collections/${id}`, {
       method: "DELETE",

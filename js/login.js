@@ -1,7 +1,9 @@
 import { Auth } from "./auth.js";
 
-const API = import.meta?.env?.VITE_API_URL
-  || "https://skilled-fundamental-acquired-express.trycloudflare.com/api";
+import { API_BASE_URL }
+from "./core/api/api-config.js";
+
+const API = API_BASE_URL;
 
 document.addEventListener("DOMContentLoaded", () => {
 

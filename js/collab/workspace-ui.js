@@ -1,60 +1,61 @@
 import { WorkspaceAPI } from "./workspace-api.js";
 import { AuthStore } from "./auth-store.js";
 
+// global event bridge
+function emitWorkspaceChange(ws) {
+  window.dispatchEvent(
+    new CustomEvent("workspace:changed", {
+      detail: ws
+    })
+  );
+}
+
 export async function initWorkspaceUI() {
 
   if (!AuthStore.isLoggedIn()) return;
 
   const sidebar = document.getElementById("collectionList");
-  if (!sidebar) {
-    console.warn("Sidebar not found");
-    return;
-  }
+  if (!sidebar) return;
 
-  // ❗ CEGAH DUPLIKASI RENDER
   const existing = document.getElementById("workspaceSection");
   if (existing) existing.remove();
 
   const wrap = document.createElement("div");
   wrap.id = "workspaceSection";
 
-  wrap.innerHTML = `
-    <div class="workspace-header">
-      <h3>Workspaces</h3>
-      <button id="logoutBtn" style="margin-left:auto;">Logout</button>
-    </div>
 
-    <div id="workspaceList"></div>
-  `;
 
-  // inject paling atas sidebar
   sidebar.prepend(wrap);
 
-  // ================= LOGOUT =================
-  const logoutBtn = wrap.querySelector("#logoutBtn");
 
-  logoutBtn.onclick = () => {
-    AuthStore.logout();
-  };
 
   // ================= LOAD WORKSPACE =================
   try {
 
     const data = await WorkspaceAPI.list();
-
     const list = wrap.querySelector("#workspaceList");
 
-    list.innerHTML = "";
+    const el =
+      document.getElementById(
+        "workspaceList"
+      );
+
+      if(!el) return;
+
+      el.innerHTML = "";
 
     data.forEach(ws => {
 
       const item = document.createElement("div");
       item.className = "workspace-item";
-
       item.textContent = ws.name;
 
       item.onclick = () => {
-        console.log("workspace selected:", ws);
+
+        console.log("[WORKSPACE CLICK]", ws);
+
+        // 🔥 IMPORTANT FIX: notify global app
+        emitWorkspaceChange(ws);
       };
 
       list.appendChild(item);

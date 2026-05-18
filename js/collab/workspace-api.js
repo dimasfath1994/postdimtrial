@@ -1,6 +1,9 @@
 import { AuthStore } from "./auth-store.js";
 
-const API = "https://skilled-fundamental-acquired-express.trycloudflare.com/api";
+import { API_BASE_URL }
+from "../core/api/api-config.js";
+
+const API = API_BASE_URL;
 
 export class WorkspaceAPI {
 

@@ -1,10 +1,13 @@
 import { Auth } from "../auth.js";
 
-const API =
-  "https://skilled-fundamental-acquired-express.trycloudflare.com/api";
+import { API_BASE_URL }
+from "../core/api/api-config.js";
+
+const API = API_BASE_URL;
 
 export class WorkspaceService {
 
+  // ================= HEADERS =================
   static headers() {
     return {
       "Content-Type": "application/json",
@@ -12,12 +15,16 @@ export class WorkspaceService {
     };
   }
 
-  // ================= NORMALIZER =================
+  // ================= SAFE JSON =================
   static async safeJson(res) {
-    const json = await res.json().catch(() => ({}));
-    return json;
+    try {
+      return await res.json();
+    } catch {
+      return {};
+    }
   }
 
+  // ================= NORMALIZER =================
   static normalizeList(res) {
     if (Array.isArray(res)) return res;
     if (Array.isArray(res?.data)) return res.data;
@@ -26,21 +33,38 @@ export class WorkspaceService {
     return [];
   }
 
+  // ================= EXTRACTOR (IMPORTANT FIX) =================
+  static extractWorkspaceId(ws) {
+    if (!ws) return null;
+
+    const candidates = [
+      ws.id,
+      ws.workspace_id,
+      ws.activeId,
+      ws.data?.activeId,
+      ws.data?.id
+    ];
+
+    for (const c of candidates) {
+      const n = Number(c);
+      if (Number.isFinite(n)) return n;
+    }
+
+    return null;
+  }
+
   // ================= GET ALL =================
   static async getMyWorkspaces() {
-
     const res = await fetch(`${API}/workspaces`, {
       headers: this.headers()
     });
 
     const json = await this.safeJson(res);
-
     return this.normalizeList(json);
   }
 
   // ================= GET SINGLE =================
   static async getWorkspace(id) {
-
     const res = await fetch(`${API}/workspaces/${id}`, {
       headers: this.headers()
     });
@@ -52,7 +76,6 @@ export class WorkspaceService {
 
   // ================= CREATE =================
   static async createWorkspace(name) {
-
     const res = await fetch(`${API}/workspaces`, {
       method: "POST",
       headers: this.headers(),
@@ -67,7 +90,14 @@ export class WorkspaceService {
   // ================= UPDATE =================
   static async updateWorkspace(id, body) {
 
-    const res = await fetch(`${API}/workspaces/${id}`, {
+    const safeId = this.extractWorkspaceId({ id });
+
+    if (!safeId) {
+      console.error("[WorkspaceService] invalid id:", id);
+      return;
+    }
+
+    const res = await fetch(`${API}/workspaces/${safeId}`, {
       method: "PUT",
       headers: this.headers(),
       body: JSON.stringify(body)
@@ -81,8 +111,10 @@ export class WorkspaceService {
   // ================= INVITE =================
   static async inviteUser(workspaceId, email) {
 
+    const safeId = this.extractWorkspaceId({ id: workspaceId });
+
     const res = await fetch(
-      `${API}/workspaces/${workspaceId}/invite`,
+      `${API}/workspaces/${safeId}/invite`,
       {
         method: "POST",
         headers: this.headers(),
