@@ -95,23 +95,426 @@ function extractId(value) {
 // ================= RENDER ACTIVE WORKSPACE UI (FIX UTAMA) =================
 function renderActiveWorkspace(ws) {
 
-  const el = document.getElementById("activeWorkspaceName");
+  const el =
+    document.getElementById(
+      "activeWorkspaceName"
+    );
+
   if (!el) return;
 
-  const fromList = State.workspaceList?.find(
-    w => Number(w.id) === Number(ws?.id)
-  );
+  const fromList =
+    State.workspaceList
+    ?.find(
+      w =>
+        Number(w.id)
+        === Number(ws?.id)
+    );
 
   const name =
-    fromList?.name ??
-    ws?.name ??
-    ws?.title ??
-    ws?.workspace_name ??
-    ws?.data?.name ??
-    null;
 
-  el.textContent = name || "Unnamed Workspace";
+    fromList?.name ??
+
+    ws?.name ??
+
+    ws?.title ??
+
+    ws?.workspace_name ??
+
+    ws?.data?.name ??
+
+    "Unnamed Workspace";
+
+  el.textContent = name;
+
+  // REBIND RIGHT CLICK
+  initWorkspaceContextMenu();
+
 }
+
+
+
+function initWorkspaceContextMenu() {
+
+  const el =
+    document.getElementById(
+      "activeWorkspaceName"
+    );
+
+  if (!el) return;
+
+  let menu =
+    document.getElementById(
+      "workspaceContextMenu"
+    );
+
+  if (!menu) {
+
+    menu =
+      document.createElement(
+        "div"
+      );
+
+    menu.id =
+      "workspaceContextMenu";
+
+    menu.style.position =
+      "fixed";
+
+    menu.style.display =
+      "none";
+
+    menu.style.background =
+      "#1e1e1e";
+
+    menu.style.border =
+      "1px solid #333";
+
+    menu.style.borderRadius =
+      "8px";
+
+    menu.style.minWidth =
+      "140px";
+
+    menu.style.zIndex =
+      "999999";
+
+    document.body
+      .appendChild(menu);
+
+  }
+
+  el.oncontextmenu =
+    (e)=>{
+
+    e.preventDefault();
+
+    menu.innerHTML="";
+
+    // ================= RENAME =================
+
+    const rename =
+      document.createElement(
+        "div"
+      );
+
+    rename.textContent =
+      "Rename";
+
+    rename.style.padding =
+      "10px";
+
+    rename.style.cursor =
+      "pointer";
+
+    rename.onclick =
+      async ()=>{
+
+      menu.style.display =
+        "none";
+
+      const newName =
+        prompt(
+          "Workspace name"
+        );
+
+      if(!newName)
+        return;
+
+      try{
+
+        await WorkspaceService
+          .updateWorkspace(
+
+            State.workspaceId,
+
+            {
+              name:newName
+            }
+
+          );
+
+        const item =
+          State.workspaceList
+          ?.find(
+
+            w=>
+              Number(w.id)
+              === Number(
+                State.workspaceId
+              )
+
+          );
+
+        if(item){
+
+          item.name =
+            newName;
+
+        }
+
+        renderActiveWorkspace({
+
+          id:
+            State.workspaceId,
+
+          name:
+            newName
+
+        });
+
+        await loadWorkspaceSwitcher();
+
+      }
+      catch(err){
+
+        console.error(
+          err
+        );
+
+      }
+
+    };
+
+    // ================= DELETE =================
+
+    const del =
+      document.createElement(
+        "div"
+      );
+
+    del.textContent =
+      "Delete";
+
+    del.style.padding =
+      "10px";
+
+    del.style.cursor =
+      "pointer";
+
+    del.onclick =
+      async ()=>{
+
+      menu.style.display =
+        "none";
+
+      try{
+
+        await WorkspaceService
+          .deleteWorkspace(
+            State.workspaceId
+          );
+
+        await loadWorkspaceFlow();
+
+        await loadWorkspaceSwitcher();
+
+      }
+      catch(err){
+
+        console.error(
+          err
+        );
+
+      }
+
+    };
+
+    menu.appendChild(
+      rename
+    );
+
+    menu.appendChild(
+      del
+    );
+
+    menu.style.left =
+      `${e.clientX}px`;
+
+    menu.style.top =
+      `${e.clientY}px`;
+
+    menu.style.display =
+      "block";
+
+  };
+
+  document.onclick =
+    ()=>{
+
+    menu.style.display =
+      "none";
+
+  };
+
+}
+
+
+
+
+function initTabContextMenu(){
+
+                  window.__openTabMenu=
+                  (e,tab)=>{
+
+                    let menu=
+                    document.getElementById(
+                    "tabContextMenu"
+                    );
+
+                    if(!menu){
+
+                    menu=
+                    document.createElement(
+                    "div"
+                    );
+
+                    menu.id=
+                    "tabContextMenu";
+
+                    menu.style.position=
+                    "fixed";
+
+                    menu.style.background=
+                    "#1e1e1e";
+
+                    menu.style.border=
+                    "1px solid #333";
+
+                    menu.style.borderRadius=
+                    "8px";
+
+                    menu.style.minWidth=
+                    "180px";
+
+                    menu.style.zIndex=
+                    "999999";
+
+                    document.body
+                    .appendChild(
+                    menu
+                    );
+
+                    }
+
+                    menu.innerHTML="";
+
+                    const addItem=
+                    (
+                    label,
+                    fn
+                    )=>{
+
+                    const el=
+                    document.createElement(
+                    "div"
+                    );
+
+                    el.textContent=
+                    label;
+
+                    el.style.padding=
+                    "10px";
+
+                    el.style.cursor=
+                    "pointer";
+
+                    el.onclick=
+                    async()=>{
+
+                    menu.style.display=
+                    "none";
+
+                    await fn();
+
+                     // hanya refresh UI, BUKAN reload dari backend
+                      tabsController.tabs.render();
+                      tabsController.tabs.syncForm();
+
+                    };
+
+                    menu.appendChild(
+                    el
+                    );
+
+                    };
+
+                    addItem(
+                    "Rename",
+                    ()=>tabsController
+                    .renameTab(
+                    tab
+                    )
+                    );
+
+                    addItem(
+                    "Duplicate",
+                    ()=>tabsController
+                    .duplicateTab(
+                    tab
+                    )
+                    );
+
+                    addItem(
+                    tab.pinned
+                    ?"Unpin"
+                    :"Pin",
+
+                    ()=>tabsController
+                    .togglePinTab(
+                    tab
+                    )
+                    );
+
+                    addItem(
+                    "Close",
+                    ()=>tabsController
+                    .closeTab(
+                    tab.id
+                    )
+                    );
+
+                    addItem(
+                    "Delete",
+                    ()=>tabsController
+                    .deleteTab(
+                    tab
+                    )
+                    );
+
+                    menu.style.left=
+                    `${e.clientX}px`;
+
+                    menu.style.top=
+                    `${e.clientY}px`;
+
+                    menu.style.display=
+                    "block";
+
+                    };
+
+                    document.addEventListener(
+                    "click",
+                    ()=>{
+
+                    const menu=
+                    document.getElementById(
+                    "tabContextMenu"
+                    );
+
+                    if(menu){
+
+                    menu.style.display=
+                    "none";
+
+                    }
+
+                    }
+      );
+
+}
+
+
+
 
 // ================= SYNC =================
 const sync = new SyncService({
@@ -130,8 +533,12 @@ async function bootstrap() {
   await loadWorkspaceFlow();
   await loadWorkspaceSwitcher();
 
+  initWorkspaceContextMenu();
+
   bindUI();
-  startAutoSync();
+
+  initTabContextMenu();
+  //startAutoSync();
 }
 
 // ================= USER =================
@@ -271,30 +678,52 @@ async function loadWorkspaceFlow() {
 }
 // ================= COLLECTION =================
 async function loadCollections(workspaceId) {
-  const id = extractId(workspaceId);
 
+  const id = extractId(workspaceId);
   if (!id) return;
 
-  const cols = (await CollectionService.getByWorkspace(Number(id)))
-    .filter(c => Number(c.workspace_id) === Number(id));
+  try {
 
-  State.collections = cols;
+    // ================= FETCH COLLECTIONS =================
+    const cols =
+      (await CollectionService.getByWorkspace(Number(id)))
+        .filter(c =>
+          Number(c.workspace_id) === Number(id)
+        );
 
-  // SET ACTIVE COLLECTION
-  State.activeCollection = cols[0] || null;
+    // ================= STATE UPDATE =================
+    State.collections = cols;
 
-  tabsController.setCollections(cols);
+    State.activeCollection =
+      cols[0] || null;
 
-  tabsController.renderCollections(
-    document.getElementById("collectionList")
-  );
+    // ================= PASS TO CONTROLLER =================
+    tabsController.setCollections(cols);
 
-  // CRITICAL: LOAD TABS DARI COLLECTION AKTIF
-  if (State.activeCollection) {
-    tabsController.loadCollection(State.activeCollection.id);
+    // ================= RENDER COLLECTION LIST =================
+    tabsController.renderCollections(
+      document.getElementById("collectionList")
+    );
+
+    // ================= LOAD ACTIVE COLLECTION =================
+    if (State.activeCollection) {
+
+      await tabsController.loadCollection(
+        State.activeCollection.id
+      );
+
+    }
+
+  } catch (err) {
+
+    console.error(
+      "[LOAD COLLECTIONS ERROR]",
+      err
+    );
+
   }
-}
 
+}
 // ================= WORKSPACE SWITCH =================
 async function loadWorkspaceSwitcher() {
 
@@ -477,6 +906,12 @@ function hydrateState(data) {
       State.collections = data.collections;
     }
 
+    if (Array.isArray(data.tabs)) {
+      tabs.tabs = structuredClone(
+        data.tabs.filter(t => !t._closed)
+      );
+    }
+
     if (data.environment) {
       Environment.clear?.();
       Object.entries(data.environment).forEach(([k, v]) => {
@@ -544,8 +979,14 @@ function bindUI() {
       try {
         await CollectionService.create(Number(State.workspaceId), name);
 
-        await loadCollections(id);
-        scheduleSave();
+        await refreshWorkspaceState();
+
+tabsController
+ .renderCollections(
+   ui.collectionList
+ );
+
+scheduleSave();
 
       } catch (err) {
         console.error("[CREATE COLLECTION FAILED]", err);
@@ -554,22 +995,25 @@ function bindUI() {
     });
 
   // ================= REQUEST =================
-  document.getElementById("addRequest")
-    ?.addEventListener("click", () => {
+  document.getElementById(
+  "addRequest"
+)
+?.addEventListener(
 
-     document.getElementById("addRequest")
-      ?.addEventListener(
-        "click",
-        async () => {
+  "click",
 
-          await tabsController
-            .addTabToActiveCollection();
+  async ()=>{
 
-          scheduleSave();
+    await tabsController
+      .addTabToActiveCollection();
 
-        }
-      );
-    });
+    await refreshWorkspaceState();
+
+    scheduleSave();
+
+  }
+
+);
 
   // ================= WORKSPACE CREATE =================
   document.getElementById("createWorkspaceBtn")
@@ -600,8 +1044,16 @@ function bindUI() {
 
         hydrateState(ws.data || {});
 
+        await loadWorkspaceFlow();
+
         await loadWorkspaceSwitcher();
-        await loadCollections(id);
+
+        await refreshWorkspaceState();
+
+        tabsController
+        .renderCollections(
+          ui.collectionList
+        );
 
         console.log("[WORKSPACE SWITCHED TO NEW]", ws);
 
@@ -635,36 +1087,75 @@ function scheduleSave() {
 
 function save() {
 
-  if (State.applyingRemote) return;
-  if (!State.workspaceId) return;
+  if (
+    State.applyingRemote
+  ) return;
 
-  tabsController?.saveActiveCollection?.();
+  if (
+    !State.workspaceId
+  ) return;
 
-  const payload = buildState();
+  // sync HANYA tab aktif
+  const activeTab =
+    tabs.getActive?.();
 
-  WorkspaceService.updateWorkspace(State.workspaceId, {
-    data: payload
-  }).catch(console.error);
+  if (
+    activeTab
+  ) {
 
-  if (sync?.send) {
-    sync.send(payload);
+    tabs.syncTab();
+
   }
+
+  // SAVE REQUEST DB
+  tabsController
+    ?.saveActiveCollection?.();
+
+  // BUILD WORKSPACE PAYLOAD
+  const payload =
+    buildState();
+
+  // DEEP COPY biar ga ketimpa reference
+  const safePayload =
+    structuredClone(
+      payload
+    );
+
+  WorkspaceService
+    .updateWorkspace(
+
+      State.workspaceId,
+
+      {
+        data:
+          safePayload
+      }
+
+    )
+    .catch(
+      err => {
+
+        console.error(
+          "[WORKSPACE SAVE]",
+          err
+        );
+
+      }
+    );
+
 }
 
 // ================= BUILD =================
 function buildState() {
   return {
-    tabs: tabs.tabs,
+    tabs: tabs.tabs.filter(t => !t._closed),
     activeId: tabs.activeId,
     collections: State.collections,
     environment: Environment.getAll()
   };
 }
 
-// ================= AUTO SYNC =================
-function startAutoSync() {
-  setInterval(() => scheduleSave(), 2000);
-}
+
 
 
 // ================= TAB CHANGE =================
@@ -678,6 +1169,28 @@ function onTabChanged() {
 }
 
 // ================= HELPERS =================
+
+async function refreshWorkspaceState() {
+
+  if (!State.workspaceId)
+    return;
+
+  await loadCollections(
+    State.workspaceId
+  );
+
+  if (
+    State.activeCollection
+  ) {
+
+    await tabsController
+      .loadCollection(
+        State.activeCollection.id
+      );
+
+  }
+
+}
 
 function getBody() {
   const tab = tabs.getActive?.();
@@ -706,3 +1219,5 @@ function logout() {
 }
 
 window.__COLLAB_MODE__ = true;
+
+window.refreshWorkspaceState = refreshWorkspaceState;

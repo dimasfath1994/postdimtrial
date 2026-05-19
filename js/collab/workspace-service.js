@@ -108,6 +108,32 @@ export class WorkspaceService {
     return json?.data ?? json;
   }
 
+  //=================== DELETE =======================
+
+static async deleteWorkspace(id){
+
+  const res =
+    await fetch(
+      `${API_BASE_URL}/workspaces/${id}`,
+      {
+        method:"DELETE",
+
+        headers:
+          this.headers()
+      }
+    );
+
+  if(!res.ok){
+
+    throw new Error(
+      await res.text()
+    );
+
+  }
+
+}
+
+
   // ================= INVITE =================
   static async inviteUser(workspaceId, email) {
 

@@ -88,6 +88,36 @@ export class CollectionService {
     return text ? JSON.parse(text) : null;
   }
 
+
+
+// ================= DELETE =================
+  static async delete(
+    id
+  ) {
+
+    const res =
+      await fetch(
+        `${API_BASE_URL}/collections/${id}`,
+        {
+          method:
+            "DELETE",
+
+          headers:
+            this.headers()
+        }
+      );
+
+    if (!res.ok) {
+
+      throw new Error(
+        await res.text()
+      );
+
+    }
+
+    return true;
+
+  }
   // ================= DELETE =================
   static async remove(id) {
 
