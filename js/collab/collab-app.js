@@ -14,6 +14,7 @@ import { SyncService } from "../core/sync/sync-service.js";
 import { WorkspaceService } from "./workspace-service.js";
 import { CollectionService } from "./collection-service.js";
 import { CollabTabsController } from "./collab-tabs-controller.js";
+import { RequestSync } from "../core/sync/request-sync.js";
 import { Auth } from "../auth.js";
 
 // ================= UI =================
@@ -35,6 +36,8 @@ const State = {
   saveTimer: null,
   collections: []
 };
+
+
 
 // ================= CORE =================
 const ctx = new ContextMenu();
@@ -58,6 +61,12 @@ const tabsController = new CollabTabsController({
   environment: Environment
 });
 
+const requestSync =
+  new RequestSync(
+    tabsController
+  );
+
+  requestSync.start();
 
 
 // ================= SAFE ID =================

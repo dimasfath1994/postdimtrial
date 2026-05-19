@@ -14,6 +14,7 @@ export class CollabTabsController {
     this.state = state;
     this.collectionService = collectionService;
     this.environment = environment;
+    this.lastMutation = 0;
   }
 
   // ================= COLLECTIONS =================
@@ -51,7 +52,7 @@ export class CollabTabsController {
   }
 
   // ================= LOAD =================
-  async loadCollection(collectionId) {
+  async loadCollection(collectionId, syncOnly=false) {
 
   const col =
     this.state.collections.find(
@@ -80,7 +81,7 @@ export class CollabTabsController {
     const rows = await res.json();
 
     // ================= IMPORTANT =================
-    // ❌ NO CLOSED FILTER HERE (sidebar must show ALL)
+    // NO CLOSED FILTER HERE (sidebar must show ALL)
 
     const safeTabs = (rows || []).map(r => ({
 
@@ -122,7 +123,72 @@ export class CollabTabsController {
 
     col.tabs = structuredClone(safeTabs);
 
-    this.tabs.tabs = structuredClone(safeTabs);
+    if(syncOnly){
+
+ safeTabs.forEach(
+  incoming=>{
+
+   const local =
+    this.tabs.tabs.find(
+      t=>
+        Number(t.id)
+        ===
+        Number(
+          incoming.id
+        )
+    );
+
+   if(local){
+
+    Object.assign(
+      local,
+      incoming
+    );
+
+   }
+
+   else{
+
+    this.tabs.tabs.push(
+      incoming
+    );
+
+   }
+
+ });
+
+ // delete removed
+
+ this.tabs.tabs =
+  this.tabs.tabs.filter(
+   local=>
+
+    safeTabs.some(
+      remote=>
+
+       Number(
+         remote.id
+       )
+
+       ===
+
+       Number(
+         local.id
+       )
+
+    )
+
+  );
+
+}
+else{
+
+ this.tabs.tabs =
+   structuredClone(
+     safeTabs
+   );
+
+}
 
     this.tabs.activeId =
       col.activeTabId
@@ -141,7 +207,7 @@ export class CollabTabsController {
 }
   // ================= SAVE =================
   async saveActiveCollection() {
-
+    this.lastMutation = Date.now();
     const collectionId =
       this.state.activeCollectionId;
 
@@ -282,7 +348,7 @@ export class CollabTabsController {
       );
 
     try {
-
+      this.lastMutation = Date.now();
       const res =
         await fetch(
           `${API_BASE_URL}/requests`,
@@ -788,7 +854,9 @@ async renameTab(tab) {
       });
     });
 
-    // 🔥 IMPORTANT: pakai STRUCTURE FULL MATCH BACKEND
+    this.lastMutation = Date.now();
+
+    // IMPORTANT: pakai STRUCTURE FULL MATCH BACKEND
     const payload = {
       name,
       method: active.method || "GET",
@@ -816,7 +884,7 @@ async renameTab(tab) {
       return;
     }
 
-    // ❗ IMPORTANT: reload dari backend supaya pasti konsisten
+    // IMPORTANT: reload dari backend supaya pasti konsisten
     await this.loadCollection(this.state.activeCollectionId);
 
     this.tabs.render();
@@ -835,7 +903,7 @@ async renameTab(tab) {
 async deleteTab(tab) {
 
   try {
-
+    this.lastMutation = Date.now();
     await fetch(
       `${API_BASE_URL}/requests/${tab.id}`,
       {
@@ -890,7 +958,7 @@ async deleteTab(tab) {
 async duplicateTab(tab) {
 
   try {
-
+        this.lastMutation = Date.now();
     const res =
       await fetch(
         `${API_BASE_URL}/requests`,
@@ -964,6 +1032,7 @@ async duplicateTab(tab) {
 
 async togglePinTab(tab){
 
+  this.lastMutation = Date.now();
   tab.pinned =
     !tab.pinned;
 
