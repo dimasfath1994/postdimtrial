@@ -132,9 +132,9 @@ export class CollectionSync {
       )
         return;
 
-      console.log(
-        "[COLLECTION SYNC]"
-      );
+      // console.log(
+      //   "[COLLECTION SYNC]"
+      // );
 
       const oldCollections =
         this.state

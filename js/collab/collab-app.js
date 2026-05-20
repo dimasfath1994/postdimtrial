@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 import { Tabs } from "../ui/tabs-collab.js";
-import { RequestEngine } from "../core/request-engine.js";
+import { RequestEngine } from "../core/request-engine-collab.js";
 import { CollectionManager } from "../core/collection.js";
 import { Environment } from "../core/environment.js";
 import { ContextMenu } from "../ui/context-menu.js";
@@ -17,6 +17,8 @@ import { CollabTabsController } from "./collab-tabs-controller.js";
 import { RequestSync } from "../core/sync/request-sync.js";
 import { WorkspaceSync } from "../core/sync/workspace-sync.js";
 import { CollectionSync } from "../core/sync/collection-sync.js";
+import { GlobalSync } from "../core/sync/global-sync.js";
+import { GlobalVariableService } from "./global-variable-service.js";
 import { Auth } from "../auth.js";
 
 // ================= UI =================
@@ -36,7 +38,8 @@ const State = {
   workspace: null,
   applyingRemote: false,
   saveTimer: null,
-  collections: []
+  collections: [],
+  globals: []
 };
 
 
@@ -76,51 +79,227 @@ document.getElementById("closeEnvPanel")?.addEventListener("click", () => {
   envPanel.classList.add("hidden");
 });
 
-function renderEnvViewer() {
-  const box = document.getElementById("envList");
-  const env = Environment.getAll();
 
-  box.innerHTML = "";
+function bindGlobalVariables(){
 
-  Object.entries(env).forEach(([key, value]) => {
+document
+.getElementById(
+  "addEnv"
+)
 
-    const row = document.createElement("div");
+?.addEventListener(
 
-    row.innerHTML = `
-      <input class="k" value="${key}">
-      <input class="v" value="${value}">
-      <button class="del">delete</button>
-    `;
+"click",
 
-    // update value
-row.querySelector(".v").oninput = (e) => {
-  Environment.set(key, e.target.value);
+async()=>{
 
-  saveActiveCollectionEnv();
-};
+ try{
 
-    // rename key
-    row.querySelector(".k").onblur = (e) => {
-      const newKey = e.target.value.trim();
-      if (!newKey || newKey === key) return;
+ const key=
 
-      const val = Environment.get(key);
+ document
+ .getElementById(
+   "envKey"
+ )
 
-      Environment.set(newKey, val);
-      Environment.remove(key); // FIX IMPORTANT
-      saveActiveCollectionEnv();
-      renderEnvViewer();
-    };
+ .value
+ .trim();
 
-    // delete
-    row.querySelector(".del").onclick = () => {
-      Environment.remove(key);
-       saveActiveCollectionEnv();
-      renderEnvViewer();
-    };
+ const value=
 
-    box.appendChild(row);
-  });
+ document
+ .getElementById(
+   "envValue"
+ )
+
+ .value
+ .trim();
+
+ if(!key)
+  return;
+
+ await GlobalVariableService
+ .create(
+
+   key,
+
+   value
+
+ );
+
+ document
+ .getElementById(
+   "envKey"
+ )
+ .value="";
+
+ document
+ .getElementById(
+   "envValue"
+ )
+ .value="";
+
+ await loadGlobals();
+
+ await renderEnvViewer();
+
+ }
+ catch(err){
+
+ console.error(
+  "[GLOBAL CREATE]",
+  err
+ );
+
+ }
+
+}
+
+);
+
+}
+
+async function renderEnvViewer(){
+
+  const box =
+    document.getElementById(
+      "envList"
+    );
+
+  box.innerHTML="";
+
+  State.globals
+    .forEach(
+      item=>{
+
+      const row=
+        document.createElement(
+          "div"
+        );
+
+      row.innerHTML=`
+
+      <input
+      class="k"
+      value="${item.global_key}"
+
+      >
+
+      <input
+      class="v"
+
+      value="${
+        item.global_value
+        ||""
+      }"
+
+      >
+
+      <button
+      class="del"
+
+      >
+      delete
+      </button>
+
+      `;
+
+      // ================= VALUE UPDATE =================
+
+      row
+      .querySelector(
+        ".v"
+      )
+
+      .oninput=
+
+      async(e)=>{
+
+        await GlobalVariableService
+        .update(
+
+          item.id,
+
+          item.global_key,
+
+          e.target.value
+
+        );
+
+        await loadGlobals();
+
+        await renderEnvViewer();
+
+      };
+
+      // ================= RENAME =================
+
+      row
+      .querySelector(
+        ".k"
+      )
+
+      .onblur=
+
+      async(e)=>{
+
+        const newKey=
+
+          e.target.value
+          .trim();
+
+        if(
+          !newKey
+        )
+
+          return;
+
+        await GlobalVariableService
+        .update(
+
+          item.id,
+
+          newKey,
+
+          item.global_value
+
+        );
+
+
+        await loadGlobals();
+
+        await renderEnvViewer();
+
+      };
+
+      // ================= DELETE =================
+
+      row
+      .querySelector(
+        ".del"
+      )
+
+      .onclick=
+
+      async()=>{
+
+        await GlobalVariableService
+        .delete(
+          item.id
+        );
+
+        await loadGlobals();
+
+        await renderEnvViewer();
+
+      };
+
+      box.appendChild(
+        row
+      );
+
+    });
+
 }
 
 // ================= REALTIME SYNC =================
@@ -154,6 +333,21 @@ const requestSync =
   );
 
 requestSync.start();
+
+
+
+const globalSync=
+
+ new GlobalSync(
+
+   State,
+
+   renderEnvViewer
+
+ );
+
+globalSync.start();
+
 
 // ================= SAFE ID =================
 function extractId(value) {
@@ -619,6 +813,35 @@ const sync = new SyncService({
 // ================= BOOT =================
 document.addEventListener("DOMContentLoaded", bootstrap);
 
+async function loadGlobals(){
+
+  const rows=
+
+    await GlobalVariableService
+    .getAll();
+
+  State.globals=
+    rows;
+
+  Environment.clear?.();
+
+  rows.forEach(
+
+    r=>{
+
+    Environment.set(
+
+      r.global_key,
+
+      r.global_value
+      ||""
+
+    );
+
+  });
+
+}
+
 async function bootstrap() {
 
   const allowed = await guardCollaborationAccess();
@@ -626,11 +849,14 @@ async function bootstrap() {
 
   await loadUserUI();
   await loadWorkspaceFlow();
+  await loadGlobals();
   await loadWorkspaceSwitcher();
 
   initWorkspaceContextMenu();
 
   bindUI();
+
+  bindGlobalVariables();
 
   initTabContextMenu();
   //startAutoSync();
@@ -1016,11 +1242,27 @@ function hydrateState(data) {
       );
     }
 
-    if (data.environment) {
-      Environment.clear?.();
-      Object.entries(data.environment).forEach(([k, v]) => {
-        Environment.set(k, v);
-      });
+    if(data.environment){
+
+        Environment.clear?.();
+
+        Object.entries(
+          data.environment
+        )
+
+        .forEach(
+
+        ([k,v])=>{
+
+        Environment.set(
+          k,
+          v
+        );
+
+        }
+
+        );
+
     }
 
   } finally {
@@ -1056,15 +1298,85 @@ function bindUI() {
       onTabChanged
     );
 
-    ui.url?.addEventListener(
-      "input",
-      onTabChanged
-    );
+    ui.url
+?.addEventListener(
 
-    ui.body?.addEventListener(
-      "input",
-      onTabChanged
-    );
+"input",
+
+()=>{
+
+ const tab=
+  tabs.getActive?.();
+
+ if(tab){
+
+  tab._editing=
+   true;
+
+ }
+touchEditing();
+ onTabChanged();
+
+}
+
+);
+
+ui.body
+?.addEventListener(
+
+"input",
+
+()=>{
+
+ const tab=
+  tabs.getActive?.();
+
+ if(tab){
+
+  tab._editing=
+   true;
+
+ }
+touchEditing();
+ onTabChanged();
+
+}
+
+);
+
+let editTimer=null;
+
+function touchEditing(){
+
+ clearTimeout(
+  editTimer
+ );
+
+ const tab=
+  tabs.getActive?.();
+
+ if(!tab)
+  return;
+
+ tab._editing=
+  true;
+
+ editTimer=
+
+ setTimeout(
+
+ ()=>{
+
+ tab._editing=
+  false;
+
+ },
+
+ 1500
+
+ );
+
+}
 
   // ================= COLLECTION =================
   document.getElementById("newCollection")
@@ -1080,17 +1392,20 @@ function bindUI() {
         return;
       }
 
+
+     
+
       try {
         await CollectionService.create(Number(State.workspaceId), name);
 
         await refreshWorkspaceState();
 
-tabsController
- .renderCollections(
-   ui.collectionList
- );
+        tabsController
+        .renderCollections(
+          ui.collectionList
+        );
 
-scheduleSave();
+        scheduleSave();
 
       } catch (err) {
         console.error("[CREATE COLLECTION FAILED]", err);

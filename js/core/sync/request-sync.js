@@ -1,8 +1,6 @@
 export class RequestSync {
 
-  constructor(
-    controller
-  ){
+  constructor(controller){
 
     this.controller =
       controller;
@@ -12,6 +10,59 @@ export class RequestSync {
 
     this.lastHash =
       null;
+
+    // lock local edit
+    this.localEditingUntil =
+      0;
+
+    this.bindEditingGuard();
+
+  }
+
+  bindEditingGuard(){
+
+    const ids = [
+
+      "url",
+      "body",
+      "method"
+
+    ];
+
+    ids.forEach(id=>{
+
+      const el =
+        document.getElementById(
+          id
+        );
+
+      if(!el)
+        return;
+
+      const markEditing = ()=>{
+
+        this.localEditingUntil =
+          Date.now()
+          + 2000;
+
+      };
+
+      el.addEventListener(
+        "input",
+        markEditing
+      );
+
+      el.addEventListener(
+        "keydown",
+        markEditing
+      );
+
+      el.addEventListener(
+        "change",
+        markEditing
+      );
+
+    });
 
   }
 
@@ -61,6 +112,7 @@ export class RequestSync {
       return;
 
     // ignore local mutation
+
     if(
 
       Date.now()
@@ -74,6 +126,22 @@ export class RequestSync {
       )
 
       <1500
+
+    ){
+
+      return;
+
+    }
+
+    // USER SEDANG NGETIK
+
+    if(
+
+      Date.now()
+
+      <
+
+      this.localEditingUntil
 
     ){
 
@@ -153,30 +221,9 @@ export class RequestSync {
 
       }
 
-      // ================= UPDATE TAB MIDDLE =================
+      // ================= SIDEBAR EXPAND STATE =================
 
-      this.controller
-      .tabs
-      .tabs =
-
-        structuredClone(
-
-          col.tabs
-          ||[]
-
-        );
-
-      this.controller
-      .tabs
-      .render();
-
-      this.controller
-      .tabs
-      .syncForm();
-
-      // ================= PRESERVE SIDEBAR EXPAND =================
-
-      const expanded={};
+      const expanded = {};
 
       document
       .querySelectorAll(
@@ -195,7 +242,68 @@ export class RequestSync {
 
       });
 
-      // ================= REFRESH SIDEBAR =================
+      // ================= UPDATE TABS =================
+
+      const currentActive =
+
+        this.controller
+        .tabs
+        .activeId;
+
+      this.controller
+      .tabs
+      .tabs =
+
+        structuredClone(
+
+          col.tabs
+          ||[]
+
+        );
+
+      this.controller
+      .tabs
+      .activeId =
+        currentActive;
+
+      this.controller
+      .tabs
+      .render();
+
+      // sync form HANYA kalau user tidak fokus
+
+      const focused =
+
+        document.activeElement
+        ?.id;
+
+      const editing =
+
+        [
+
+          "url",
+
+          "body",
+
+          "method"
+
+        ]
+
+        .includes(
+          focused
+        );
+
+      if(
+        !editing
+      ){
+
+        this.controller
+        .tabs
+        .syncForm();
+
+      }
+
+      // ================= SIDEBAR =================
 
       this.controller
       .renderCollections(
@@ -207,11 +315,12 @@ export class RequestSync {
 
       );
 
-      // ================= RESTORE EXPAND =================
+      // restore expand
 
       Object.entries(
         expanded
       )
+
       .forEach(
 
         ([id,val])=>{
@@ -225,7 +334,9 @@ export class RequestSync {
           `.collection-item[data-id="${id}"]`
 
         )
+
         ?.classList
+
         .add(
           "expanded"
         );
@@ -233,6 +344,7 @@ export class RequestSync {
       });
 
     }
+
     catch(err){
 
       console.error(
