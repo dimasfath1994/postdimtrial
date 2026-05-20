@@ -65,6 +65,7 @@ export class WorkspaceService {
 
   // ================= GET SINGLE =================
   static async getWorkspace(id) {
+    
     const res = await fetch(`${API}/workspaces/${id}`, {
       headers: this.headers()
     });
@@ -76,6 +77,7 @@ export class WorkspaceService {
 
   // ================= CREATE =================
   static async createWorkspace(name) {
+    window.__workspaceMutation = Date.now();
     const res = await fetch(`${API}/workspaces`, {
       method: "POST",
       headers: this.headers(),
@@ -89,7 +91,7 @@ export class WorkspaceService {
 
   // ================= UPDATE =================
   static async updateWorkspace(id, body) {
-
+    window.__workspaceMutation = Date.now();
     const safeId = this.extractWorkspaceId({ id });
 
     if (!safeId) {
@@ -111,7 +113,7 @@ export class WorkspaceService {
   //=================== DELETE =======================
 
 static async deleteWorkspace(id){
-
+  window.__workspaceMutation = Date.now();
   const res =
     await fetch(
       `${API_BASE_URL}/workspaces/${id}`,

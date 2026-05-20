@@ -15,6 +15,8 @@ import { WorkspaceService } from "./workspace-service.js";
 import { CollectionService } from "./collection-service.js";
 import { CollabTabsController } from "./collab-tabs-controller.js";
 import { RequestSync } from "../core/sync/request-sync.js";
+import { WorkspaceSync } from "../core/sync/workspace-sync.js";
+import { CollectionSync } from "../core/sync/collection-sync.js";
 import { Auth } from "../auth.js";
 
 // ================= UI =================
@@ -61,13 +63,39 @@ const tabsController = new CollabTabsController({
   environment: Environment
 });
 
+
+
+// ================= REALTIME SYNC =================
+
+window.__workspaceSync =
+  new WorkspaceSync({
+
+    state: State,
+
+    renderWorkspaces:
+      loadWorkspaceSwitcher
+
+  });
+
+window.__workspaceSync.start();
+
+
+window.__collectionSync =
+  new CollectionSync({
+
+    state: State,
+
+    tabsController
+
+  });
+
+
 const requestSync =
   new RequestSync(
     tabsController
   );
 
-  requestSync.start();
-
+requestSync.start();
 
 // ================= SAFE ID =================
 function extractId(value) {
@@ -688,6 +716,10 @@ async function loadWorkspaceFlow() {
 // ================= COLLECTION =================
 async function loadCollections(workspaceId) {
 
+   window.__collectionSync
+ ?.start(
+   workspaceId
+ );
   const id = extractId(workspaceId);
   if (!id) return;
 
@@ -713,6 +745,11 @@ async function loadCollections(workspaceId) {
     tabsController.renderCollections(
       document.getElementById("collectionList")
     );
+
+    window.__collectionSync
+ ?.start(
+   workspaceId
+ );
 
     // ================= LOAD ACTIVE COLLECTION =================
     if (State.activeCollection) {

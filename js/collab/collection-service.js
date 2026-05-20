@@ -41,7 +41,7 @@ export class CollectionService {
 
   // ================= CREATE (FIXED i64) =================
   static async create(workspaceId, name) {
-
+    window.__collectionMutation = Date.now();
     const payload = {
       workspace_id: Number(workspaceId), // 🔥 FIX IMPORTANT (i64 fix)
       name: String(name || "").trim()
@@ -72,7 +72,7 @@ export class CollectionService {
 
   // ================= UPDATE =================
   static async update(id, payload) {
-
+    window.__collectionMutation = Date.now();
     const res = await fetch(`${API}/collections/${id}`, {
       method: "PUT",
       headers: this.headers(),
@@ -94,7 +94,7 @@ export class CollectionService {
   static async delete(
     id
   ) {
-
+    window.__collectionMutation = Date.now();
     const res =
       await fetch(
         `${API_BASE_URL}/collections/${id}`,
@@ -120,7 +120,7 @@ export class CollectionService {
   }
   // ================= DELETE =================
   static async remove(id) {
-
+    window.__collectionMutation = Date.now();
     const res = await fetch(`${API}/collections/${id}`, {
       method: "DELETE",
       headers: this.headers()
