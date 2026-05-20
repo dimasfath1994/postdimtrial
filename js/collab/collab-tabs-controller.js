@@ -52,158 +52,354 @@ export class CollabTabsController {
   }
 
   // ================= LOAD =================
-  async loadCollection(collectionId, syncOnly=false) {
+  async loadCollection(
+  collectionId,
+  syncOnly=false
+){
 
   const col =
     this.state.collections.find(
-      c => Number(c.id) === Number(collectionId)
+
+      c=>
+
+      Number(c.id)
+
+      ===
+
+      Number(
+        collectionId
+      )
+
     );
 
-  if (!col) return null;
+  if(!col)
+    return null;
 
-  this.state.activeCollectionId = col.id;
+  this.state.activeCollectionId =
+    col.id;
 
-  try {
+  this.state.activeCollection =
+    col;
 
-    const res = await fetch(
-      `${API_BASE_URL}/requests/collection/${col.id}`,
-      {
-        method: "GET",
-        headers: this.collectionService.headers()
-      }
-    );
+  try{
 
-    if (!res.ok) {
-      console.error(await res.text());
+    const res =
+      await fetch(
+
+        `${API_BASE_URL}/requests/collection/${col.id}`,
+
+        {
+
+          method:"GET",
+
+          headers:
+            this.collectionService
+            .headers()
+
+        }
+
+      );
+
+    if(!res.ok){
+
+      console.error(
+        await res.text()
+      );
+
       return null;
+
     }
 
-    const rows = await res.json();
+    const rows =
+      await res.json();
 
-    // ================= IMPORTANT =================
-    // NO CLOSED FILTER HERE (sidebar must show ALL)
+    // IMPORTANT:
+    // sidebar always show ALL
+    const safeTabs =
 
-    const safeTabs = (rows || []).map(r => ({
+      (rows||[])
+      .map(r=>({
 
-      id: Number(r.id),
+      id:
+        Number(r.id),
 
-      workspace_id: r.workspace_id,
-      collection_id: r.collection_id,
+      workspace_id:
+        r.workspace_id,
 
-      name: r.name || "Untitled",
-      method: r.method || "GET",
-      url: r.url || "",
+      collection_id:
+        r.collection_id,
 
-      body: {
-        mode: "raw",
-        raw: r.body || "",
-        formData: [],
-        urlencoded: []
+      name:
+        r.name
+        ||"Untitled",
+
+      method:
+        r.method
+        ||"GET",
+
+      url:
+        r.url
+        ||"",
+
+      body:{
+
+        mode:"raw",
+
+        raw:
+          r.body
+          ||"",
+
+        formData:[],
+
+        urlencoded:[]
+
       },
 
-      pinned: !!r.pinned,
+      pinned:
+        !!r.pinned,
 
-      headers: {},
-      params: {},
+      headers:{},
 
-      auth: {
-        type: r.auth_type || "",
-        value: r.auth_value || ""
+      params:{},
+
+      auth:{
+
+        type:
+          r.auth_type
+          ||"",
+
+        value:
+          r.auth_value
+          ||""
+
       },
 
-      scripts: {
-        pre: r.pre_script || "",
-        post: r.post_script || ""
+      scripts:{
+
+        pre:
+          r.pre_script
+          ||"",
+
+        post:
+          r.post_script
+          ||""
+
       },
 
-      opened: true,
-      history: []
+      opened:true,
+
+      history:[]
 
     }));
 
-    col.tabs = structuredClone(safeTabs);
+    // ================= UPDATE COLLECTION =================
+
+    col.tabs =
+      structuredClone(
+        safeTabs
+      );
+
+    const idx =
+      this.state
+      .collections
+      .findIndex(
+
+        c=>
+
+        Number(c.id)
+
+        ===
+
+        Number(
+          col.id
+        )
+
+      );
+
+    if(
+      idx>=0
+    ){
+
+      this.state
+      .collections[idx]
+      .tabs =
+
+        structuredClone(
+          safeTabs
+        );
+
+    }
+
+    // ================= TAB SYNC =================
 
     if(syncOnly){
 
- safeTabs.forEach(
-  incoming=>{
+      safeTabs.forEach(
+        incoming=>{
 
-   const local =
-    this.tabs.tabs.find(
-      t=>
-        Number(t.id)
-        ===
-        Number(
-          incoming.id
-        )
-    );
+        const local =
 
-   if(local){
+          this.tabs.tabs
+          .find(
 
-    Object.assign(
-      local,
-      incoming
-    );
+            t=>
 
-   }
+            Number(t.id)
 
-   else{
+            ===
 
-    this.tabs.tabs.push(
-      incoming
-    );
+            Number(
+              incoming.id
+            )
 
-   }
+          );
 
- });
+        if(local){
 
- // delete removed
+          Object.assign(
+            local,
+            incoming
+          );
 
- this.tabs.tabs =
-  this.tabs.tabs.filter(
-   local=>
+        }
 
-    safeTabs.some(
-      remote=>
+        else{
 
-       Number(
-         remote.id
-       )
+          this.tabs.tabs
+          .push(
+            incoming
+          );
 
-       ===
+        }
 
-       Number(
-         local.id
-       )
+      });
 
-    )
+      // remove deleted
 
-  );
+      this.tabs.tabs =
 
-}
-else{
+        this.tabs.tabs
+        .filter(
 
- this.tabs.tabs =
-   structuredClone(
-     safeTabs
-   );
+          local=>
 
-}
+          safeTabs.some(
+
+            remote=>
+
+            Number(
+              remote.id
+            )
+
+            ===
+
+            Number(
+              local.id
+            )
+
+          )
+
+        );
+
+    }
+
+    else{
+
+      this.tabs.tabs =
+
+        structuredClone(
+          safeTabs
+        );
+
+    }
 
     this.tabs.activeId =
+
       col.activeTabId
-      || safeTabs[0]?.id
-      || null;
+
+      ||
+
+      safeTabs[0]?.id
+
+      ||
+
+      null;
 
     this.tabs.render();
+
     this.tabs.syncForm();
+
+    // ================= SIDEBAR REFRESH =================
+
+    const expanded={};
+
+    document
+    .querySelectorAll(
+      ".collection-item"
+    )
+    .forEach(el=>{
+
+      expanded[
+        el.dataset.id
+      ]=
+
+      el.classList
+      .contains(
+        "expanded"
+      );
+
+    });
+
+    this.renderCollections(
+
+      document
+      .getElementById(
+        "collectionList"
+      )
+
+    );
+
+    Object.entries(
+      expanded
+    )
+    .forEach(
+
+      ([id,val])=>{
+
+      if(!val)
+        return;
+
+      document
+      .querySelector(
+
+        `.collection-item[data-id="${id}"]`
+
+      )
+      ?.classList
+      .add(
+        "expanded"
+      );
+
+    });
 
     return col;
 
-  } catch (err) {
-    console.error("[LOAD COLLECTION ERROR]", err);
-    return null;
   }
+
+  catch(err){
+
+    console.error(
+
+      "[LOAD COLLECTION ERROR]",
+
+      err
+
+    );
+
+    return null;
+
+  }
+
 }
   // ================= SAVE =================
   async saveActiveCollection() {

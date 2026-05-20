@@ -1,43 +1,62 @@
-import { WorkspaceService }
+import {
+  WorkspaceService
+}
 from "../../collab/workspace-service.js";
 
 export class WorkspaceSync {
 
-  constructor(app){
+  constructor({
 
-    this.app = app;
+    state,
 
-    this.timer = null;
+    renderWorkspaces
+
+  }) {
+
+    this.state =
+      state;
+
+    this.renderWorkspaces =
+      renderWorkspaces;
+
+    this.timer =
+      null;
 
   }
 
-  start(){
+  start() {
 
     this.stop();
 
     this.timer =
       setInterval(
+
         ()=>this.sync(),
+
         1500
+
       );
 
   }
 
-  stop(){
+  stop() {
 
-    if(this.timer){
+    if(
+      this.timer
+    ){
 
       clearInterval(
         this.timer
       );
 
-      this.timer = null;
+      this.timer =
+        null;
 
     }
 
   }
 
-  async sync(){
+  async sync() {
 
     try{
 
@@ -56,45 +75,112 @@ export class WorkspaceSync {
         <1500
 
       )
-
-      return;
+        return;
 
       const rows =
         await WorkspaceService
-        .getMyWorkspaces();
+          .getMyWorkspaces();
+
+      const oldList =
+        this.state
+        .workspaceList
+        || [];
 
       const oldJson =
         JSON.stringify(
-          this.app
-          ?.state
-          ?.workspaces
-          ||[]
+          oldList
         );
 
       const newJson =
         JSON.stringify(
-          rows||[]
+          rows
         );
 
       if(
-        oldJson===newJson
+        oldJson === newJson
       )
-
-      return;
+        return;
 
       console.log(
         "[WORKSPACE SYNC]"
       );
 
-      this.app.state.workspaces =
-        rows;
+      // ===== ADD / UPDATE =====
+      rows.forEach(newWs=>{
 
-      window.renderWorkspaces?.(
-  this.app.state.workspaces
-);
+        const old =
+          oldList.find(
+            x=>
+
+            Number(x.id)
+
+            ===
+
+            Number(
+              newWs.id
+            )
+          );
+
+        if(!old){
+
+          oldList.push(
+            newWs
+          );
+
+          return;
+
+        }
+
+        old.name =
+          newWs.name;
+
+      });
+
+      // ===== DELETE =====
+      for(
+
+        let i=
+          oldList.length-1;
+
+        i>=0;
+
+        i--
+
+      ){
+
+        const exists =
+          rows.find(
+            x=>
+
+            Number(x.id)
+
+            ===
+
+            Number(
+              oldList[i].id
+            )
+          );
+
+        if(!exists){
+
+          oldList.splice(
+            i,
+            1
+          );
+
+        }
+
+      }
+
+      this.state
+      .workspaceList =
+        oldList;
+
+      await this
+        .renderWorkspaces
+        ?.();
 
     }
-
     catch(err){
 
       console.error(

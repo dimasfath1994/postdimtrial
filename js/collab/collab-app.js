@@ -65,6 +65,64 @@ const tabsController = new CollabTabsController({
 
 
 
+
+document.getElementById("openEnvModal")?.addEventListener("click", () => {
+  envPanel.classList.remove("hidden");
+  envPanel.classList.add("show");
+  renderEnvViewer();
+});
+document.getElementById("closeEnvPanel")?.addEventListener("click", () => {
+  envPanel.classList.remove("show");
+  envPanel.classList.add("hidden");
+});
+
+function renderEnvViewer() {
+  const box = document.getElementById("envList");
+  const env = Environment.getAll();
+
+  box.innerHTML = "";
+
+  Object.entries(env).forEach(([key, value]) => {
+
+    const row = document.createElement("div");
+
+    row.innerHTML = `
+      <input class="k" value="${key}">
+      <input class="v" value="${value}">
+      <button class="del">delete</button>
+    `;
+
+    // update value
+row.querySelector(".v").oninput = (e) => {
+  Environment.set(key, e.target.value);
+
+  saveActiveCollectionEnv();
+};
+
+    // rename key
+    row.querySelector(".k").onblur = (e) => {
+      const newKey = e.target.value.trim();
+      if (!newKey || newKey === key) return;
+
+      const val = Environment.get(key);
+
+      Environment.set(newKey, val);
+      Environment.remove(key); // FIX IMPORTANT
+      saveActiveCollectionEnv();
+      renderEnvViewer();
+    };
+
+    // delete
+    row.querySelector(".del").onclick = () => {
+      Environment.remove(key);
+       saveActiveCollectionEnv();
+      renderEnvViewer();
+    };
+
+    box.appendChild(row);
+  });
+}
+
 // ================= REALTIME SYNC =================
 
 window.__workspaceSync =
@@ -73,7 +131,7 @@ window.__workspaceSync =
     state: State,
 
     renderWorkspaces:
-      loadWorkspaceSwitcher
+      reloadWorkspaceRealtime
 
   });
 
@@ -1241,6 +1299,21 @@ async function refreshWorkspaceState() {
 function getBody() {
   const tab = tabs.getActive?.();
   return tab?.body || null;
+}
+
+async function reloadWorkspaceRealtime() {
+
+  if(
+    !State.workspaceId
+  )
+    return;
+
+  await loadWorkspaceSwitcher();
+
+  await loadCollections(
+    State.workspaceId
+  );
+
 }
 
 // ================= RESPONSE =================

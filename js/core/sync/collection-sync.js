@@ -1,42 +1,57 @@
 import {
-CollectionService
+  CollectionService
 }
-from
-"../../collab/collection-service.js";
+from "../../collab/collection-service.js";
 
 export class CollectionSync {
 
-  constructor(
-    app,
-    workspaceId
-  ){
+  constructor({
 
-    this.app =
-      app;
+    state,
+
+    tabsController
+
+  }) {
+
+    this.state =
+      state;
+
+    this.tabsController =
+      tabsController;
 
     this.workspaceId =
-      workspaceId;
+      null;
 
     this.timer =
       null;
 
   }
 
-  start(){
+  start(
+    workspaceId
+  ){
+
+    this.workspaceId =
+      workspaceId;
 
     this.stop();
 
     this.timer =
       setInterval(
+
         ()=>this.sync(),
+
         1500
+
       );
 
   }
 
   stop(){
 
-    if(this.timer){
+    if(
+      this.timer
+    ){
 
       clearInterval(
         this.timer
@@ -56,8 +71,7 @@ export class CollectionSync {
       if(
         !this.workspaceId
       )
-
-      return;
+        return;
 
       if(
 
@@ -74,12 +88,26 @@ export class CollectionSync {
         <1500
 
       )
-
-      return;
+        return;
 
       const rows =
         await CollectionService
-        .getByWorkspace(
+          .getByWorkspace(
+            Number(
+              this.workspaceId
+            )
+          );
+
+      const filtered =
+        rows.filter(
+          x=>
+
+          Number(
+            x.workspace_id
+          )
+
+          ===
+
           Number(
             this.workspaceId
           )
@@ -87,47 +115,116 @@ export class CollectionSync {
 
       const oldJson =
         JSON.stringify(
-          this.app
-          ?.state
-          ?.collections
+
+          this.state
+          .collections
           ||[]
+
         );
 
       const newJson =
         JSON.stringify(
-          rows||[]
+          filtered
         );
 
       if(
-        oldJson===newJson
+        oldJson === newJson
       )
-
-      return;
+        return;
 
       console.log(
         "[COLLECTION SYNC]"
       );
 
-      this.app.state.collections =
-        rows;
+      const oldCollections =
+        this.state
+        .collections
+        || [];
 
-      this.app
-      .tabsController
-      ?.setCollections(
-        rows
-      );
+      // ===== ADD / UPDATE =====
+      filtered.forEach(
+        newCol=>{
 
-      this.app
-      .tabsController
-      ?.renderCollections(
-        document
-        .getElementById(
-          "collectionList"
-        )
-      );
+        const old =
+          oldCollections.find(
+            x=>
+
+            Number(x.id)
+
+            ===
+
+            Number(
+              newCol.id
+            )
+          );
+
+        if(!old){
+
+          oldCollections.push(
+            newCol
+          );
+
+          return;
+
+        }
+
+        old.name =
+          newCol.name;
+
+      });
+
+      // ===== DELETE =====
+      for(
+
+        let i=
+          oldCollections
+          .length-1;
+
+        i>=0;
+
+        i--
+
+      ){
+
+        const exists =
+          filtered.find(
+            x=>
+
+            Number(x.id)
+
+            ===
+
+            Number(
+              oldCollections[i]
+              .id
+            )
+          );
+
+        if(!exists){
+
+          oldCollections
+          .splice(
+            i,
+            1
+          );
+
+        }
+
+      }
+
+      this.state
+      .collections =
+        oldCollections;
+
+      this.tabsController
+        .setCollections(
+          oldCollections
+        );
+
+      //  NO renderCollections()
+      // supaya expand collapse tetap hidup
 
     }
-
     catch(err){
 
       console.error(
