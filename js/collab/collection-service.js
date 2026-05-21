@@ -43,7 +43,7 @@ export class CollectionService {
   static async create(workspaceId, name) {
     window.__collectionMutation = Date.now();
     const payload = {
-      workspace_id: Number(workspaceId), // 🔥 FIX IMPORTANT (i64 fix)
+      workspace_id: Number(workspaceId), // FIX IMPORTANT (i64 fix)
       name: String(name || "").trim()
     };
 

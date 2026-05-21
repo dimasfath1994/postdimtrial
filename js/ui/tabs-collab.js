@@ -153,26 +153,28 @@ export class Tabs {
   }
 
   // ================= CLOSE (SOFT UI ONLY) =================
-close(id) {
+ close(id) {
 
-  const tabId = Number(id);
+    const tabId = Number(id);
 
-  this.closedTabIds.add(tabId);
-  this._saveClosedTabs();
+    // 1. mark as closed
+    this.closedTabIds.add(tabId);
+    this._saveClosedTabs(); // 🔥 PERSIST
 
-  // update active tab jika perlu
-  if (this.activeId === tabId) {
+    // 2. switch active tab if needed
+    if (this.activeId === tabId) {
 
-    const next = this.tabs.find(t =>
-      !this.closedTabIds.has(Number(t.id))
-    );
+      const next = this.tabs.find(t =>
+        !this.closedTabIds.has(Number(t.id))
+      );
 
-    this.activeId = next?.id || null;
+      this.activeId = next?.id || null;
+    }
+
+    // 3. update UI only (NO DELETE, NO DB TOUCH)
+    this.render();
+    this.syncForm();
   }
-
-  this.render();
-  this.syncForm();
-}
 
   // ================= RENAME =================
   rename(tab, name) {
@@ -340,29 +342,28 @@ close(id) {
   }
 
   // ================= LOAD =================
-      load() {
+    load() {
 
-        const data = Storage.load();
+      const data = Storage.load();
 
-        // load closed state
-        this._loadClosedTabs?.();
+      const closed =
+        JSON.parse(localStorage.getItem("closed_tabs") || "[]");
 
-        if (data?.tabs?.length) {
+      if (data?.tabs?.length) {
 
-          this.tabs = structuredClone(data.tabs);
+        this.tabs = structuredClone(data.tabs);
 
-          const exists = this.tabs.find(t => t.id === data.activeId);
+        const exists = this.tabs.find(t => t.id === data.activeId);
 
-          this.activeId = exists
-            ? data.activeId
-            : this.tabs[0]?.id;
+        this.activeId = exists
+          ? data.activeId
+          : this.tabs[0]?.id;
 
-        } else {
-          this.tabs = [];
-          this.activeId = null;
-        }
+      } else {
 
-        // IMPORTANT: sync active tab biar ga ke reopen UI
-        this.render();
+        this.tabs = [];
+        this.activeId = null;
       }
+
+    }
 }

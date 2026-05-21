@@ -22,6 +22,62 @@ export class CollabTabsController {
     this.state.collections = cols;
   }
 
+
+
+  // ================= ACTIVE STATE =================
+
+_getActiveKey(collectionId) {
+
+  return `active_tab_${collectionId}`;
+
+}
+
+saveActiveTab(collectionId, tabId) {
+
+  if (!collectionId || !tabId)
+    return;
+
+  localStorage.setItem(
+    this._getActiveKey(collectionId),
+    String(tabId)
+  );
+
+}
+
+restoreActiveTab(
+  collectionId,
+  tabs=[]
+){
+
+  if(!collectionId)
+    return null;
+
+  const saved = Number(
+
+    localStorage.getItem(
+      this._getActiveKey(
+        collectionId
+      )
+    )
+
+  );
+
+  const exists = tabs.find(
+
+    t=>
+
+    Number(t.id)
+
+    ===
+
+    saved
+
+  );
+
+  return exists?.id || null;
+
+}
+
   // ================= BODY NORMALIZER =================
   normalizeBody(body) {
 
@@ -160,7 +216,7 @@ export class CollabTabsController {
 
       headers:{},
 
-      params:{},
+      params:[],
 
       auth:{
 
@@ -305,29 +361,108 @@ export class CollabTabsController {
 
     else{
 
-      this.tabs.tabs =
-
-        structuredClone(
-          safeTabs
-        );
+    if (!syncOnly) {
+  this.tabs.tabs = structuredClone(safeTabs);
+}
 
     }
 
-    this.tabs.activeId =
+   // ================= KEEP ACTIVE TAB =================
 
-      col.activeTabId
+const restored =
 
-      ||
+  this.restoreActiveTab(
+    col.id,
+    safeTabs
+  );
 
-      safeTabs[0]?.id
+const currentActive =
+  this.tabs.activeId;
 
-      ||
+const stillExists =
 
-      null;
+  safeTabs.find(
 
-    this.tabs.render();
+    t=>
 
-    this.tabs.syncForm();
+    Number(t.id)
+
+    ===
+
+    Number(
+      currentActive
+    )
+
+  );
+
+this.tabs.activeId =
+
+  restored
+
+  ||
+
+  stillExists?.id
+
+  ||
+
+  col.activeTabId
+
+  ||
+
+  safeTabs[0]?.id
+
+  ||
+
+  null;
+
+
+  this.state.activeCollection.activeTabId = this.tabs.activeId;
+
+
+// persist again
+
+if(
+  this.tabs.activeId
+){
+
+  this.saveActiveTab(
+
+    col.id,
+
+    this.tabs.activeId
+
+  );
+
+}
+
+
+// IMPORTANT:
+//
+// jangan overwrite form kalau user lagi edit
+
+const activeEl =
+  document.activeElement;
+
+const editing =
+
+  activeEl?.matches(
+    "input,textarea"
+  )
+
+  ||
+
+  activeEl?.closest(
+    ".monaco-editor"
+  );
+
+
+this.tabs.render();
+
+if(!editing){
+
+  this.tabs.syncForm();
+
+}
 
     // ================= SIDEBAR REFRESH =================
 
@@ -511,8 +646,10 @@ export class CollabTabsController {
 
         col.activeTabId =
           this.tabs.activeId;
+this.state.activeCollection.activeTabId = this.tabs.activeId;
 
       }
+      
 
     }
     catch (err) {
@@ -1007,17 +1144,65 @@ async ()=>{
 
 }
   // ================= ACTIVE =================
-  setActiveTab(id) {
+setActiveTab(id) {
 
-    this.tabs.setActive?.(
-      id
+  const tab =
+
+    this.tabs.tabs.find(
+
+      t=>
+
+      Number(t.id)
+
+      ===
+
+      Number(id)
+
     );
 
-    this.tabs.render?.();
+  if(!tab)
+    return;
 
-    this.tabs.syncForm?.();
+  this.tabs.activeId =
+    tab.id;
+
+  const colId =
+
+    tab.collection_id
+
+    ||
+
+    this.state
+    .activeCollectionId;
+
+  if(
+    this.state
+    .activeCollection
+  ){
+
+    this.state
+    .activeCollection
+    .activeTabId =
+
+      tab.id;
 
   }
+
+  this.saveActiveTab(
+    colId,
+    tab.id
+  );
+
+  this.tabs.render();
+
+  this.tabs.syncForm();
+
+  this.state.activeCollection.activeTabId =
+  tab.id;
+
+window.scheduleSave?.();
+
+}
 
   // ================= TAB ACTIONS =================
 
@@ -1243,7 +1428,7 @@ closeTab(tabId) {
 
   const id = Number(tabId);
 
-  // 🔥 ALWAYS use Tabs system
+  // ALWAYS use Tabs system
   this.tabs.close?.(id);
 
   // optional sync localStorage (if still needed)
@@ -1264,6 +1449,24 @@ closeTab(tabId) {
       );
 
     this.tabs.activeId = next?.id || null;
+
+    if(next){
+
+  this.saveActiveTab(
+
+    next.collection_id
+
+    ||
+
+    this.state
+    .activeCollectionId,
+
+    next.id
+
+  );
+
+}
+
   }
 
   this.tabs.render();

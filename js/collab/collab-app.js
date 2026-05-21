@@ -10,7 +10,7 @@ import { RequestEngine } from "../core/request-engine-collab.js";
 import { CollectionManager } from "../core/collection.js";
 import { Environment } from "../core/environment.js";
 import { ContextMenu } from "../ui/context-menu.js";
-import { SyncService } from "../core/sync/sync-service.js";
+//import { SyncService } from "../core/sync/sync-service.js";
 import { WorkspaceService } from "./workspace-service.js";
 import { CollectionService } from "./collection-service.js";
 import { CollabTabsController } from "./collab-tabs-controller.js";
@@ -18,7 +18,10 @@ import { RequestSync } from "../core/sync/request-sync.js";
 import { WorkspaceSync } from "../core/sync/workspace-sync.js";
 import { CollectionSync } from "../core/sync/collection-sync.js";
 import { GlobalSync } from "../core/sync/global-sync.js";
+import { RequestParamSync } from "../core/sync/request-param-sync.js";
 import { GlobalVariableService } from "./global-variable-service.js";
+import { RequestParamService } from "./request-param-service.js";
+import { CollabRequestParamController } from "./collab-requestparam-controller.js";
 import { Auth } from "../auth.js";
 
 // ================= UI =================
@@ -48,16 +51,37 @@ const State = {
 const ctx = new ContextMenu();
 const tabs = new Tabs(ui);
 const oldSetActive =
-  tabs.setActive.bind(tabs);
+tabs.setActive.bind(tabs);
 
-tabs.setActive = function(id) {
+tabs.setActive=
 
-  scheduleSave();
+function(id){
 
-  oldSetActive(id);
+oldSetActive(
+id
+);
+
+scheduleSave();
+
+window.dispatchEvent(
+
+new CustomEvent(
+
+"tab-changed",
+
+{
+
+detail:{
+id
+}
+
+}
+
+)
+
+);
 
 };
-
 const collections = new CollectionManager();
 const tabsController = new CollabTabsController({
   tabs,
@@ -66,7 +90,11 @@ const tabsController = new CollabTabsController({
   environment: Environment
 });
 
+tabsController.bindRequestTabs =
+  bindRequestTabs;
 
+tabsController.bindResponseTabs =
+  bindResponseTabs;
 
 
 document.getElementById("openEnvModal")?.addEventListener("click", () => {
@@ -334,7 +362,15 @@ const requestSync =
 
 requestSync.start();
 
+const paramSync=
 
+ new RequestParamSync(
+
+ tabsController
+
+ );
+
+paramSync.start();
 
 const globalSync=
 
@@ -347,6 +383,22 @@ const globalSync=
  );
 
 globalSync.start();
+
+
+
+
+
+const requestParamController=
+
+new CollabRequestParamController({
+
+tabs
+
+});
+
+
+
+
 
 
 // ================= SAFE ID =================
@@ -806,9 +858,9 @@ function initTabContextMenu(){
 
 
 // ================= SYNC =================
-const sync = new SyncService({
-  onUpdate: (data) => hydrateState(data, true)
-});
+// const sync = new SyncService({
+//   onUpdate: (data) => hydrateState(data, true)
+// });
 
 // ================= BOOT =================
 document.addEventListener("DOMContentLoaded", bootstrap);
@@ -996,64 +1048,341 @@ async function loadWorkspaceFlow() {
     workspaceId
   );
 
-}
-// ================= COLLECTION =================
-async function loadCollections(workspaceId) {
+  window.dispatchEvent(
 
-   window.__collectionSync
- ?.start(
-   workspaceId
- );
-  const id = extractId(workspaceId);
-  if (!id) return;
+    new CustomEvent(
 
-  try {
+    "workspace-loaded"
 
-    // ================= FETCH COLLECTIONS =================
-    const cols =
-      (await CollectionService.getByWorkspace(Number(id)))
-        .filter(c =>
-          Number(c.workspace_id) === Number(id)
-        );
+    )
 
-    // ================= STATE UPDATE =================
-    State.collections = cols;
-
-    State.activeCollection =
-      cols[0] || null;
-
-    // ================= PASS TO CONTROLLER =================
-    tabsController.setCollections(cols);
-
-    // ================= RENDER COLLECTION LIST =================
-    tabsController.renderCollections(
-      document.getElementById("collectionList")
     );
 
-    window.__collectionSync
- ?.start(
-   workspaceId
- );
+}
+// ================= COLLECTION =================
+async function loadCollections(
+  workspaceId
+){
+
+  const id =
+    extractId(
+      workspaceId
+    );
+
+  if(
+    !id
+  )
+    return;
+
+  // ================= START COLLECTION REALTIME =================
+
+  window.__collectionSync
+  ?.start(
+    id
+  );
+
+  try{
+
+    // ================= FETCH COLLECTION =================
+
+    const cols =
+
+      (
+        await CollectionService
+        .getByWorkspace(
+          Number(id)
+        )
+      )
+
+      .filter(
+
+        c=>
+
+        Number(
+          c.workspace_id
+        )
+
+        ===
+
+        Number(id)
+
+      );
+
+    // ================= STATE =================
+
+    State.collections =
+      cols;
+
+    State.activeCollection =
+
+      cols[0]
+
+      ||
+
+      null;
+
+    // ================= CONTROLLER =================
+
+    tabsController
+    .setCollections(
+      cols
+    );
+
+    // ================= UI =================
+
+    tabsController
+    .renderCollections(
+
+      document
+      .getElementById(
+        "collectionList"
+      )
+
+    );
 
     // ================= LOAD ACTIVE COLLECTION =================
-    if (State.activeCollection) {
 
-      await tabsController.loadCollection(
-        State.activeCollection.id
+    if(
+      State.activeCollection
+    ){
+
+      await tabsController
+      .loadCollection(
+
+        State.activeCollection
+        .id
+
       );
+
+      // ================= PARAM LOAD =================
+
+      // const activeTab =
+
+      //   tabs
+      //   .getActive?.();
+
+      // if(
+
+      //   activeTab
+
+      //   &&
+
+      //   activeTab.requestId
+
+      // ){
+
+      //   try{
+
+      //     const params =
+
+      //       await RequestParamService
+      //       .getByRequest(
+
+      //         activeTab
+      //         .requestId
+
+      //       );
+
+      //     activeTab.params =
+
+      //       params
+
+      //       ||
+
+      //       [];
+
+      //     renderParams(
+
+      //       activeTab
+      //       .params
+
+      //     );
+
+      //   }
+
+      //   catch(err){
+
+      //     console.error(
+
+      //       "[PARAM LOAD]",
+
+      //       err
+
+      //     );
+
+      //   }
+
+      // }
 
     }
 
-  } catch (err) {
+  }
+
+  catch(err){
 
     console.error(
+
       "[LOAD COLLECTIONS ERROR]",
+
       err
+
     );
 
   }
 
 }
+
+// ========================= RENDER PARAMS ==============================
+function renderParams(
+ params=[]
+){
+
+ const box=
+
+ document.getElementById(
+ "paramsBox"
+ );
+
+ if(!box)
+ return;
+
+ box.innerHTML="";
+
+ params.forEach(
+
+ (p,index)=>{
+
+ const row=
+
+ document.createElement(
+ "div"
+ );
+
+ row.className=
+ "param-row";
+
+ row.dataset.id=
+ p.id;
+
+ row.dataset.index=
+ index;
+
+ row.innerHTML=`
+
+ <input
+
+ class="param-key"
+
+ value="${
+ p.key||""
+ }"
+
+ placeholder="key"
+
+ >
+
+ <input
+
+ class="param-value"
+
+ value="${
+ p.value||""
+ }"
+
+ placeholder="value"
+
+ >
+
+ <input
+
+ class="param-desc"
+
+ value="${
+ p.description
+ ||""
+ }"
+
+ placeholder="description"
+
+ >
+
+ <input
+
+ class="param-enabled"
+
+ type="checkbox"
+
+ ${
+ p.enabled
+ ?"checked"
+ :""
+ }
+
+ >
+
+ <button
+ class="param-delete"
+ >
+
+ x
+
+ </button>
+
+ `;
+
+ row
+ .querySelector(
+ ".param-delete"
+ )
+
+ .onclick=
+
+ async()=>{
+
+ await RequestParamService
+ .delete(
+ p.id
+ );
+
+ const tab=
+
+ tabs
+ .getActive?.();
+
+ if(
+  tab?.params
+ ){
+
+ tab.params=
+
+ tab.params.filter(
+
+ x=>
+
+ x.id!==p.id
+
+ );
+
+ }
+
+ renderParams(
+ tab.params
+ );
+
+ };
+
+ box.appendChild(
+ row
+ );
+
+ }
+
+ );
+
+}
+
+
+
 // ================= WORKSPACE SWITCH =================
 async function loadWorkspaceSwitcher() {
 
@@ -1230,6 +1559,8 @@ function hydrateState(data) {
       tabs.activeId = data.activeId || data.tabs[0]?.id;
       tabs.render();
       tabs.syncForm();
+
+      bindRequestTabs();
     }
 
     if (Array.isArray(data.collections)) {
@@ -1459,7 +1790,7 @@ function touchEditing(){
         renderActiveWorkspace({
   name: ws?.name ?? ws?.title ?? ws?.data?.name,
   id: ws?.id
-}); // 🔥 FIX UI NAME
+}); // FIX UI NAME
 
         hydrateState(ws.data || {});
 
@@ -1651,6 +1982,126 @@ function logout() {
   Auth.logout?.();
   window.location.replace("/login.html");
 }
+
+
+
+function bindRequestTabs(){
+
+  document
+    .querySelectorAll(
+      ".req-tab"
+    )
+    .forEach(tab=>{
+
+      tab.onclick=()=>{
+
+        document
+          .querySelectorAll(
+            ".req-tab"
+          )
+          .forEach(
+            x=>
+            x.classList.remove(
+              "active"
+            )
+          );
+
+        tab.classList.add(
+          "active"
+        );
+
+        const target=
+          tab.dataset.tab;
+
+        document
+          .querySelectorAll(
+            ".tab-panel"
+          )
+          .forEach(
+            x=>
+            x.classList.add(
+              "hidden"
+            )
+          );
+
+        document
+          .querySelector(
+
+            `[data-panel="${target}"]`
+
+          )
+          ?.classList.remove(
+            "hidden"
+          );
+
+      };
+
+    });
+
+}
+
+function bindResponseTabs(){
+
+  document
+    .querySelectorAll(
+      ".response-tab"
+    )
+    .forEach(tab=>{
+
+      tab.onclick=()=>{
+
+        document
+          .querySelectorAll(
+            ".response-tab"
+          )
+          .forEach(
+            x=>
+            x.classList.remove(
+              "active"
+            )
+          );
+
+        tab.classList.add(
+          "active"
+        );
+
+        document
+          .querySelectorAll(
+            ".response-panel"
+          )
+          .forEach(
+            x=>
+            x.classList.add(
+              "hidden"
+            )
+          );
+
+        document
+          .getElementById(
+
+            "response"+
+
+            tab.dataset.tab
+            .charAt(0)
+            .toUpperCase()
+
+            +
+
+            tab.dataset.tab
+            .slice(1)
+
+          )
+
+          ?.classList.remove(
+            "hidden"
+          );
+
+      };
+
+    });
+
+}
+
 
 window.__COLLAB_MODE__ = true;
 

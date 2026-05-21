@@ -1,6 +1,8 @@
 export class RequestSync {
 
-  constructor(controller){
+  constructor(
+    controller
+  ){
 
     this.controller =
       controller;
@@ -10,59 +12,6 @@ export class RequestSync {
 
     this.lastHash =
       null;
-
-    // lock local edit
-    this.localEditingUntil =
-      0;
-
-    this.bindEditingGuard();
-
-  }
-
-  bindEditingGuard(){
-
-    const ids = [
-
-      "url",
-      "body",
-      "method"
-
-    ];
-
-    ids.forEach(id=>{
-
-      const el =
-        document.getElementById(
-          id
-        );
-
-      if(!el)
-        return;
-
-      const markEditing = ()=>{
-
-        this.localEditingUntil =
-          Date.now()
-          + 2000;
-
-      };
-
-      el.addEventListener(
-        "input",
-        markEditing
-      );
-
-      el.addEventListener(
-        "keydown",
-        markEditing
-      );
-
-      el.addEventListener(
-        "change",
-        markEditing
-      );
-
-    });
 
   }
 
@@ -133,16 +82,29 @@ export class RequestSync {
 
     }
 
-    // USER SEDANG NGETIK
+    // user lagi ngetik
+
+    const activeEl =
+      document.activeElement;
+
+    const editing =
+
+      activeEl?.matches(
+
+        "input,textarea"
+
+      )
+
+      ||
+
+      activeEl?.closest(
+
+        ".monaco-editor"
+
+      );
 
     if(
-
-      Date.now()
-
-      <
-
-      this.localEditingUntil
-
+      editing
     ){
 
       return;
@@ -221,9 +183,9 @@ export class RequestSync {
 
       }
 
-      // ================= SIDEBAR EXPAND STATE =================
+      // ================= SAVE EXPANDED =================
 
-      const expanded = {};
+      const expanded={};
 
       document
       .querySelectorAll(
@@ -244,12 +206,6 @@ export class RequestSync {
 
       // ================= UPDATE TABS =================
 
-      const currentActive =
-
-        this.controller
-        .tabs
-        .activeId;
-
       this.controller
       .tabs
       .tabs =
@@ -263,47 +219,25 @@ export class RequestSync {
 
       this.controller
       .tabs
-      .activeId =
-        currentActive;
+      .render();
 
       this.controller
       .tabs
-      .render();
+      .syncForm();
 
-      // sync form HANYA kalau user tidak fokus
+      // ================= REBIND REQUEST TABS =================
 
-      const focused =
+      this.controller
+      .bindRequestTabs
+      ?.();
 
-        document.activeElement
-        ?.id;
+      // ================= REBIND RESPONSE TABS =================
 
-      const editing =
+      this.controller
+      .bindResponseTabs
+      ?.();
 
-        [
-
-          "url",
-
-          "body",
-
-          "method"
-
-        ]
-
-        .includes(
-          focused
-        );
-
-      if(
-        !editing
-      ){
-
-        this.controller
-        .tabs
-        .syncForm();
-
-      }
-
-      // ================= SIDEBAR =================
+      // ================= REFRESH SIDEBAR =================
 
       this.controller
       .renderCollections(
@@ -315,36 +249,34 @@ export class RequestSync {
 
       );
 
-      // restore expand
+      // ================= RESTORE EXPAND =================
 
       Object.entries(
         expanded
       )
-
       .forEach(
 
         ([id,val])=>{
 
-        if(!val)
-          return;
+          if(!val)
+            return;
 
-        document
-        .querySelector(
+          document
+          .querySelector(
 
-          `.collection-item[data-id="${id}"]`
+            `.collection-item[data-id="${id}"]`
 
-        )
+          )
+          ?.classList
+          .add(
+            "expanded"
+          );
 
-        ?.classList
+        }
 
-        .add(
-          "expanded"
-        );
-
-      });
+      );
 
     }
-
     catch(err){
 
       console.error(
