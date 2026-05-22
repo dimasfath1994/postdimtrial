@@ -159,7 +159,7 @@ const cookieHeader = Object.entries(RequestEngine.cookieJar)
 
 if (cookieHeader) {
   if (!finalHeaders["Cookie"] && cookieHeader) {
-  finalHeaders["Cookie"] = cookieHeader;
+  //finalHeaders["Cookie"] = cookieHeader;
 }
 }
     // ================= FETCH =================
