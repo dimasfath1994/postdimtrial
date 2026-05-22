@@ -1,2 +1,2 @@
 export const API_BASE_URL =
-  "https://syndicate-wake-mixer-perfume.trycloudflare.com/api";
+  "https://hood-wherever-captured-magnet.trycloudflare.com/api";
