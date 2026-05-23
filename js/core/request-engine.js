@@ -1,5 +1,6 @@
 import { EnvResolver } from "./env-resolver.js";
 import { AuthStore } from "../collab/auth-store.js";
+import { proxysendRequest } from "./api/proxy-api.js";
 
 export class RequestEngine {
 
@@ -164,13 +165,23 @@ if (cookieHeader) {
 }
     // ================= FETCH =================
 
-
-    const res = await fetch(url, {
+    const useProxy = document.getElementById("use-proxy").checked;
+    let res;
+    if (useProxy){
+      const options = {
+        method: method,
+        headers: finalHeaders,
+        body: ["GET", "HEAD"].includes(method.toUpperCase()) ? undefined : finalBody
+      }
+      res = await proxysendRequest(url, options, true);
+    } else {
+     res = await fetch(url, {
       method,
       headers: finalHeaders,
       body: ["GET", "HEAD"].includes(method) ? undefined : finalBody,
       //credentials: "include"
     });
+  }
 
     const rawHeaders = Object.fromEntries(res.headers.entries());
 

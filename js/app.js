@@ -48,6 +48,7 @@ const ui = {
 
   bodyType: document.getElementById("bodyType"),
   exportBtn: document.getElementById("exportBtn"),
+  useProxy: document.getElementById("use-proxy"),
   importFile: document.getElementById("importFile")
 };
 const bodyMode = document.getElementById("bodyMode");
@@ -111,6 +112,14 @@ function applyRemoteState(data) {
     renderEnvViewer();
   }
 }
+
+
+const isProxyEnabled = localStorage.getItem('proxy_enabled') === 'true';
+ui.useProxy.checked = isProxyEnabled;
+
+ui.useProxy.addEventListener('change', (e) => {
+    localStorage.setItem('proxy_enabled', e.target.checked);
+});
 
 
 // ================= INIT =================

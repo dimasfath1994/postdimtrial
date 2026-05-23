@@ -45,7 +45,13 @@ const State = {
   globals: []
 };
 
+const useProxy = document.getElementById("use-proxy");
+const isProxyEnabled = localStorage.getItem('proxy_enabled') === 'true';
+useProxy.checked = isProxyEnabled;
 
+useProxy.addEventListener('change', (e) => {
+    localStorage.setItem('proxy_enabled', e.target.checked);
+});
 
 // ================= CORE =================
 const ctx = new ContextMenu();
