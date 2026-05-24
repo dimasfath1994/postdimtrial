@@ -1,26 +1,96 @@
 import { Storage } from "../core/storage.js";
 
+
 export class Tabs {
 
-  constructor(ui) {
+  constructor(ui, collections) {
     this.ui = ui;
     this.tabs = [];
     this.activeId = null;
 
-    // 🔥 prevent UI ↔ storage ↔ sync loop
-    this._syncing = false;
+    this.onUpdate = null;
 
+    //  prevent UI ↔ storage ↔ sync loop
+    this._syncing = false;
+    this.collections = collections;
     this.load();
   }
 
   // ================= CREATE =================
-  create() {
-    const tab = this._createDefaultTab();
+//   create() {
+//     const tab = this._createDefaultTab();
 
-    this.tabs.push(tab);
-    this.commit();
-    this.setActive(tab.id);
+//     this.tabs.push(tab);
+//     this.commit();
+//     this.setActive(tab.id);
+//   }
+
+//   // Di dalam class TabsManager
+// createTabForFolder(collectionId, folderId) {
+//   const newTab = {
+//       id: Date.now(),
+//       name: "New Request",
+//       method: "GET",
+//       url: "",
+//       collectionId: collectionId, // Langsung pasang ID-nya di sini
+//       folderId: folderId          // Langsung pasang ID-nya di sini
+//   };
+  
+//   this.tabs.push(newTab);
+//   this.save();
+//   return newTab; // Mengembalikan objek agar bisa diproses di UI
+// }
+create(collectionId = null, folderId = null) {
+  // Gunakan helper _createDefaultTab yang sudah ada
+  const tab = this._createDefaultTab();
+
+  // Tambahkan data folder/collection jika ada
+  const newTab = {
+      ...tab, // Mengambil id, name, method, url dari _createDefaultTab()
+      collectionId: collectionId,
+      folderId: folderId
+  };
+
+  this.tabs.push(newTab);
+  this.commit();
+  this.setActive(newTab.id);
+  if (this.onUpdate) this.onUpdate();
+  return newTab; // Mengembalikan agar bisa digunakan di action button
+}
+
+
+// Di dalam class TabsManager
+openRequest(request) {
+  // 1. Cek apakah tab dengan ID request ini ada di daftar tab
+  let existingTab = this.tabs.find(t => t.id === request.id);
+
+  if (existingTab) {
+      // PERBAIKAN: Jika tab ditemukan (walaupun sedang closed), 
+      // aktifkan kembali dengan set opened = true
+      existingTab.opened = true; 
+      this.setActive(existingTab.id);
+  } else {
+      // Jika belum ada sama sekali, buat tab baru
+      const newTab = {
+          id: request.id,
+          name: request.name,
+          method: request.method,
+          url: request.url,
+          collectionId: request.collectionId || null,
+          folderId: request.folderId || null,
+          opened: true // Pastikan tab baru terbuka
+      };
+      this.tabs.push(newTab);
+      this.save();
+      this.setActive(newTab.id);
   }
+
+  // Update UI (ini akan merender ulang daftar tab yang opened !== false)
+  this.render();
+}
+
+
+
   delete(tabId) {
 
   this.tabs = this.tabs.filter(t => t.id !== tabId);
@@ -116,44 +186,104 @@ close(id) {
 }
   // ================= RENAME =================
   rename(tab, name) {
-    tab.name = name?.trim() || "Untitled";
-    this.commit();
-  }
+    const newName = name?.trim() || "Untitled";
+    
+    // 1. Update data di objek tab (untuk tampilan di atas)
+    tab.name = newName;
 
-  renameById(id, name) {
+    // 2. Update data di database koleksi
+    const col = this.collections.getCollection(tab.collectionId);
+    if (col) {
+        const updateNameRecursive = (folders) => {
+            for (let f of folders) {
+                const req = f.requests?.find(r => r.id === tab.id);
+                if (req) { req.name = newName; return true; }
+                if (f.folders && updateNameRecursive(f.folders)) return true;
+            }
+            return false;
+        };
+
+        if (tab.folderId) updateNameRecursive(col.folders);
+        else {
+            const req = col.requests?.find(r => r.id === tab.id);
+            if (req) req.name = newName;
+        }
+
+        // 3. SIMPAN KE STORAGE (Ini yang akan dibaca oleh renderCollections)
+        this.collections.save();
+    }
+
+    // 4. Update persistensi tab (biar tidak balik ke nama lama saat refresh)
+    this.commit();
+    
+    // 5. Update UI
+    this.render();
+    this.syncForm();
+
+    // 6. Trigger Sidebar untuk render ulang dengan data fresh
+    if (typeof window.renderCollections === 'function') {
+        window.renderCollections();
+    } else {
+        // Fallback jika tidak terjangkau
+        window.dispatchEvent(new CustomEvent('request-renamed'));
+    }
+}
+
+  renameById(id, name, collectionId, folderId = null) {
     const tab = this.tabs.find(t => t.id === id);
     if (!tab) return;
 
     tab.name = name?.trim() || "Untitled";
+    
+    // Sinkronisasi ke CollectionManager jika request milik folder atau root
+    const col = this.collections.getCollection(collectionId);
+    if (col) {
+        const updateInFolder = (folders) => {
+            for (let f of folders) {
+                if (f.id === folderId) {
+                    const req = f.requests?.find(r => r.id === id);
+                    if (req) req.name = tab.name;
+                    return true;
+                }
+                if (f.folders && updateInFolder(f.folders)) return true;
+            }
+            return false;
+        };
+
+        if (folderId) updateInFolder(col.folders);
+        else {
+            const req = col.requests?.find(r => r.id === id);
+            if (req) req.name = tab.name;
+        }
+        this.collections.save();
+    }
+
     this.commit();
     this.render();
-  }
+}
 
   // ================= DUPLICATE =================
   duplicate(tab) {
     const copy = {
-      ...tab,
-      id: Date.now(),
-      name: `${tab.name} copy`,
-
-      params: structuredClone(tab.params || {}),
-      headers: structuredClone(tab.headers || {}),
-      auth: structuredClone(tab.auth || { type: "", value: "" }),
-
-      scripts: {
-        pre: tab.scripts?.pre || "",
-        post: tab.scripts?.post || ""
-      },
-
-      history: Array.isArray(tab.history) ? [...tab.history] : []
+        ...tab,
+        id: Date.now(),
+        name: `${tab.name} copy`,
+        // ... (data lainnya sama)
     };
 
     this.tabs.push(copy);
 
+    // Sinkronisasi ke CollectionManager
+    const col = this.collections.getCollection(tab.collectionId);
+    if (col) {
+        // Kita gunakan fungsi addRequest yang sudah ada agar otomatis masuk ke tempat yang benar
+        this.collections.addRequest(tab.collectionId, copy, tab.folderId);
+    }
+
     this.commit();
     this.render();
     this.syncForm();
-  }
+}
 
   // ================= PIN =================
   togglePin(tab) {
@@ -275,7 +405,7 @@ close(id) {
   commit() {
     this.save();
 
-    // 🔥 hook for sync-service
+    // hook for sync-service
     window.__pushSync?.();
   }
 

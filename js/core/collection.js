@@ -41,7 +41,8 @@ export class CollectionManager {
     const collection = {
       id: Date.now(),
       name,
-      requests: []
+      requests: [],
+      folders: []
     };
 
     this.workspace.collections.push(collection);
@@ -58,25 +59,42 @@ export class CollectionManager {
   }
 
   // ---------------- REQUEST ----------------
-  addRequest(collectionId, request) {
-    tabs.create();
-    tabs.getActive().collectionId = collectionId;
+  addRequest(collectionId, request, folderId = null) {
     const col = this.getCollection(collectionId);
     if (!col) return;
 
     const req = {
-      id: Date.now(),
-      name: request.name || "New Request",
-      method: request.method || "GET",
-      url: request.url || "",
-      body: request.body || ""
+        id: Date.now(),
+        name: request.name || "New Request",
+        method: request.method || "GET",
+        url: request.url || "",
+        folderId: folderId // Simpan referensi folder
     };
 
-    col.requests.push(req);
-    this.save();
+    if (folderId) {
+        // Cari folder secara rekursif dan push ke dalamnya
+        console.log("Menambahkan ke FOLDER ID:", folderId);
+        const findAndPush = (folders) => {
+            for (let f of folders) {
+                if (f.id === folderId) {
+                    if (!f.requests) f.requests = [];
+                    f.requests.push(req);
+                    return true;
+                }
+                if (f.folders && findAndPush(f.folders)) return true;
+            }
+            return false;
+        };
+        findAndPush(col.folders);
+    } else {
+        // Jika tidak ada folderId, masukkan ke root collection
+        console.log("Menambahkan ke ROOT");
+        col.requests.push(req);
+    }
 
+    this.save();
     return req;
-  }
+}
     getTabsByCollection(id) {
     return this.tabs.filter(t => t.collectionId === id);
     }
@@ -103,9 +121,39 @@ export class CollectionManager {
     const col = this.getCollection(collectionId);
     if (!col) return;
 
-    col.requests = col.requests.filter(r => r.id !== requestId);
+    // 1. Coba cari dan hapus di dalam folder secara rekursif
+    const findAndRemove = (folders) => {
+        for (let f of folders) {
+            // Cek apakah ada request di folder ini
+            if (f.requests) {
+                const initialLength = f.requests.length;
+                f.requests = f.requests.filter(r => r.id !== requestId);
+                
+                // Jika panjang array berkurang, berarti request ditemukan dan dihapus
+                if (f.requests.length !== initialLength) {
+                    return true; 
+                }
+            }
+            
+            // Lanjut ke sub-folder jika ada
+            if (f.folders && findAndRemove(f.folders)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // Jalankan pencarian di folder
+    const deletedInFolder = findAndRemove(col.folders);
+
+    // 2. Jika tidak ditemukan/dihapus di folder, baru hapus di root
+    // (Ini menjaga agar logika root tetap berjalan seperti sedia kala)
+    if (!deletedInFolder) {
+        col.requests = col.requests.filter(r => r.id !== requestId);
+    }
+
     this.save();
-  }
+}
 
   // ---------------- STORAGE ----------------
   save() {
@@ -143,4 +191,43 @@ export class CollectionManager {
 
     this.save();
     }
+
+
+
+// ---------------- FOLDER ----------------
+// Di dalam class CollectionManager
+addFolder(collectionId, name, parentFolderId = null) {
+  const newFolder = {
+      id: Date.now(),
+      name: name,
+      folders: [],
+      requests: []
+  };
+
+  const col = this.getCollection(collectionId);
+  if (!col) return null;
+
+  if (!parentFolderId) {
+      col.folders.push(newFolder);
+  } else {
+      // REKURSI: Mencari folder tujuan di level mana pun
+      const findAndInsert = (folders) => {
+          for (let f of folders) {
+              if (f.id === parentFolderId) {
+                  if (!f.folders) f.folders = [];
+                  f.folders.push(newFolder);
+                  return true;
+              }
+              if (f.folders && findAndInsert(f.folders)) return true;
+          }
+          return false;
+      };
+      findAndInsert(col.folders);
+  }
+
+  this.save();
+  return newFolder;
+}
+
+    
 }

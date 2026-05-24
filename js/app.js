@@ -57,8 +57,14 @@ const bodyMode = document.getElementById("bodyMode");
 const APP_STATE = {
   collabMode: false
 };
-const tabs = new Tabs(ui);
+
 const collections = new CollectionManager();
+const tabs = new Tabs(ui, collections);
+
+tabs.onUpdate = () => {
+    renderCollections(); 
+};
+
 const ctx = new ContextMenu();
 
 const sync = new SyncService({
@@ -76,6 +82,16 @@ let runtimeVariables = null;
 let preEditor = null;
 let postEditor = null;
 
+
+window.eventBus = {
+  emit: (event, data) => window.dispatchEvent(new CustomEvent(event, { detail: data })),
+  on: (event, callback) => window.addEventListener(event, (e) => callback(e.detail))
+};
+
+// Pasang listener di sini
+window.eventBus.on('data-changed', () => {
+  if (typeof renderCollections === 'function') renderCollections();
+});
 
 
 document.getElementById("collabModeBtn").onclick = () => {
@@ -296,7 +312,7 @@ if (cookies) {
 
 // ================= COLLECTION =================
 function renderCollections() {
-
+  
   ui.collectionList.innerHTML = "";
 
   collections.getCollections().forEach(col => {
@@ -347,6 +363,7 @@ function renderCollections() {
   renderCollections();
 };
 
+
     // ================= CONTEXT MENU =================
 
     div.oncontextmenu = (e) => {
@@ -375,11 +392,79 @@ function renderCollections() {
           action: () => {
             exportCollectionAsPostman(col.id);
           }
-        }
+        },
+        {
+          label: "Add Request",
+          action: () => {
+            saveActiveCollectionState();
+
+              tabs.create();
+
+              saveActiveCollectionState();
+          }
+        },
+        // Di dalam UI/Context Menu
+       // ... di dalam oncontextmenu collection header
+       // ... di dalam div.oncontextmenu (header collection)
+{ 
+  label: "Add Folder", 
+  action: () => {
+    const name = prompt("New folder name:");
+    if (name) {
+      // Gunakan col.id (karena ini header collection)
+      // ParentId adalah null karena ini folder di root collection
+      collections.addFolder(col.id, name, null); 
+      
+      // Expand collection-nya agar folder terlihat
+      expandedCollections[col.id] = true;
+      
+      renderCollections();
+    }
+  }
+}
+          
       ]);
     };
 
     wrap.appendChild(div);
+
+
+
+    // ... di dalam loop collections.forEach(col => { ...
+// ... setelah bagian COLLECTION HEADER selesai ...
+
+// ================= RENDER FOLDER & ROOT REQUEST =================
+if (expanded) {
+  const reqWrap = document.createElement("div");
+  reqWrap.style.marginTop = "4px";
+
+  // 1. Render Folder Root
+  col.folders?.forEach(folder => {
+      renderFolderTree(folder, reqWrap, col.id, 1);
+  });
+
+  // 2. Render Request yang ada di root Collection
+  col.requests?.forEach(req => {
+    // TAMBAHKAN KONDISI INI:
+    // Hanya render jika folderId tidak ada (null/undefined)
+    if (!req.folderId || req.folderId === "undefined" || req.folderId === "") {
+        const reqDiv = document.createElement("div");
+        reqDiv.className = "collection-request";
+        reqDiv.style.marginLeft = "18px";
+        reqDiv.textContent = `${req.method || "GET"} ${req.name}`;
+        
+        reqDiv.onclick = (e) => {
+            e.stopPropagation();
+            tabs.openRequest(req);
+        };
+        
+        reqWrap.appendChild(reqDiv);
+    }
+});
+
+  wrap.appendChild(reqWrap);
+}
+
 
     // ================= REQUEST LIST =================
 
@@ -391,7 +476,7 @@ function renderCollections() {
       reqWrap.style.marginTop = "4px";
 
       col.tabs.forEach(tab => {
-
+        if (tab.folderId) return;
         const req = document.createElement("div");
 
         req.className = "collection-request";
@@ -501,6 +586,146 @@ function renderCollections() {
   
 }
 
+
+
+
+// Helper untuk merender folder dan request secara rekursif
+function renderFolderTree(folder, container, colId, depth = 1) {
+  const isExpanded = expandedCollections[folder.id];
+
+  const folderDiv = document.createElement("div");
+  folderDiv.className = "folder-item";
+  folderDiv.style.marginLeft = `${depth * 15}px`;
+  folderDiv.style.cursor = "pointer";
+  folderDiv.innerHTML = `<span>${isExpanded ? "▼" : "▶"} ${folder.name}</span>`;
+
+  folderDiv.onclick = (e) => {
+    e.stopPropagation();
+    expandedCollections[folder.id] = !expandedCollections[folder.id];
+    renderCollections();
+  };
+
+  // Context Menu untuk Folder
+  folderDiv.oncontextmenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ctx.show(e.clientX, e.clientY, [
+      { 
+        label: "Add Folder", action: () => {
+          const name = prompt("New folder name:");
+          if (name) {
+            collections.addFolder(colId, name, folder.id);
+            renderCollections();
+          }
+      }
+    },
+    { label: "Delete", action: () => { /* Logika delete folder */ }},
+    { 
+        label: "Add Request", 
+        action: () => {
+            // 1. Tambahkan ke data collections
+            collections.addRequest(colId, { name: "New Request" }, folder.id);
+            
+            // 2. Expand folder agar request baru terlihat
+            expandedCollections[folder.id] = true;
+            
+            // 3. Buat tab khusus untuk folder (Panggil fungsi baru)
+            const newTab = tabs.create(colId, folder.id);
+            
+            // 4. Update UI tab & sidebar
+            tabs.setActive(newTab.id);
+            tabs.render();
+            renderCollections();
+        }
+    }
+    ]);
+  };
+
+  container.appendChild(folderDiv);
+
+  // Jika folder dibuka, render children-nya
+  // Di dalam renderFolderTree (bagian setelah folder ter-expand)
+  if (isExpanded) {
+    // 1. RENDER SUB-FOLDERS (REKURSI DI SINI!)
+    folder.folders?.forEach(subFolder => {
+        // Panggil fungsi ini lagi untuk sub-folder
+        renderFolderTree(subFolder, container, colId, depth + 1);
+    });
+    
+    // 2. RENDER REQUESTS DI DALAM FOLDER
+    // RENDER REQUESTS DI DALAM FOLDER
+folder.requests?.forEach(req => {
+  const reqDiv = document.createElement("div");
+  reqDiv.className = "collection-request";
+  reqDiv.style.marginLeft = `${(depth + 1) * 15}px`;
+  reqDiv.textContent = `${req.method || "GET"} ${req.name}`;
+  reqDiv.style.cursor = "pointer";
+
+  // Klik untuk membuka tab
+  reqDiv.onclick = (e) => {
+      e.stopPropagation();
+      tabs.openRequest(req);
+  };
+
+  // --- TAMBAHKAN CONTEXT MENU DI SINI ---
+  reqDiv.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      ctx.show(e.clientX, e.clientY, [
+          {
+              label: "Rename",
+              action: () => {
+                  const name = prompt("Rename tab:", req.name);
+                  if (name) {
+                      tabs.rename(req, name); // Pastikan fungsi rename ada di tabs/manager
+                      renderCollections();
+                  }
+              }
+          },
+          {
+              label: "Duplicate",
+              action: () => {
+                  tabs.duplicate(req);
+                  renderCollections();
+              }
+          },
+          {
+              label: req.pinned ? "Unpin" : "Pin",
+              action: () => {
+                  tabs.togglePin(req);
+                  renderCollections();
+              }
+          },
+          {
+              label: "Close",
+              action: () => {
+                  tabs.close(req.id);
+                  renderCollections();
+              }
+          },
+          {
+              label: "Delete",
+              action: () => {
+                  collections.deleteRequest(colId, req.id);
+                  tabs.close(req.id); // Tutup tab jika terbuka
+                  renderCollections();
+              }
+          }
+      ]);
+  };
+
+  container.appendChild(reqDiv);
+});
+
+
+
+
+
+  }
+}
+
+
 // ================= HEADERS =================
 function renderHeaders() {
   const box = ui.headersBox;
@@ -531,7 +756,7 @@ function renderHeaders() {
       <button>x</button>
     `;
 
-    // ❌ delete
+    // delete
     row.querySelector("button").onclick = () => {
       delete headers[key];
       tabs.save();
@@ -769,7 +994,7 @@ ui.tabsEl?.addEventListener("contextmenu", (e) => {
             const name = prompt("Rename tab:");
             if (name) {
                 tabs.rename(tab, name);
-                tabs.render();
+                //tabs.render();
             }
         }
     },
@@ -2115,6 +2340,37 @@ bodyMode?.addEventListener("change", () => {
   renderBodyUI(tab.body);
   tabs.save();
 });
+
+
+function renderTreeFolder(items, level = 0) {
+  let html = '';
+  const padding = level * 15; // Indentasi setiap level
+
+  items.forEach(item => {
+      // Render Folder
+      if (item.type === 'folder' || item.folders) {
+          html += `
+              <div class="folder-item" style="padding-left: ${padding}px" data-id="${item.id}">
+                  <i class="folder-icon">📁</i> ${item.name}
+              </div>
+              <div class="folder-children">
+                  ${renderTree(item.folders || [], level + 1)}
+                  ${renderTree(item.requests || [], level + 1)}
+              </div>
+          `;
+      } 
+      // Render Request
+      else {
+          html += `
+              <div class="request-item" style="padding-left: ${padding}px" data-id="${item.id}">
+                  <span class="method-${item.method}">${item.method}</span> ${item.name}
+              </div>
+          `;
+      }
+  });
+  return html;
+}
+
 
 
 function normalizeValue(item) {
