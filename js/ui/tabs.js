@@ -186,18 +186,15 @@ close(id) {
 }
   // ================= RENAME =================
   rename(tab, name) {
-    const newName = name?.trim() || "Untitled";
-    
-    // 1. Update data di objek tab (untuk tampilan di atas)
-    tab.name = newName;
+    console.log("Tab ditemukan:", tab);
+    tab.name = name?.trim() || "Untitled";
 
-    // 2. Update data di database koleksi
     const col = this.collections.getCollection(tab.collectionId);
     if (col) {
         const updateNameRecursive = (folders) => {
             for (let f of folders) {
                 const req = f.requests?.find(r => r.id === tab.id);
-                if (req) { req.name = newName; return true; }
+                if (req) { req.name = tab.name; return true; }
                 if (f.folders && updateNameRecursive(f.folders)) return true;
             }
             return false;
@@ -206,31 +203,22 @@ close(id) {
         if (tab.folderId) updateNameRecursive(col.folders);
         else {
             const req = col.requests?.find(r => r.id === tab.id);
-            if (req) req.name = newName;
+            if (req) req.name = tab.name;
         }
 
-        // 3. SIMPAN KE STORAGE (Ini yang akan dibaca oleh renderCollections)
         this.collections.save();
     }
 
-    // 4. Update persistensi tab (biar tidak balik ke nama lama saat refresh)
     this.commit();
-    
-    // 5. Update UI
     this.render();
     this.syncForm();
-
-    // 6. Trigger Sidebar untuk render ulang dengan data fresh
-    if (typeof window.renderCollections === 'function') {
-        window.renderCollections();
-    } else {
-        // Fallback jika tidak terjangkau
-        window.dispatchEvent(new CustomEvent('request-renamed'));
-    }
+    // KIRIM SINYAL GLOBAL (Aman, tidak merusak fungsi yang ada)
+    window.dispatchEvent(new CustomEvent('request-renamed'));
 }
 
   renameById(id, name, collectionId, folderId = null) {
     const tab = this.tabs.find(t => t.id === id);
+    console.log("Tab ditemukan:", tab);
     if (!tab) return;
 
     tab.name = name?.trim() || "Untitled";
@@ -260,6 +248,9 @@ close(id) {
 
     this.commit();
     this.render();
+    this.syncForm();
+     // KIRIM SINYAL GLOBAL (Aman, tidak merusak fungsi yang ada)
+     window.dispatchEvent(new CustomEvent('request-renamed'));
 }
 
   // ================= DUPLICATE =================

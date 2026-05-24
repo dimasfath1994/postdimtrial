@@ -148,28 +148,43 @@ function mapRequests(items = []) {
 
 // ================= RECURSIVE FOLDERS =================
 function mapItems(items = []) {
-  return items.map(item => {
+  if (!Array.isArray(items)) return [];
 
-    if (item.item) {
+  return items.map(item => {
+    // 1. Logika Deteksi Folder
+    // Folder di Postman memiliki properti 'item' (array) dan TIDAK memiliki properti 'request'
+    const isFolder = item.item && !item.request;
+
+    if (isFolder) {
       return {
-        id: Date.now() + Math.random(),
-        name: item.name,
+        id: crypto.randomUUID?.() || Date.now() + Math.random(),
+        name: item.name || "Untitled Folder",
         type: "folder",
-        children: mapItems(item.item)
+        // Rekursi: Memanggil diri sendiri untuk memproses isi folder
+        children: mapItems(item.item) 
       };
     }
 
+    // 2. Logika Deteksi Request
     const r = item.request || {};
+    
+    // Mengekstrak script jika ada
+    const preScript = item.event?.find(e => e.listen === "prerequest")?.script?.exec;
+    const postScript = item.event?.find(e => e.listen === "test")?.script?.exec;
 
     return {
       type: "request",
-      id: Date.now() + Math.random(),
-      name: item.name || "Untitled",
+      id: crypto.randomUUID?.() || Date.now() + Math.random(),
+      name: item.name || "Untitled Request",
       method: r.method || "GET",
       url: parseUrl(r.url),
       headers: mapHeaders(r.header || []),
       body: mapBodyAdvanced(r),
-      auth: mapAuth(r.auth)
+      auth: mapAuth(r.auth),
+      scripts: {
+        pre: Array.isArray(preScript) ? preScript.join("\n") : "",
+        post: Array.isArray(postScript) ? postScript.join("\n") : ""
+      }
     };
   });
 }
@@ -228,30 +243,82 @@ function mapBodyAdvanced(request) {
 
 // ================= MAIN EXPORT =================
 export function importPostmanCollection(json) {
-  try {
-    const data = typeof json === "string"
-      ? JSON.parse(json)
-      : json;
+  const data = typeof json === "string" ? JSON.parse(json) : json;
+  const collectionId = Date.now(); // ID unik untuk koleksi ini
 
-    if (!data?.item) {
-      throw new Error("Invalid Postman collection");
-    }
+  // Wadah penampung
+  const allTabs = [];
+  const rootFolders = [];
 
-    return {
-      collections: [
-        {
-          id: Date.now(),
-          name: data.info?.name || "Imported Collection",
+  // Fungsi rekursif untuk memproses item (mengisi tabs dan membangun struktur folder)
+  function processItems(items, parentFolderId = null) {
+      return items.map(item => {
+          const isFolder = item.item && !item.request;
+          const itemId = Date.now() + Math.floor(Math.random() * 10000);
 
-          tabs: mapItems(data.item),
+          if (isFolder) {
+              const folderObj = {
+                  id: itemId,
+                  name: item.name,
+                  folders: [],
+                  requests: []
+              };
 
-          environment: mapVariables(data.variable || [])
-        }
-      ]
-    };
+              // Proses isi folder
+              const children = processItems(item.item, itemId);
+              
+              // Pisahkan hasil anak-anak ke folder atau request
+              children.forEach(child => {
+                  if (child.type === 'folder') folderObj.folders.push(child);
+                  else folderObj.requests.push(child);
+              });
 
-  } catch (err) {
-    console.error("Postman import failed:", err);
-    return null;
+              return { ...folderObj, type: 'folder' };
+          } else {
+              // Ini adalah Request
+              const r = item.request || {};
+              const requestObj = {
+                  id: itemId,
+                  name: item.name || "Untitled",
+                  method: r.method || "GET",
+                  url: parseUrl(r.url),
+                  folderId: parentFolderId,
+                  collectionId: collectionId,
+                  scripts: {
+                      pre: item.event?.find(e => e.listen === "prerequest")?.script?.exec?.join("\n") || "",
+                      post: item.event?.find(e => e.listen === "test")?.script?.exec?.join("\n") || ""
+                  },
+                  body: mapBodyAdvanced(r),
+                  opened: false // Default
+              };
+
+              // Tambahkan ke master list 'tabs'
+              allTabs.push(requestObj);
+              
+              return { ...requestObj, type: 'request' };
+          }
+      });
   }
+
+  // Jalankan pemrosesan
+  const processed = processItems(data.item || []);
+  
+  // Ambil hanya root folders untuk struktur koleksi
+  const finalFolders = processed.filter(i => i.type === 'folder');
+
+  return {
+      tabs: allTabs,
+      collections: [
+          {
+              id: collectionId,
+              name: data.info?.name || "Imported Collection",
+              requests: [], // Jika perlu diisi, bisa difilter dari allTabs
+              folders: finalFolders,
+              tabs: allTabs, // Duplikat semua tab di sini sesuai strukturmu
+              environment: {},
+              activeTabId: allTabs[0]?.id || null
+          }
+      ],
+      environment: {}
+  };
 }

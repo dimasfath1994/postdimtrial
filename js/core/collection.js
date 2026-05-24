@@ -88,7 +88,7 @@ export class CollectionManager {
         findAndPush(col.folders);
     } else {
         // Jika tidak ada folderId, masukkan ke root collection
-        console.log("Menambahkan ke ROOT");
+        //console.log("Menambahkan ke ROOT");
         col.requests.push(req);
     }
 
@@ -227,6 +227,50 @@ addFolder(collectionId, name, parentFolderId = null) {
 
   this.save();
   return newFolder;
+}
+
+
+renameFolder(collectionId, folderId, newName) {
+  const col = this.getCollection(collectionId);
+  if (!col) return;
+
+  const findAndRename = (folders) => {
+      for (let f of folders) {
+          if (f.id === folderId) {
+              f.name = newName;
+              return true;
+          }
+          if (f.folders && findAndRename(f.folders)) return true;
+      }
+      return false;
+  };
+
+  findAndRename(col.folders);
+  this.save();
+}
+
+deleteFolder(collectionId, folderId) {
+  const col = this.getCollection(collectionId);
+  if (!col) return;
+
+  const removeRecursive = (folders) => {
+      // Cari apakah ada folder yang mau dihapus di level ini
+      const index = folders.findIndex(f => f.id === folderId);
+      
+      if (index !== -1) {
+          folders.splice(index, 1); // Hapus folder tersebut
+          return true;
+      }
+
+      // Kalau belum ketemu, cari di sub-folders
+      for (let f of folders) {
+          if (f.folders && removeRecursive(f.folders)) return true;
+      }
+      return false;
+  };
+
+  removeRecursive(col.folders);
+  this.save();
 }
 
     

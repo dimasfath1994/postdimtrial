@@ -521,11 +521,12 @@ if (expanded) {
               {
                 label: "Rename",
                 action: () => {
-
+                  //INI SIDEBAR
                   const name = prompt("Rename tab:");
 
                   if (name) {
-                    tabs.rename(tab, name);
+                    const tabe = tabs.tabs.find(t => t.id === tab.id);
+                    tabs.rename(tabe, name);
 
                     saveActiveCollectionState();
                     renderCollections();
@@ -619,7 +620,26 @@ function renderFolderTree(folder, container, colId, depth = 1) {
           }
       }
     },
-    { label: "Delete", action: () => { /* Logika delete folder */ }},
+    {
+        label: "Rename",
+        action: () => {
+            const newName = prompt("Rename folder:", folder.name);
+            if (newName) {
+                collections.renameFolder(colId, folder.id, newName);
+                renderCollections();
+            }
+        }
+    },
+    {
+        label: "Delete",
+        action: () => {
+          collections.deleteFolder(colId, folder.id);
+          // Bersihkan tab yang mungkin terbuka dari folder ini
+          tabs.tabs = tabs.tabs.filter(t => t.folderId !== folder.id);
+          tabs.save();
+          renderCollections();
+        }
+    },
     { 
         label: "Add Request", 
         action: () => {
@@ -653,7 +673,6 @@ function renderFolderTree(folder, container, colId, depth = 1) {
     });
     
     // 2. RENDER REQUESTS DI DALAM FOLDER
-    // RENDER REQUESTS DI DALAM FOLDER
 folder.requests?.forEach(req => {
   const reqDiv = document.createElement("div");
   reqDiv.className = "collection-request";
@@ -671,14 +690,15 @@ folder.requests?.forEach(req => {
   reqDiv.oncontextmenu = (e) => {
       e.preventDefault();
       e.stopPropagation();
-
       ctx.show(e.clientX, e.clientY, [
           {
               label: "Rename",
               action: () => {
-                  const name = prompt("Rename tab:", req.name);
+                  const name = prompt("Rename tab:");
                   if (name) {
-                      tabs.rename(req, name); // Pastikan fungsi rename ada di tabs/manager
+                      //tabs.rename(req, name); // Pastikan fungsi rename ada di tabs/manager
+                      tabs.renameById(req.id, name, colId, req.folderId);
+                      saveActiveCollectionState();
                       renderCollections();
                   }
               }
@@ -687,6 +707,7 @@ folder.requests?.forEach(req => {
               label: "Duplicate",
               action: () => {
                   tabs.duplicate(req);
+                  saveActiveCollectionState();
                   renderCollections();
               }
           },
@@ -709,6 +730,7 @@ folder.requests?.forEach(req => {
               action: () => {
                   collections.deleteRequest(colId, req.id);
                   tabs.close(req.id); // Tutup tab jika terbuka
+                  saveActiveCollectionState();
                   renderCollections();
               }
           }
@@ -897,7 +919,7 @@ ui.send.onclick = async () => {
 if (tabBody?.mode === "form-data") {
   body = Object.fromEntries(
     (tabBody.formData || [])
-      .filter(x => x.key != null && x.key !== "") // 🔥 TARUH DI SINI
+      .filter(x => x.key != null && x.key !== "") //  TARUH DI SINI
       .map(x => [
         x.key,
         {
@@ -906,7 +928,7 @@ if (tabBody?.mode === "form-data") {
               ? null
               : x.value === undefined
                 ? ""
-                : x.value, // 🔥 empty string tetap terkirim
+                : x.value, //  empty string tetap terkirim
           type: x.type || "text",
           file: x.file || null,
           enabled: x.enabled !== false
@@ -917,7 +939,7 @@ if (tabBody?.mode === "form-data") {
 if (tabBody?.mode === "urlencoded") {
   body = Object.fromEntries(
     (tabBody.urlencoded || [])
-      .filter(x => x.key != null && x.key !== "") // 🔥 TARUH DI SINI
+      .filter(x => x.key != null && x.key !== "") //  TARUH DI SINI
       .map(x => [
         x.key,
         {
@@ -926,7 +948,7 @@ if (tabBody?.mode === "urlencoded") {
               ? null
               : x.value === undefined
                 ? ""
-                : x.value, // 🔥 string kosong tetap ""
+                : x.value, // string kosong tetap ""
           enabled: x.enabled !== false
         }
       ])
@@ -991,10 +1013,13 @@ ui.tabsEl?.addEventListener("contextmenu", (e) => {
     {
       label: "Rename",
         action: () => {
-            const name = prompt("Rename tab:");
+            const name = prompt("Rename tab");
             if (name) {
                 tabs.rename(tab, name);
                 //tabs.render();
+                saveActiveCollectionState();
+                renderCollections();
+                //INI TAB
             }
         }
     },
@@ -1294,7 +1319,7 @@ async function importUniversal(file) {
 
   if (type === "postman") {
     const mod = await import("./core/importers/postman-importer.js");
-const result = mod.importPostmanCollection?.(data);
+    const result = mod.importPostmanCollection?.(data);
 
 if (!result || !result.collections) {
   console.error("Import failed:", result);

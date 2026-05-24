@@ -217,24 +217,65 @@ function mapEnvironment(environment = {}) {
     }));
 }
 
+// export function exportPostmanCollection(collection) {
+
+//   return {
+
+//     info: {
+//       _postman_id: crypto.randomUUID(),
+
+//       name: collection.name,
+
+//       schema:
+//         "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+//     },
+
+//     item: (collection.tabs || [])
+//       .map(mapRequest),
+
+//     variable: mapEnvironment(
+//       collection.environment || {}
+//     )
+//   };
+// }
+
 export function exportPostmanCollection(collection) {
+  // 1. Ambil semua request dari koleksi
+  const allRequests = collection.tabs || collection.requests || [];
+  const folders = collection.folders || [];
+
+  // 2. Fungsi rekursif untuk folder (Hanya mengambil request yang MILIK folder tsb)
+  const processFolders = (folderList) => {
+      return folderList.map(folder => ({
+          name: folder.name,
+          item: [
+              ...processFolders(folder.folders || []),
+              // Filter: Hanya ambil request yang folderId-nya SAMA dengan folder ini
+              ...allRequests
+                  .filter(r => r.folderId === folder.id)
+                  .map(mapRequest)
+          ]
+      }));
+  };
+
+  // 3. Ambil request ROOT (yang folderId-nya kosong/null/undefined)
+  const rootRequests = allRequests
+      .filter(r => !r.folderId || r.folderId === "" || r.folderId === "undefined")
+      .map(mapRequest);
+
+  // 4. Gabungkan: Folder dulu, baru request root
+  const finalItems = [
+      ...processFolders(folders),
+      ...rootRequests
+  ];
 
   return {
-
-    info: {
-      _postman_id: crypto.randomUUID(),
-
-      name: collection.name,
-
-      schema:
-        "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-    },
-
-    item: (collection.tabs || [])
-      .map(mapRequest),
-
-    variable: mapEnvironment(
-      collection.environment || {}
-    )
+      info: {
+          _postman_id: crypto.randomUUID(),
+          name: collection.name,
+          schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+      },
+      item: finalItems,
+      variable: mapEnvironment(collection.environment || {})
   };
 }
