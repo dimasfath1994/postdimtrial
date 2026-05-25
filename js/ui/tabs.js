@@ -41,23 +41,28 @@ export class Tabs {
 //   return newTab; // Mengembalikan objek agar bisa diproses di UI
 // }
 create(collectionId = null, folderId = null) {
-  // Gunakan helper _createDefaultTab yang sudah ada
   const tab = this._createDefaultTab();
 
-  // Tambahkan data folder/collection jika ada
   const newTab = {
-      ...tab, // Mengambil id, name, method, url dari _createDefaultTab()
-      collectionId: collectionId,
-      folderId: folderId
+    ...tab, 
+    collectionId: collectionId,
+    folderId: folderId
   };
 
   this.tabs.push(newTab);
+  
+  // Kirim objek newTab langsung ke addRequest
+  if (collectionId) {
+    this.collections.addRequest(collectionId, newTab, folderId);
+  }
+
   this.commit();
   this.setActive(newTab.id);
+  
   if (this.onUpdate) this.onUpdate();
-  return newTab; // Mengembalikan agar bisa digunakan di action button
+  
+  return newTab;
 }
-
 
 // Di dalam class TabsManager
 openRequest(request) {

@@ -641,22 +641,21 @@ function renderFolderTree(folder, container, colId, depth = 1) {
         }
     },
     { 
-        label: "Add Request", 
-        action: () => {
-            // 1. Tambahkan ke data collections
-            collections.addRequest(colId, { name: "New Request" }, folder.id);
-            
-            // 2. Expand folder agar request baru terlihat
-            expandedCollections[folder.id] = true;
-            
-            // 3. Buat tab khusus untuk folder (Panggil fungsi baru)
-            const newTab = tabs.create(colId, folder.id);
-            
-            // 4. Update UI tab & sidebar
-            tabs.setActive(newTab.id);
-            tabs.render();
-            renderCollections();
-        }
+      label: "Add Request", 
+      action: () => {
+          // 1. Tambahkan ke data collections (BIAR MUNCUL DI SIDEBAR)
+          // Fungsi ini harus mencari folder berdasarkan folder.id dan mem-push request baru ke array-nya
+          
+          // 2. Tambahkan ke tabs (BIAR MUNCUL DI HEADER/EDITOR)
+          tabs.create(colId, folder.id);
+          
+          // 3. Expand folder agar user bisa langsung melihat request baru
+          expandedCollections[folder.id] = true;
+          
+          // 4. Update UI agar sidebar dan tab ter-refresh
+          renderCollections();
+          tabs.render();
+      }
     }
     ]);
   };

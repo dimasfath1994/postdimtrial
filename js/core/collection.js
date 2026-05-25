@@ -59,26 +59,28 @@ export class CollectionManager {
   }
 
   // ---------------- REQUEST ----------------
-  addRequest(collectionId, request, folderId = null) {
+  addRequest(collectionId, tab, folderId = null) {
     const col = this.getCollection(collectionId);
     if (!col) return;
 
+    // Gunakan data dari objek tab langsung
     const req = {
-        id: Date.now(),
-        name: request.name || "New Request",
-        method: request.method || "GET",
-        url: request.url || "",
-        folderId: folderId // Simpan referensi folder
+        id: tab.id, // Pakai ID yang sama dengan tab
+        name: tab.name,
+        method: tab.method,
+        url: tab.url,
+        folderId: folderId // folderId tetap dibawa
     };
 
     if (folderId) {
-        // Cari folder secara rekursif dan push ke dalamnya
-        console.log("Menambahkan ke FOLDER ID:", folderId);
         const findAndPush = (folders) => {
             for (let f of folders) {
                 if (f.id === folderId) {
                     if (!f.requests) f.requests = [];
-                    f.requests.push(req);
+                    // Cek duplikasi ID agar tidak push berkali-kali
+                    if (!f.requests.find(r => r.id === req.id)) {
+                        f.requests.push(req);
+                    }
                     return true;
                 }
                 if (f.folders && findAndPush(f.folders)) return true;
@@ -87,9 +89,9 @@ export class CollectionManager {
         };
         findAndPush(col.folders);
     } else {
-        // Jika tidak ada folderId, masukkan ke root collection
-        //console.log("Menambahkan ke ROOT");
-        col.requests.push(req);
+        if (!col.requests.find(r => r.id === req.id)) {
+            col.requests.push(req);
+        }
     }
 
     this.save();
