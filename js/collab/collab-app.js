@@ -23,25 +23,58 @@ workspaceCtrl.onSwitchWorkspace = (id) => connectSocket(id);
 let currentSocket = null;
 let currentConnectedId = null; 
 
-function connectSocket(id) {
-    // Jika ID sama dan socket masih hidup, jangan lakukan apa-apa
-    if (currentConnectedId === id && currentSocket?.readyState === WebSocket.OPEN) return;
+let isConnecting = false;
 
-    // Bersihkan koneksi lama dengan benar
+function connectSocket(id) {
+    // 1. Guard: Tidak perlu melakukan apa-apa jika sudah terhubung
+    if (currentConnectedId === id && currentSocket?.readyState === WebSocket.OPEN) {
+        return;
+    }
+
+    // 2. Guard: Jika sedang proses connecting, batalkan request baru
+    if (isConnecting) return;
+    
+    // 3. Bersihkan koneksi lama secara sinkron
     if (currentSocket) {
-        // Hapus handler agar tidak trigger re-render saat socket mati
-        currentSocket.onmessage = null; 
+        currentSocket.onmessage = null;
         currentSocket.onclose = null;
-        currentSocket.close();
+        currentSocket.onerror = null;
+        try {
+            currentSocket.close();
+        } catch (e) {
+            console.warn("[SOCKET] Cleanup:", e);
+        }
         currentSocket = null;
     }
 
+    // 4. Inisialisasi Koneksi (Sinkron)
+    isConnecting = true;
     console.log(`[DEBUG] Memulai socket BARU untuk: ${id}`);
-    currentSocket = setupGlobalSocket(id, (payload) => {
-        workspaceCtrl.handleSocketMessage(payload);
-    });
+    
+    try {
+        currentSocket = setupGlobalSocket(id, (payload) => {
+            // Callback ini tetap berjalan saat message diterima
+            if (currentConnectedId === id) {
+                workspaceCtrl.handleSocketMessage(payload);
+            }
+        });
 
-    currentConnectedId = id;
+        // Setup handler onclose sinkron
+        currentSocket.onclose = () => {
+            isConnecting = false; // Reset status saat close
+            // Coba reconnect setelah jeda
+            setTimeout(() => connectSocket(id), 3000);
+        };
+        
+        currentSocket.onopen = () => {
+            isConnecting = false; // Reset status saat sukses
+        };
+
+        currentConnectedId = id;
+    } catch (err) {
+        console.error("[SOCKET] Gagal:", err);
+        isConnecting = false;
+    }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
