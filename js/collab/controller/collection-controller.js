@@ -9,6 +9,12 @@ export class CollectionController {
         // BroadcastChannel untuk sinkronisasi antar tab dalam satu browser
         this.bc = new BroadcastChannel('collection_channel');
         this.setupBroadcastListener();
+
+        window.addEventListener("workspace:changed", (event) => {
+            const newWorkspaceId = event.detail.id;
+            this.State.workspaceId = newWorkspaceId;
+            this.init(newWorkspaceId); // Fetch koleksi baru untuk workspace baru
+        });
     }
 
     async init(workspaceId) {
@@ -37,29 +43,30 @@ export class CollectionController {
      */
     handleSocketMessage(payload) {
         const { type, data } = payload;
-        const collectionId = payload.collection_id || data.collection_id;
+        const collection_id = payload.collection_id || data.collection_id;
         console.log(`[COLLECTION] Processing ${type}...`);
 
         switch (type) {
             case 'COLLECTION_CREATED':
-                // Tambahkan ke State jika belum ada
-                if (!this.State.collections.find(c => c.id === data.id)) {
-                    this.State.collections.push(data);
-                }
-                break;
+            // 1. Update State
+            if (!this.State.collections.find(c => c.id === data.id)) {
+                this.State.collections.push(data);
+                // 2. RE-RENDER UI (Sangat penting!)
+                this.render(); 
+            }
+            break;
 
+            case 'COLLECTION_DELETED':
+                // 1. Update State
+                this.State.collections = this.State.collections.filter(c => c.id !== collection_id);
+                // 2. RE-RENDER UI (Sangat penting!)
+                this.render();
+                break;
+                
             case 'COLLECTION_UPDATED':
                 const idx = this.State.collections.findIndex(c => c.id === data.id);
                 if (idx !== -1) {
                     this.State.collections[idx] = { ...this.State.collections[idx], ...data };
-                    this.render(); // Re-render UI
-                }
-                break;
-
-            case 'COLLECTION_DELETED':
-                // Gunakan collectionId yang sudah kita normalisasi di atas
-                if (collectionId) {
-                    this.State.collections = this.State.collections.filter(c => c.id !== collectionId);
                     this.render();
                 }
                 break;
@@ -68,7 +75,7 @@ export class CollectionController {
                 return; // Tidak ada perubahan, tidak perlu re-render
         }
         
-        this.render();
+
     }
 
     // --- RENDER TRIGGER ---
@@ -218,3 +225,5 @@ showContextMenu(e, col) {
         // Implementasi logika export postman
     }
 }
+
+
