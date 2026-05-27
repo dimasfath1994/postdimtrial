@@ -229,19 +229,45 @@ initSocket() {
 
 
 handleSocketMessage(payload) {
-    const targetId = Number(payload.workspace_id);
-    
-    if (payload.type === 'WORKSPACE_UPDATED') {
-        // 1. Update diri sendiri
-        this.syncWorkspaceData(targetId, payload.data);
-        
-        // 2. KASIH TAHU TAB LAIN!
-        const bc = new BroadcastChannel('workspace_channel');
-        bc.postMessage(payload); // Kirim seluruh payload asli
-        bc.close(); // Tutup setelah kirim
-        this.loadFlow();
+    const { type, workspace_id, data } = payload;
+    const targetId = Number(workspace_id);
+
+    console.log(`[SOCKET] Menerima event ${type} untuk WS: ${targetId}`);
+
+    switch (type) {
+        case 'WORKSPACE_UPDATED':
+            this.syncWorkspaceData(targetId, data);
+            break;
+
+        case 'WORKSPACE_CREATED':
+            // Tambahkan ke list lokal jika belum ada
+            if (!this.State.workspaceList.find(w => Number(w.id) === targetId)) {
+                this.State.workspaceList.push(data);
+                this.loadWorkspaceSwitcher();
+            }
+            break;
+
+        case 'WORKSPACE_DELETED':
+            // Hapus dari list
+            this.State.workspaceList = this.State.workspaceList.filter(w => Number(w.id) !== targetId);
+            this.loadWorkspaceSwitcher();
+
+            // Jika workspace yang dihapus adalah yang sedang dibuka, pindah ke yang lain
+            if (Number(this.State.workspaceId) === targetId) {
+                if (this.State.workspaceList.length > 0) {
+                    this.handleWorkspaceSwitch(this.State.workspaceList[0].id);
+                } else {
+                    this.resetWorkspaceUI();
+                }
+            }
+            break;
     }
-    
+}
+resetWorkspaceUI() {
+    this.State.workspaceId = null;
+    this.State.workspace = null;
+    this.ui.activeWorkspaceName.textContent = "No Workspace";
+    this.ui.workspaceSwitcher.innerHTML = "";
 }
 
 
