@@ -159,7 +159,7 @@ export class Tabs {
 
     // 1. mark as closed
     this.closedTabIds.add(tabId);
-    this._saveClosedTabs(); // 🔥 PERSIST
+    this._saveClosedTabs(); // PERSIST
 
     // 2. switch active tab if needed
     if (this.activeId === tabId) {

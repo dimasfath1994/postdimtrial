@@ -3,10 +3,13 @@ import { Auth } from "../auth.js";
 import { API_BASE_URL }
 from "../core/api/api-config.js";
 
+
+
 const API = API_BASE_URL;
 
-export class WorkspaceService {
 
+export class WorkspaceService {
+  
   // ================= HEADERS =================
   static headers() {
     return {
@@ -75,23 +78,22 @@ export class WorkspaceService {
     return json?.data ?? json;
   }
 
-  // ================= CREATE =================
-  static async createWorkspace(name) {
-    window.__workspaceMutation = Date.now();
-    const res = await fetch(`${API}/workspaces`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({ name })
-    });
-
-    const json = await this.safeJson(res);
-
-    return json?.data ?? json;
-  }
+    // ================= CREATE =================
+    static async createWorkspace(name) {
+      window.__workspaceMutation = Date.now();
+      const res = await fetch(`${API}/workspaces`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ name })
+      });
+  
+      const json = await this.safeJson(res);
+  
+      return json?.data ?? json;
+    }
 
   // ================= UPDATE =================
   static async updateWorkspace(id, body) {
-    window.__workspaceMutation = Date.now();
     const safeId = this.extractWorkspaceId({ id });
 
     if (!safeId) {
@@ -113,7 +115,6 @@ export class WorkspaceService {
   //=================== DELETE =======================
 
 static async deleteWorkspace(id){
-  window.__workspaceMutation = Date.now();
   const res =
     await fetch(
       `${API_BASE_URL}/workspaces/${id}`,
