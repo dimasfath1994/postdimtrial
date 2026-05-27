@@ -2,6 +2,7 @@ import { WorkspaceController } from "./controller/workspace-controller.js";
 import { initWorkspaceUI } from "./ui/workspace-ui.js";
 import { guardCollaborationAccess } from "./collab-auth-guard.js";
 import { setupGlobalSocket } from '../ws/request-socket.js';
+import { SocketDispatcher } from "../ws/socket-dispatcher.js";
 
 
 import { CollectionController } from "./controller/collection-controller.js";
@@ -22,6 +23,7 @@ const State = {
     workspaceList: [],
     collections: []
  };
+ const dispatcher = new SocketDispatcher();
 
 
  //=============== INITIALIZE WORKSPACE ================
@@ -47,6 +49,18 @@ const collectionCtrl = new CollectionController(ui, State, {
     }
 });
 setupCollectionActions(collectionCtrl);
+
+
+
+// =============== INITIALIZE SOCKET DISPATCHER ================
+dispatcher.register('WORKSPACE_', workspaceCtrl);
+dispatcher.register('COLLECTION_', collectionCtrl);
+// Saat inisialisasi socket, cukup panggil dispatcher.dispatch
+function initSocket(workspaceId) {
+    setupGlobalSocket(workspaceId, (payload) => {
+        dispatcher.dispatch(payload);
+    });
+}
 
 
 let currentSocket = null;
@@ -82,8 +96,11 @@ function connectSocket(id) {
     try {
         currentSocket = setupGlobalSocket(id, (payload) => {
             // Callback ini tetap berjalan saat message diterima
+            // if (currentConnectedId === id) {
+            //     workspaceCtrl.handleSocketMessage(payload);
+            // }
             if (currentConnectedId === id) {
-                workspaceCtrl.handleSocketMessage(payload);
+                dispatcher.dispatch(payload); 
             }
         });
 

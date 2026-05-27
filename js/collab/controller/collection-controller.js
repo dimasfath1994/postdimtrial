@@ -10,6 +10,13 @@ export class CollectionController {
         this.bc = new BroadcastChannel('collection_channel');
         this.setupBroadcastListener();
 
+        window.addEventListener("socket:message", (e) => {
+            const payload = e.detail;
+            // Filter: Hanya proses jika message terkait collection
+            if (payload.type && payload.type.startsWith('COLLECTION_')) {
+                this.handleSocketMessage(payload);
+            }
+        });
         window.addEventListener("workspace:changed", (event) => {
             const newWorkspaceId = event.detail.id;
             this.State.workspaceId = newWorkspaceId;
