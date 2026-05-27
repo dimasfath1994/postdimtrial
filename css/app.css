@@ -811,3 +811,8 @@ pre {
 #responsePanels{
   margin-top:10px;
 }
+
+
+.col-name {
+  cursor: context-menu; /* Memberi petunjuk visual bahwa ini bisa diklik kanan */
+}

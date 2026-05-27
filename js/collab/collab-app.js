@@ -3,16 +3,28 @@ import { initWorkspaceUI } from "./ui/workspace-ui.js";
 import { guardCollaborationAccess } from "./collab-auth-guard.js";
 import { setupGlobalSocket } from '../ws/request-socket.js';
 
-function loadCollections(id) { console.log("Load collections for", id); }
+
+import { CollectionController } from "./controller/collection-controller.js";
+import { renderCollectionSidebar, setupCollectionActions } from "./ui/collection-ui.js";
+
+
 function hydrateState(data) { console.log("Hydrate data", data); }
 
 const ui = {
     workspaceSwitcher: document.getElementById("workspaceSwitcher"),
     workspaceTitle: document.getElementById("workspaceTitle"),
-    activeWorkspaceName: document.getElementById("activeWorkspaceName")
+    activeWorkspaceName: document.getElementById("activeWorkspaceName"),
+    collectionList: document.getElementById("collectionList") // Tambahan
 };
-const State = { workspaceId: null, workspace: null, workspaceList: [] };
+const State = { 
+    workspaceId: null,
+    workspace: null,
+    workspaceList: [],
+    collections: []
+ };
 
+
+ //=============== INITIALIZE WORKSPACE ================
 const workspaceCtrl = new WorkspaceController(ui, State, {
     loadCollectionsCallback: loadCollections,
     hydrateStateCallback: hydrateState
@@ -20,9 +32,25 @@ const workspaceCtrl = new WorkspaceController(ui, State, {
 
 workspaceCtrl.onSwitchWorkspace = (id) => connectSocket(id);
 
+
+//=============== INITIALIZE COLLECTION ================
+const collectionCtrl = new CollectionController(ui, State, {
+    onUpdateUI: (cols) => {
+        renderCollectionSidebar(
+            document.getElementById('collectionList'), 
+            cols, 
+            {
+                // Cukup panggil method dari instance controller
+                onOpenMenu: (e, col) => collectionCtrl.showContextMenu(e, col)
+            }
+        );
+    }
+});
+setupCollectionActions(collectionCtrl);
+
+
 let currentSocket = null;
 let currentConnectedId = null; 
-
 let isConnecting = false;
 
 function connectSocket(id) {
@@ -80,7 +108,10 @@ function connectSocket(id) {
 document.addEventListener("DOMContentLoaded", async () => {
     initWorkspaceUI(workspaceCtrl);
     const allowed = await guardCollaborationAccess();
-    if (allowed) await workspaceCtrl.loadFlow();
+    if (allowed)
+    {
+         await workspaceCtrl.loadFlow();
+    }
 });
 
 // Listener dari Workspace Controller
@@ -88,3 +119,9 @@ window.addEventListener("workspace:changed", (event) => {
     connectSocket(event.detail.id);
     workspaceCtrl.broadcastSwitch(event.detail.id);
 });
+
+async function loadCollections(id) { 
+    console.log("Load collections for", id);
+    // Panggil method init yang kita buat di CollectionController
+    await collectionCtrl.init(id); 
+}

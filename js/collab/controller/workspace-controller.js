@@ -140,17 +140,6 @@ async silentSwitch(id) {
     console.log("[SILENT] Workspace berpindah ke", id);
 }
 
-    async refreshDataOnly(id) {
-        try {
-            const ws = await WorkspaceService.getWorkspace(id);
-            this.State.workspace = ws;
-            this.renderActiveWorkspace(ws); // Update UI Nama saja
-            if (this.onHydrateState) this.onHydrateState(ws?.data || {});
-            if (this.onLoadCollections) await this.onLoadCollections(id);
-            // HAPUS dispatchEvent di sini!
-        } catch (err) { console.error(err); }
-    }
-
     renderActiveWorkspace(ws) {
         const target = this.State.workspaceList?.find(w => Number(w.id) === Number(this.State.workspaceId)) 
                 || this.State.workspace || ws;
@@ -215,16 +204,6 @@ async handleWorkspaceSwitch(id) {
         
         window.dispatchEvent(new CustomEvent("workspace:changed", { detail: { id } }));
     } catch (err) { console.error(err); }
-}
-
-
-// Di dalam class WorkspaceController
-initSocket() {
-    // Memulai koneksi dan menentukan apa yang terjadi saat pesan datang
-    setupGlobalSocket(this.State.workspaceId, (payload) => {
-        // Ini adalah callback yang dipanggil saat ada pesan dari server
-        this.handleSocketMessage(payload);
-    });
 }
 
 
@@ -321,24 +300,6 @@ async createNewWorkspace() {
         });
         bc.close();
     }
-
-syncUITitle(id, newName) {
-    // 1. Update Nama Aktif
-    const el = this.ui.activeWorkspaceName;
-    if (el) el.textContent = newName;
-    
-    // 2. Update Dropdown
-    const select = this.ui.workspaceSwitcher;
-    if (select) {
-        const opt = Array.from(select.options).find(o => o.value == id);
-        if (opt) opt.textContent = newName;
-    }
-    
-    // 3. Pastikan State juga terupdate agar tidak kembali ke nama lama saat refresh
-    if (this.State.workspaceId == id && this.State.workspace) {
-        this.State.workspace.name = newName;
-    }
-}
     initWorkspaceContextMenu() {
         const el = this.ui.activeWorkspaceName;
         if (!el) return;
