@@ -203,7 +203,6 @@ async handleWorkspaceSwitch(id) {
         this.State.workspaceId = id;
         this.State.workspace = ws;
         
-        this.initSocket();
         // 2. Update UI
         this.renderActiveWorkspace(ws);
         
@@ -219,7 +218,7 @@ async handleWorkspaceSwitch(id) {
 }
 
 
-
+// Di dalam class WorkspaceController
 initSocket() {
     // Memulai koneksi dan menentukan apa yang terjadi saat pesan datang
     setupGlobalSocket(this.State.workspaceId, (payload) => {
