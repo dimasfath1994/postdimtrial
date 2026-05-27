@@ -17,6 +17,7 @@ export class WorkspaceController {
 
     setupBroadcastListener() {
         this.bc.onmessage = async (event) => {
+            console.log("[DEBUG BROADCAST] Menerima event:", event.data);
             const { type, id, data } = event.data;
             const ensureStateReady = async () => {
                 let retries = 0;
