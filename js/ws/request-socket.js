@@ -10,6 +10,13 @@ export function setupGlobalSocket(workspaceId, callback) {
         return globalSocket;
     }
 
+    // 2. JIKA SEDANG CONNECTING (readyState 0), JANGAN BUKA LAGI!
+    // Tunggu sampai dia benar-benar terbuka atau error
+    if (globalSocket && globalSocket.readyState === WebSocket.CONNECTING) {
+        console.log("[SOCKET] Sedang mencoba connect, tunggu sebentar...");
+        return globalSocket;
+    }
+
     // 2. Jika ada koneksi lama, tutup dulu sebelum buka yang baru
     if (globalSocket) {
         console.log("[SOCKET] Menutup koneksi lama...");
@@ -38,8 +45,10 @@ export function setupGlobalSocket(workspaceId, callback) {
         }
     };
 
+    // PENTING: Jika error, reset variabel agar bisa dicoba lagi
     globalSocket.onerror = (err) => {
         console.error("[SOCKET] Error:", err);
+        globalSocket = null;
     };
 
     globalSocket.onclose = () => {
