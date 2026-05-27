@@ -1,5 +1,6 @@
 import { WorkspaceService } from "../workspace-service.js";
 import { updateWorkspaceNameUI, updateSwitcherUI } from "../ui/workspace-ui.js";
+import { setupGlobalSocket } from "../../ws/request-socket.js"; // Sesuaikan path-nya
 
 export class WorkspaceController {
     constructor(ui, State, { loadCollectionsCallback, hydrateStateCallback }) {
@@ -217,6 +218,14 @@ async handleWorkspaceSwitch(id) {
 }
 
 
+
+initSocket() {
+    // Memulai koneksi dan menentukan apa yang terjadi saat pesan datang
+    setupGlobalSocket(this.State.workspaceId, (payload) => {
+        // Ini adalah callback yang dipanggil saat ada pesan dari server
+        this.handleSocketMessage(payload);
+    });
+}
 
 
 handleSocketMessage(payload) {

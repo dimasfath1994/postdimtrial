@@ -20,6 +20,8 @@ const workspaceCtrl = new WorkspaceController(ui, State, {
 
 workspaceCtrl.onSwitchWorkspace = (id) => connectSocket(id);
 
+workspaceCtrl.initSocket();
+
 let currentSocket = null;
 let currentConnectedId = null; 
 
