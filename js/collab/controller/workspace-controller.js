@@ -275,20 +275,44 @@ async createNewWorkspace() {
     }
 }
 
-
     async updateName(id, newName) {
-        try {
-            // 1. Cukup update ke Server saja
-            await WorkspaceService.updateWorkspace(id, { name: newName });
-            
-            // JANGAN lakukan update State atau Broadcast di sini!
-            // Biarkan Server mengirim WebSocket ke semua klien (termasuk dirimu sendiri)
-            // agar semuanya mendapatkan "kebenaran yang sama" secara bersamaan.
-        } catch (err) { 
-            console.error("Gagal update:", err); 
-        }
+        // 1. Update ke Server
+        await WorkspaceService.updateWorkspace(id, { name: newName });
+        
+        // 2. Update State utama
+        if (this.State.workspace) this.State.workspace.name = newName;
+    
+        // 3. Update State List (PENTING: Agar renderActiveWorkspace tidak ambil data lama)
+        const wsInList = this.State.workspaceList?.find(w => Number(w.id) === Number(id));
+        if (wsInList) wsInList.name = newName;
+
+        // 4. PENTING: Broadcast ke Tab B agar mereka juga update
+        const bc = new BroadcastChannel('workspace_channel');
+        bc.postMessage({ 
+            type: 'SYNC_DATA_GLOBAL', 
+            id: id, 
+            data: { name: newName } 
+        });
+        bc.close();
     }
 
+syncUITitle(id, newName) {
+    // 1. Update Nama Aktif
+    const el = this.ui.activeWorkspaceName;
+    if (el) el.textContent = newName;
+    
+    // 2. Update Dropdown
+    const select = this.ui.workspaceSwitcher;
+    if (select) {
+        const opt = Array.from(select.options).find(o => o.value == id);
+        if (opt) opt.textContent = newName;
+    }
+    
+    // 3. Pastikan State juga terupdate agar tidak kembali ke nama lama saat refresh
+    if (this.State.workspaceId == id && this.State.workspace) {
+        this.State.workspace.name = newName;
+    }
+}
     initWorkspaceContextMenu() {
         const el = this.ui.activeWorkspaceName;
         if (!el) return;

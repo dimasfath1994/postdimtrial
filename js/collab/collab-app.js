@@ -24,25 +24,22 @@ let currentSocket = null;
 let currentConnectedId = null; 
 
 function connectSocket(id) {
-    if (!id) return;
+    // Jika ID sama dan socket masih hidup, jangan lakukan apa-apa
     if (currentConnectedId === id && currentSocket?.readyState === WebSocket.OPEN) return;
 
+    // Bersihkan koneksi lama dengan benar
+    if (currentSocket) {
+        // Hapus handler agar tidak trigger re-render saat socket mati
+        currentSocket.onmessage = null; 
+        currentSocket.onclose = null;
+        currentSocket.close();
+        currentSocket = null;
+    }
+
     console.log(`[DEBUG] Memulai socket BARU untuk: ${id}`);
-    
     currentSocket = setupGlobalSocket(id, (payload) => {
         workspaceCtrl.handleSocketMessage(payload);
     });
-
-    // Tambahkan ini untuk ketahanan jaringan
-    currentSocket.onclose = () => {
-        console.warn("[SOCKET] Koneksi terputus, mencoba reconnect dalam 3 detik...");
-        setTimeout(() => {
-            if (workspaceCtrl.State.workspaceId === id) {
-                currentSocket = null; // Reset agar bisa di-reconnect
-                connectSocket(id);
-            }
-        }, 3000);
-    };
 
     currentConnectedId = id;
 }
@@ -50,20 +47,7 @@ function connectSocket(id) {
 document.addEventListener("DOMContentLoaded", async () => {
     initWorkspaceUI(workspaceCtrl);
     const allowed = await guardCollaborationAccess();
-    if (allowed) {
-        // loadFlow akan men-trigger event "workspace:changed"
-        // sehingga connectSocket akan dipanggil secara otomatis
-        await workspaceCtrl.loadFlow();
-    }
-});
-
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-        console.log("Tab aktif kembali, memastikan socket hidup...");
-        if (workspaceCtrl.State.workspaceId) {
-            connectSocket(workspaceCtrl.State.workspaceId);
-        }
-    }
+    if (allowed) await workspaceCtrl.loadFlow();
 });
 
 // Listener dari Workspace Controller
