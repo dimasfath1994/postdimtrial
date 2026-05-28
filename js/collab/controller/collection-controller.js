@@ -198,7 +198,7 @@ showContextMenu(e, col) {
             this.bc.postMessage({ type: 'COLLECTION_CREATED', data: newCol });
             
             // Update lokal
-            this.State.collections.push(newCol);
+            //this.State.collections.push(newCol);
             this.render();
         } catch (err) {
             console.error("Gagal buat koleksi:", err);
