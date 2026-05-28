@@ -60,6 +60,18 @@ export class FolderController {
         // 2. Render sidebar utama
         this.render();
     
+
+        const expandedFolders = document.querySelectorAll('.folder-item');
+        expandedFolders.forEach(el => {
+            const childList = el.querySelector('.child-list');
+            if (childList) {
+                const folderId = parseInt(el.dataset.id);
+                // Kita panggil refreshFolderView agar ia merender ulang 
+                // isi di dalam elemen tersebut dengan data terbaru dari State
+                this.refreshFolderView(folderId, el);
+            }
+        });
+
         // 3. TARGETED RE-RENDER
         // Menggunakan requestAnimationFrame untuk mencegah race condition DOM
         requestAnimationFrame(() => {
@@ -78,6 +90,8 @@ export class FolderController {
             }
         });
     }
+
+    
 
     renderFolder(folderId, parentElement) {
         // 1. Mencegah proses render ganda
@@ -128,6 +142,28 @@ export class FolderController {
             parentElement.removeAttribute('data-rendering');
         }
     }
+
+    refreshFolderView(folderId, itemElement) {
+                const subFolders = this.State.folders.filter(f => f.parent_id === folderId);
+                const requests = this.State.requests ? this.State.requests.filter(r => r.folder_id === folderId) : [];
+                
+                renderFolderChildren(itemElement, subFolders, requests, {
+                    onOpenMenu: (e, folder) => showFolderContextMenu(e, folder, {
+                        onRename: (id) => {
+                            const name = prompt("New name:", folder.name);
+                            if(name) this.renameFolder(id, name);
+                        },
+                        onDelete: (id) => this.deleteFolder(id),
+                        onExpand: (id, el) => this.refreshFolderView(id, el),
+                        onAddFolder: (parentId) => {
+                            const name = prompt("Folder name:");
+                            if(name) this.createFolder(this.workspaceId, this.collectionId, parentId, name);
+                        }
+                    }),
+                    onExpand: (id, el) => this.refreshFolderView(id, el)
+                });
+            }
+        
 
     async render() {
         if (this.onUpdateUI) this.onUpdateUI(this.State.folders);
