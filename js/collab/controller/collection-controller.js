@@ -1,11 +1,12 @@
 import { CollectionService } from "../collection-service.js";
+import { exportPostmanCollection } from "../../core/exporters/postman-exporter.js";
 
 export class CollectionController {
-    constructor(ui, State, { onUpdateUI }) {
+    constructor(ui, State, { onUpdateUI, folderCtrl }) {
         this.ui = ui; // Mengacu pada elemen UI container sidebar
         this.State = State;
         this.onUpdateUI = onUpdateUI; // Callback untuk memicu render ke collection-ui
-        
+        this.folderCtrl = folderCtrl;
         // BroadcastChannel untuk sinkronisasi antar tab dalam satu browser
         this.bc = new BroadcastChannel('collection_channel');
         this.setupBroadcastListener();
@@ -94,6 +95,37 @@ export class CollectionController {
     }
 
 
+    // --- EXPORT POSTMAN ---
+    async exportPostman(id) {
+        // 1. Cari koleksi di state
+        const collection = this.State.collections.find(c => c.id === id);
+        if (!collection) {
+            console.error("Koleksi tidak ditemukan");
+            return;
+        }
+    
+        // 2. Proses data
+        const data = exportPostmanCollection(collection);
+    
+        // 3. Trigger download
+        this.downloadJSON(data, `${collection.name}.postman_collection.json`);
+    }
+    
+    // Tambahkan helper download di dalam class ini agar tidak mengotori file lain
+    downloadJSON(data, filename) {
+        const blob = new Blob(
+            [JSON.stringify(data, null, 2)],
+            { type: "application/json" }
+        );
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+
     // Di dalam class CollectionController
 showContextMenu(e, col) {
     // 1. Bersihkan menu lama jika ada
@@ -138,7 +170,13 @@ showContextMenu(e, col) {
         menu.remove();
     };
 
+    menu.querySelector('#ctx-add-folder').onclick = () => {
+        this.addFolder(col.id); // Memanggil method addFolder yang baru kita buat
+        menu.remove();
+    };
+
     menu.querySelector('#ctx-export').onclick = () => {
+        // Panggil method controller, bukan fungsi global di luar
         this.exportPostman(col.id);
         menu.remove();
     };
@@ -223,13 +261,31 @@ showContextMenu(e, col) {
     }
 
     async addFolder(collectionId) {
-        console.log("Add Folder to collection:", collectionId);
-        // Implementasi integrasi API folder di sini
-    }
+        // 1. Minta nama folder ke user
+        const folderName = prompt("Enter folder name:");
+        if (!folderName) return;
 
-    async exportPostman(id) {
-        console.log("Exporting collection to Postman:", id);
-        // Implementasi logika export postman
+        // 2. Tentukan parentId
+        // Jika folder dibuat di level root collection, parentId adalah null.
+        // Jika nanti kamu punya fitur "Add Subfolder", kamu bisa passing parentId-nya
+        const parentId = null; 
+
+        try {
+            // 3. Panggil method dari FolderController
+            // Pastikan kamu punya akses ke instance folderCtrl di sini
+            // Biasanya kamu bisa menyimpannya di constructor atau via App context
+            await this.folderCtrl.createFolder(
+                this.State.workspaceId, 
+                collectionId, 
+                parentId, 
+                folderName
+            );
+            
+            console.log("Folder created successfully in collection:", collectionId);
+        } catch (err) {
+            console.error("Gagal menambahkan folder:", err);
+            alert("Gagal menambahkan folder");
+        }
     }
 }
 

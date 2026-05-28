@@ -816,3 +816,14 @@ pre {
 .col-name {
   cursor: context-menu; /* Memberi petunjuk visual bahwa ini bisa diklik kanan */
 }
+
+
+.folder-item {
+  display: flex;
+  flex-direction: column; /* Biarkan children tersusun ke bawah */
+}
+.child-list {
+  display: block; /* Pastikan terlihat */
+  margin-left: 20px;
+  border-left: 1px solid #ccc;
+}

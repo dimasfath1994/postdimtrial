@@ -4,9 +4,11 @@ import { guardCollaborationAccess } from "./collab-auth-guard.js";
 import { setupGlobalSocket } from '../ws/request-socket.js';
 import { SocketDispatcher } from "../ws/socket-dispatcher.js";
 
-
 import { CollectionController } from "./controller/collection-controller.js";
 import { renderCollectionSidebar, setupCollectionActions } from "./ui/collection-ui.js";
+
+import { FolderController } from "./controller/folder-controller.js";
+import { renderFolderChildren, showFolderContextMenu } from "./ui/folder-ui.js";
 
 
 function hydrateState(data) { console.log("Hydrate data", data); }
@@ -21,7 +23,8 @@ const State = {
     workspaceId: null,
     workspace: null,
     workspaceList: [],
-    collections: []
+    collections: [],
+    folders: [] 
  };
  const dispatcher = new SocketDispatcher();
 
@@ -35,26 +38,50 @@ const workspaceCtrl = new WorkspaceController(ui, State, {
 workspaceCtrl.onSwitchWorkspace = (id) => connectSocket(id);
 
 
+//=============== INITIALIZE FOLDER ================
+// Pastikan folderCtrl diinisialisasi dengan struktur yang tepat
+const folderCtrl = new FolderController(ui, State, {
+    workspaceId: State.workspaceId, 
+    collectionId: null, 
+    onUpdateUI: (folders) => {
+        console.log("Folders state updated:", folders);
+    }
+});
+
 //=============== INITIALIZE COLLECTION ================
 const collectionCtrl = new CollectionController(ui, State, {
+    folderCtrl: folderCtrl,
     onUpdateUI: (cols) => {
+        const collectionListContainer = document.getElementById('collectionList');
+        
         renderCollectionSidebar(
-            document.getElementById('collectionList'), 
+            collectionListContainer, 
             cols, 
             {
-                // Cukup panggil method dari instance controller
-                onOpenMenu: (e, col) => collectionCtrl.showContextMenu(e, col)
+                onOpenMenu: (e, col) => collectionCtrl.showContextMenu(e, col),
+                onExpand: async (collectionId, itemElement) => {
+                    // 1. Simpan referensi collectionId ke folderCtrl agar handleSocketMessage tahu konteksnya
+                    await folderCtrl.init(collectionId);
+                    
+                    // 2. Tandai elemen koleksi ini dengan ID agar socket bisa melakukan auto-refresh
+                    // Ini kunci agar handleSocketMessage bisa menemukan elemen ini nanti
+                    itemElement.dataset.collectionId = collectionId;
+                    
+                    // 3. Render level root
+                    folderCtrl.renderFolder(null, itemElement);
+                }
             }
         );
     }
 });
-setupCollectionActions(collectionCtrl);
 
+setupCollectionActions(collectionCtrl);
 
 
 // =============== INITIALIZE SOCKET DISPATCHER ================
 dispatcher.register('WORKSPACE_', workspaceCtrl);
 dispatcher.register('COLLECTION_', collectionCtrl);
+dispatcher.register('FOLDER_', folderCtrl);
 // Saat inisialisasi socket, cukup panggil dispatcher.dispatch
 function initSocket(workspaceId) {
     setupGlobalSocket(workspaceId, (payload) => {
@@ -69,6 +96,7 @@ let isConnecting = false;
 
 function connectSocket(id) {
     // 1. Guard: Tidak perlu melakukan apa-apa jika sudah terhubung
+    State.workspaceId = id;
     if (currentConnectedId === id && currentSocket?.readyState === WebSocket.OPEN) {
         return;
     }
