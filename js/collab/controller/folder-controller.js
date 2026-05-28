@@ -188,7 +188,7 @@ this.refreshFolderView(folderId, el);
             this.bc.postMessage({ type: 'FOLDER_CREATED', data: newFolder });
             
             // 3. Update Local State
-            this.State.folders.push(newFolder);
+            //this.State.folders.push(newFolder);
             
             // 4. Targeted UI Update
             if (parentId) {
