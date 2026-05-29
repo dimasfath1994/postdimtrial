@@ -2,11 +2,12 @@ import { CollectionService } from "../collection-service.js";
 import { exportPostmanCollection } from "../../core/exporters/postman-exporter.js";
 
 export class CollectionController {
-    constructor(ui, State, { onUpdateUI, folderCtrl }) {
+    constructor(ui, State, { onUpdateUI, folderCtrl, requestCtrl }) {
         this.ui = ui; // Mengacu pada elemen UI container sidebar
         this.State = State;
         this.onUpdateUI = onUpdateUI; // Callback untuk memicu render ke collection-ui
         this.folderCtrl = folderCtrl;
+        this.requestCtrl = requestCtrl;
         // BroadcastChannel untuk sinkronisasi antar tab dalam satu browser
         this.bc = new BroadcastChannel('collection_channel');
         this.setupBroadcastListener();
@@ -27,8 +28,12 @@ export class CollectionController {
 
     async init(workspaceId) {
         try {
+            this.State.collections = [];
+            this.render();
             // 1. Ambil data koleksi dari API
+            //console.log("Mencoba fetch untuk workspace:", workspaceId);
             const list = await CollectionService.getByWorkspace(workspaceId);
+            //console.log("Data yang diterima dari backend:", list);
             // 2. Update state lokal
             this.State.collections = list;
             // 3. Render
@@ -88,10 +93,17 @@ export class CollectionController {
 
     // --- RENDER TRIGGER ---
     async render() {
-        console.log("Rendering collections:", this.State.collections); // Debugging: Cek apakah ini muncul di console
+        //console.log("Rendering collections:", this.State.collections); // Debugging: Cek apakah ini muncul di console
         if (this.onUpdateUI) {
             this.onUpdateUI(this.State.collections);
         }
+
+        if (this.requestCtrl) {
+            this.State.collections.forEach(col => {
+                this.requestCtrl.loadRequestsByCollection(col.id);
+            });
+        }
+        
     }
 
 

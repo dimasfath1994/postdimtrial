@@ -86,7 +86,7 @@ export class WorkspaceController {
 
             this.renderActiveWorkspace(ws);
             await this.loadWorkspaceSwitcher();
-            
+            console.log("id dari workspace-controller", id);
             if (this.onHydrateState) this.onHydrateState(ws?.data || {});
             if (this.onLoadCollections) await this.onLoadCollections(id);
 

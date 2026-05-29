@@ -24,6 +24,7 @@ export function renderCollectionSidebar(container, collections, handlers) {
                 <span class="toggle-icon">▶</span>
                 <span class="col-name">${col.name}</span>
             </div>
+            <div id="requests-container-${col.id}" class="requests-list" style="display:none; padding-left: 20px;"></div>
         `;
 
         // Event: Klik panah untuk expand/collapse
@@ -44,18 +45,32 @@ export function renderCollectionSidebar(container, collections, handlers) {
 
 function toggleExpand(item, col, handlers) {
     const icon = item.querySelector('.toggle-icon');
+    const container = item.querySelector(`#requests-container-${col.id}`);
     const isExpanded = icon.textContent === '▼';
-    
-    // Toggle icon
+
+    // 1. Toggle icon
     icon.textContent = isExpanded ? '▶' : '▼';
-    
-    // Panggil handler untuk load isi koleksi jika belum di-expand
+
+    // 2. Toggle visibility container
+    if (container) {
+        container.style.display = isExpanded ? 'none' : 'block';
+    }
+
+    // 3. Panggil handler jika di-expand
     if (!isExpanded) {
-        handlers.onExpand(col.id, item);
+        // Trigger untuk memuat data request (menggunakan requestCtrl yang dikirim via handlers)
+        if (handlers.requestCtrl) {
+            handlers.requestCtrl.loadRequestsByCollection(col.id);
+        }
+        
+        // Panggil handler original untuk folder (jika ada)
+        if (handlers.onExpand) {
+            handlers.onExpand(col.id, item);
+        }
     } else {
-        // Hapus child list jika sudah ada
-        const childList = item.querySelector('.child-list');
-        if (childList) childList.remove();
+        // Logika untuk collapse (opsional: bersihkan container atau biarkan tersembunyi)
+        // const childList = item.querySelector('.child-list');
+        // if (childList) childList.remove();
     }
 }
 

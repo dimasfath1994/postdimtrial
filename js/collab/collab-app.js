@@ -1,3 +1,5 @@
+//collab-app.js
+
 import { WorkspaceController } from "./controller/workspace-controller.js";
 import { initWorkspaceUI } from "./ui/workspace-ui.js";
 import { guardCollaborationAccess } from "./collab-auth-guard.js";
@@ -9,6 +11,9 @@ import { renderCollectionSidebar, setupCollectionActions } from "./ui/collection
 
 import { FolderController } from "./controller/folder-controller.js";
 import { renderFolderChildren, showFolderContextMenu } from "./ui/folder-ui.js";
+
+import { RequestController } from "./controller/request-controller.js";
+import { TabController } from "./controller/tab-controller.js";
 
 
 function hydrateState(data) { console.log("Hydrate data", data); }
@@ -24,9 +29,24 @@ const State = {
     workspace: null,
     workspaceList: [],
     collections: [],
-    folders: [] 
+    folders: [] ,
+    requests: []
  };
  const dispatcher = new SocketDispatcher();
+
+
+//=============== INITIALIZE TAB REQUEST ================
+const tabCtrl = new TabController(ui);
+
+ //=============== INITIALIZE REQUEST ================
+const requestCtrl = new RequestController(ui, State, {
+    workspaceId: State.workspaceId,
+    tabCtrl: tabCtrl,
+    onUpdateUI: (requests) => {
+        console.log("Requests state updated:", requests);
+    }
+});
+
 
 
  //=============== INITIALIZE WORKSPACE ================
@@ -35,7 +55,10 @@ const workspaceCtrl = new WorkspaceController(ui, State, {
     hydrateStateCallback: hydrateState
 });
 
-workspaceCtrl.onSwitchWorkspace = (id) => connectSocket(id);
+workspaceCtrl.onSwitchWorkspace = (id) => {
+    connectSocket(id);
+    requestCtrl.init(id); // Reset/Fetch ulang request saat pindah workspace
+};
 
 
 //=============== INITIALIZE FOLDER ================
@@ -51,6 +74,7 @@ const folderCtrl = new FolderController(ui, State, {
 //=============== INITIALIZE COLLECTION ================
 const collectionCtrl = new CollectionController(ui, State, {
     folderCtrl: folderCtrl,
+    requestCtrl: requestCtrl,
     onUpdateUI: (cols) => {
         const collectionListContainer = document.getElementById('collectionList');
         
@@ -82,6 +106,9 @@ setupCollectionActions(collectionCtrl);
 dispatcher.register('WORKSPACE_', workspaceCtrl);
 dispatcher.register('COLLECTION_', collectionCtrl);
 dispatcher.register('FOLDER_', folderCtrl);
+dispatcher.register('REQUEST_', requestCtrl);
+
+
 // Saat inisialisasi socket, cukup panggil dispatcher.dispatch
 function initSocket(workspaceId) {
     setupGlobalSocket(workspaceId, (payload) => {
@@ -161,8 +188,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Listener dari Workspace Controller
 window.addEventListener("workspace:changed", (event) => {
+    //console.log("Workspace changed event received for:", event.detail.id); // Tambahkan log ini
     connectSocket(event.detail.id);
     workspaceCtrl.broadcastSwitch(event.detail.id);
+
 });
 
 async function loadCollections(id) { 

@@ -20,7 +20,7 @@ export class CollectionService {
     const id = Number(workspaceId);
 
     const res = await fetch(
-      `${API}/collections?workspace_id=${id}`,
+      `${API}/collections/workspace/${workspaceId}`,
       { headers: this.headers() }
     );
 

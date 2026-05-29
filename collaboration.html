@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>Postdim - Collaboration</title>
-  <link rel="stylesheet" href="./css/app.css">
+  <link rel="stylesheet" href="./css/collab-app.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
 <body class="collab-mode">
@@ -39,15 +40,15 @@
     <option>Loading...</option>
   </select>
 
-  <button id="createWorkspaceBtn" style="margin-top:10px;">
-    + Workspace
-  </button>
-
- 
-
-  <!-- ================= ACTIONS ================= -->
-  <button id="newCollection">+ Collection</button>
-  <button id="addRequest">+ Request</button>
+  <div class="action-menu" style="margin-top: auto; padding: 10px;">
+    <button id="mainActionBtn" class="btn-fab">+</button>
+  
+    <div id="actionDropdown" class="action-dropdown">
+      <button id="createWorkspaceBtn">New Workspace</button>
+      <button id="newCollection">New Collection</button>
+      <button id="addRequest">New Request</button>
+    </div>
+  </div>
 
   <!-- ================= COLLECTION LIST ================= -->
   <div id="collectionList"></div>
@@ -94,8 +95,10 @@
     </select>
 
     <input id="url" placeholder="https://api.example.com" />
-    <input type="checkbox" id="use-proxy" name="use-proxy">
-    <label for="use-proxy">Use Proxy (For Web)</label>
+    <div class="proxy-container">
+      <input type="checkbox" id="use-proxy">
+      <label for="use-proxy">Proxy</label>
+    </div>
   </div>
 
   <button id="send">Send Request</button>
@@ -226,6 +229,20 @@
       return "./lib/js/monaco-editor/min/vs/base/worker/workerMain.js";
     }
   };
+
+  const mainBtn = document.getElementById('mainActionBtn');
+const dropdown = document.getElementById('actionDropdown');
+
+mainBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  // Toggle visibility
+  dropdown.style.display = (dropdown.style.display === 'block') ? 'none' : 'block';
+});
+
+// Menutup menu jika klik area luar
+document.addEventListener('click', () => {
+  dropdown.style.display = 'none';
+});
 </script>
 
 <script src="./lib/js/monaco-editor/min/vs/loader.js"></script>
