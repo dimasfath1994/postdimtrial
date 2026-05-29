@@ -36,7 +36,7 @@ const State = {
 
 
 //=============== INITIALIZE TAB REQUEST ================
-const tabCtrl = new TabController(ui);
+const tabCtrl = new TabController(ui, null);
 
  //=============== INITIALIZE REQUEST ================
 const requestCtrl = new RequestController(ui, State, {
@@ -47,7 +47,8 @@ const requestCtrl = new RequestController(ui, State, {
     }
 });
 
-
+tabCtrl.handlers = requestCtrl.handlers;
+tabCtrl.setRequestGetter((id) => requestCtrl.getRequestById(id));
 
  //=============== INITIALIZE WORKSPACE ================
 const workspaceCtrl = new WorkspaceController(ui, State, {

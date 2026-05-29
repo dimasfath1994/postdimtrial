@@ -3,7 +3,6 @@
 import { RequestService } from "../request-service.js";
 import { RequestUI } from "../ui/request-ui.js"; 
 
-
 export class RequestController {
     constructor(ui, State, { onUpdateUI, tabCtrl }) {
         this.ui = ui; // Container untuk request di sidebar/folder
@@ -76,6 +75,10 @@ export class RequestController {
         }
     }
 
+    getRequestById(id) {
+        return this.State.requests.find(r => r.id === id);
+    }
+
     handleSocketMessage(payload) {
         const { type, data } = payload;
         const request_id = payload.request_id || data?.id;
@@ -90,9 +93,19 @@ export class RequestController {
                 }
                 break;
 
-            case 'REQUEST_DELETED':
+           case 'REQUEST_DELETED':
+                // 1. Update state
                 this.State.requests = this.State.requests.filter(r => r.id !== request_id);
-                this.render();
+                
+                // 2. Hapus dari Sidebar UI (DOM)
+                const sidebarEl = document.querySelector(`.request-item[data-id="${request_id}"]`);
+                if (sidebarEl) sidebarEl.remove();
+
+                // 3. Hapus dari Tab UI (DOM) jika sedang terbuka
+                // Kita panggil fungsi tabCtrl yang sudah ada untuk sinkronisasi
+                if (this.tabCtrl) {
+                    this.tabCtrl.closeTab(request_id); 
+                }
                 break;
 
             case 'REQUEST_UPDATED':
@@ -103,6 +116,8 @@ export class RequestController {
                     
                     // Panggil helper untuk update UI secara dinamis
                     this.updateUIElements(data.id, data);
+
+                    if (this.tabCtrl) this.tabCtrl.updateTab(data.id, data);
                 }
                 break;
         }
