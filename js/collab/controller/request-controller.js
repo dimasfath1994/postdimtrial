@@ -32,9 +32,34 @@ export class RequestController {
     }
 
     async init(workspaceId) {
-        // Request biasanya di-load via Collection atau Folder, 
-        // tapi method ini bisa digunakan jika ada kebutuhan global
-        this.render();
+        console.log("DEBUG: Mengambil request untuk workspace:", workspaceId);
+        
+        // Pastikan kita menunggu data koleksi jika belum ada
+        // Anda mungkin perlu memanggil fungsi fetch collections jika masih kosong
+        const collections = this.State.collections || [];
+        
+        if (collections.length === 0) {
+            console.warn("DEBUG: Koleksi masih kosong, mencoba ambil dari service...");
+            // Jika Anda punya akses ke service koleksi, panggil di sini
+            // await CollectionService.getAll(workspaceId); 
+        }
+    
+        // Gunakan Promise.all agar fetch berjalan paralel (lebih cepat)
+        const promises = collections.map(col => RequestService.getByCollection(col.id));
+        
+        try {
+            const results = await Promise.all(promises);
+            // Gabungkan semua hasil array
+            const allRequests = results.flat(); 
+            
+            this.State.requests = allRequests;
+            if (this.onUpdateUI) {
+                this.onUpdateUI(allRequests);
+            }
+            console.log("DEBUG: Total request terkumpul:", allRequests.length);
+        } catch (err) {
+            console.error("DEBUG: Gagal mengumpulkan request:", err);
+        }
     }
 
     setupBroadcastListener() {
@@ -87,11 +112,23 @@ export class RequestController {
 
         switch (type) {
             case 'REQUEST_CREATED':
-                if (!this.State.requests.find(r => r.id === data.id)) {
-                    this.State.requests.push(data);
+            if (!this.State.requests.find(r => r.id === data.id)) {
+                //this.State.requests.push(data);
+                
+                // JANGAN panggil loadRequestsByCollection kalau itu akan merender ulang semua.
+                // Cukup panggil render() untuk root, atau panggil folder render untuk folder.
+                if (data.folder_id) {
+                    // Biarkan FolderController yang handle jika ada folder_id
+                    if (window.folderCtrl) {
+                        const folderEl = document.querySelector(`.folder-item[data-id="${data.folder_id}"]`);
+                        if (folderEl) window.folderCtrl.renderFolder(data.folder_id, folderEl);
+                    }
+                } else {
+                    // Jika root, cukup render() yang sudah kita buat sebelumnya
                     this.render();
                 }
-                break;
+            }
+            break;
 
            case 'REQUEST_DELETED':
                 // 1. Update state
@@ -123,28 +160,70 @@ export class RequestController {
         }
     }
 
+
+
     async render() {
-        if (this.onUpdateUI) {
-            this.onUpdateUI(this.State.requests);
-        }
+        // 1. Bersihkan HANYA container utama (root level)
+        // Gunakan selector yang spesifik agar tidak menyentuh container di dalam folder
+        const rootContainers = document.querySelectorAll('.collection-item > .requests-list');
+        rootContainers.forEach(container => {
+            container.innerHTML = '';
+        });
+        
+    
+        // 2. Loop semua request dan filter hanya yang folder_id-nya null (root)
+        this.State.requests.forEach(req => {
+            // PERBAIKAN LOGIKA: Hanya render jika folder_id benar-benar null atau undefined
+            if (!req.folder_id) {
+                
+                // Cari container berdasarkan data-collection-id
+                const mainContainer = document.querySelector(`[data-collection-id="${req.collection_id}"] .requests-list`);
+                
+                if (mainContainer) {
+                    // Render item request ke root
+                    RequestUI.renderRequestItem(
+                        req, 
+                        mainContainer, 
+                        this.handlers, 
+                        (r) => this.tabCtrl.openTab(r)
+                    );
+                } else {
+                    console.warn(`[DEBUG] Container koleksi ${req.collection_id} tidak ditemukan.`);
+                }
+            }
+            // Jika req.folder_id ada nilainya, biarkan FolderController yang bekerja!
+        });
+        
+        console.log(`[DEBUG] Render selesai. Total request root: ${this.State.requests.filter(r => !r.folder_id).length}`);
     }
 
 
 
     async loadRequestsByCollection(collectionId, folderId = null) {
         try {
-            const requests = await RequestService.getByCollection(collectionId, folderId);
-            this.State.requests = requests;
+            const newRequests = await RequestService.getByCollection(collectionId, folderId);
             
-            const container = document.getElementById(`requests-container-${collectionId}`);
+            // 1. SMART MERGE: Jangan timpa seluruh State
+            // Hapus request lama yang berada di collection/folder yang sama, lalu masukkan yang baru
+            this.State.requests = this.State.requests.filter(r => 
+                !(String(r.collection_id) === String(collectionId) && String(r.folder_id || null) === String(folderId))
+            );
+            this.State.requests.push(...newRequests);
+    
+            // 2. SMART TARGETING: Cari container berdasarkan folder/koleksi
+            // Jangan pakai ID statis yang kaku, gunakan selector yang dinamis
+            const container = folderId 
+                ? document.querySelector(`.folder-item[data-id="${folderId}"] > .child-list`)
+                : document.querySelector(`[data-collection-id="${collectionId}"] .requests-list`);
+    
             if (container) {
-                container.innerHTML = ""; // Bersihkan
-                requests.forEach(req => 
+                container.innerHTML = ""; // Bersihkan hanya container yang spesifik ini
+                newRequests.forEach(req => 
                     RequestUI.renderRequestItem(
                         req, 
                         container, 
                         this.handlers, 
-                        (r) => this.tabCtrl.openTab(r) 
+                        (r) => this.tabCtrl.openTab(r)
                     )
                 );
             }
@@ -173,31 +252,46 @@ export class RequestController {
 
     // --- CRUD ACTIONS ---
 
-    /**
-     * @param {Object} context - { workspace_id, collection_id, folder_id (opsional) }
-     */
     async createRequest(context) {
-        try {
-            // 1. Panggil Service
-            const newReq = await RequestService.create({
-                ...context,
-                name: "New Request",
-                method: "GET"
-            });
+    try {
+        const newReq = await RequestService.create({
+            ...context,
+            name: "New Request",
+            method: "GET"
+        });
 
-            // 2. Broadcast ke tab lain
-            this.bc.postMessage({ type: 'REQUEST_CREATED', data: newReq });
+        // 1. Update State lokal
+        
 
-            // 3. Update State lokal & Render
-            this.State.requests.push(newReq);
-            this.render();
-            
-            return newReq;
-        } catch (err) {
-            console.error("Gagal buat request:", err);
-            alert("Gagal membuat request");
+        // 2. SMART UI UPDATE:
+        if (context.folder_id) {
+            // Jika ada folder_id, minta FolderController render ulang folder tsb
+            if (window.folderCtrl) {
+                const folderEl = document.querySelector(`.folder-item[data-id="${context.folder_id}"]`);
+                if (folderEl) window.folderCtrl.renderFolder(context.folder_id, folderEl);
+                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+            }
+        } else {
+            // Jika folder_id null/undefined, kita di Root (di luar folder)
+            // Cukup panggil render() milik RequestController
+            const isExists = this.State.requests.find(r => r.id === newReq.id);
+            if (!isExists) {
+                this.State.requests.push(newReq);
+                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+            }
+            this.render(); 
         }
+
+        // 3. Broadcast & Tab
+        this.bc.postMessage({ type: 'REQUEST_CREATED', data: newReq });
+        if (this.tabCtrl) this.tabCtrl.openTab(newReq);
+            
+        return newReq;
+    } catch (err) {
+        console.error("Gagal buat request:", err);
+        alert("Gagal membuat request");
     }
+}
 
     async deleteRequest(id) {
         if (!confirm("Are you sure you want to delete this request?")) return;
@@ -210,7 +304,6 @@ export class RequestController {
 
             // Update State
             this.State.requests = this.State.requests.filter(r => r.id !== id);
-            this.render();
         } catch (err) {
             console.error("Gagal delete request:", err);
             alert("Gagal menghapus request");
@@ -228,7 +321,6 @@ export class RequestController {
             const idx = this.State.requests.findIndex(r => r.id === id);
             if (idx !== -1) {
                 this.State.requests[idx] = { ...this.State.requests[idx], ...updatedReq };
-                this.render();
             }
         } catch (err) {
             console.error("Gagal update request:", err);

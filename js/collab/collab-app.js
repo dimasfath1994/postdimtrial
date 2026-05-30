@@ -29,6 +29,7 @@ const State = {
     workspace: null,
     workspaceList: [],
     collections: [],
+    activeCollectionId: null,
     folders: [] ,
     requests: []
  };
@@ -44,6 +45,7 @@ const requestCtrl = new RequestController(ui, State, {
     tabCtrl: tabCtrl,
     onUpdateUI: (requests) => {
         console.log("Requests state updated:", requests);
+        State.requests = requests;
     }
 });
 
@@ -67,10 +69,20 @@ workspaceCtrl.onSwitchWorkspace = (id) => {
 const folderCtrl = new FolderController(ui, State, {
     workspaceId: State.workspaceId, 
     collectionId: null, 
+    requestCtrl: requestCtrl,
     onUpdateUI: (folders) => {
         console.log("Folders state updated:", folders);
     }
 });
+
+folderCtrl.handlers = {
+    onExpand: (id, el) => folderCtrl.renderFolder(id, el),
+    onOpenMenu: (e, folder) => folderCtrl.showContextMenu(e, folder),
+    requestHandlers: requestCtrl.handlers, // Wajib ada untuk render request di dalam folder
+    onOpenTab: (r) => tabCtrl.openTab(r)
+};
+
+window.folderCtrl = folderCtrl;
 
 //=============== INITIALIZE COLLECTION ================
 const collectionCtrl = new CollectionController(ui, State, {
@@ -85,15 +97,18 @@ const collectionCtrl = new CollectionController(ui, State, {
             {
                 onOpenMenu: (e, col) => collectionCtrl.showContextMenu(e, col),
                 onExpand: async (collectionId, itemElement) => {
-                    // 1. Simpan referensi collectionId ke folderCtrl agar handleSocketMessage tahu konteksnya
-                    await folderCtrl.init(collectionId);
+                    // 1. Pastikan request benar-benar sudah ada datanya sebelum lanjut
+                    if (!requestCtrl.State.requests || requestCtrl.State.requests.length === 0) {
+                        console.log("DEBUG: Data request kosong, melakukan await requestCtrl.init...");
+                        await requestCtrl.init(State.workspaceId); // Tambahkan 'await' di sini
+                    }
                     
-                    // 2. Tandai elemen koleksi ini dengan ID agar socket bisa melakukan auto-refresh
-                    // Ini kunci agar handleSocketMessage bisa menemukan elemen ini nanti
+                    // 2. Sekarang baru init folder dan render
+                    await folderCtrl.init(collectionId);
                     itemElement.dataset.collectionId = collectionId;
                     
-                    // 3. Render level root
                     folderCtrl.renderFolder(null, itemElement);
+                    
                 }
             }
         );
@@ -200,3 +215,93 @@ async function loadCollections(id) {
     // Panggil method init yang kita buat di CollectionController
     await collectionCtrl.init(id); 
 }
+
+
+
+
+
+
+// 1. Definisikan elemen modal dan trigger
+const modal = document.getElementById('addRequestModal');
+const addRequestBtn = document.getElementById('addRequest'); // Tombol di dropdown sidebar
+const actionDropdown = document.getElementById('actionDropdown');
+const cancelRequestBtn = document.getElementById('cancelRequest');
+
+// 2. Fungsi Utama untuk menampilkan Modal
+async function showRequestPicker() {
+    modal.classList.remove('hidden');
+    const container = document.getElementById('locationPicker');
+    container.innerHTML = '<div class="picker-item">Loading...</div>';
+
+    try {
+        const collections = State.collections;
+        let html = '';
+
+        for (const col of collections) {
+            // 1. Tambahkan Header Koleksi
+            html += `
+                <div class="picker-item col-head" data-col-id="${col.id}">
+                    📂 <strong>${col.name}</strong>
+                </div>`;
+            
+            // 2. Ambil folder untuk koleksi ini
+            // Pastikan Anda memanggil API atau mengambil dari State yang sudah ter-filter
+            const folders = await folderCtrl.getFoldersByCollection(col.id); 
+            
+            // 3. Hanya loop dan render folder jika folder.length > 0
+            if (folders && folders.length > 0) {
+                folders.forEach(folder => {
+                    html += `
+                        <div class="picker-item folder-item" 
+                             data-col-id="${col.id}" 
+                             data-folder-id="${folder.id}" 
+                             style="padding-left: 30px;">
+                             📁 ${folder.name}
+                        </div>`;
+                });
+            }
+        }
+        
+        container.innerHTML = html;
+
+        // 4. Pasang Event Listener
+        container.querySelectorAll('.picker-item').forEach(item => {
+            item.onclick = async () => {
+                const colId = item.dataset.colId;
+                const folderId = item.dataset.folderId || null; 
+                console.log("DEBUG: Mengirim ke RequestController:", { colId, folderId });
+                
+                // Eksekusi create request
+                await requestCtrl.createRequest({
+                    workspace_id: State.workspaceId,
+                    collection_id: colId,
+                    folder_id: folderId // Jika folderId null, request masuk ke root collection
+                });
+                
+                modal.classList.add('hidden');
+            };
+        });
+    } catch (err) {
+        container.innerHTML = '<div class="picker-item">Error loading locations.</div>';
+        console.error("Gagal memuat picker:", err);
+    }
+}
+
+// 3. Event Listener untuk tombol "Add Request" di dropdown
+if (addRequestBtn) {
+    addRequestBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        actionDropdown.style.display = 'none'; // Tutup dropdown
+        showRequestPicker(); // Panggil fungsi modal
+    });
+}
+
+// 4. Event Listener untuk tombol Close/Cancel
+if (cancelRequestBtn) {
+    cancelRequestBtn.onclick = () => modal.classList.add('hidden');
+}
+
+// Opsional: Tutup modal jika klik di luar area konten
+modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.add('hidden');
+});

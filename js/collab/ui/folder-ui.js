@@ -1,3 +1,4 @@
+import { RequestUI } from './request-ui.js';
 /**
  * Merender daftar folder/request ke dalam elemen container (child-list)
  * @param {HTMLElement} parentElement - Elemen tempat list akan disisipkan
@@ -5,82 +6,105 @@
  * @param {Array} requests - Data request
  * @param {Object} handlers - Callback untuk aksi
  */
+/**
+ * Merender daftar folder/request ke dalam elemen container (child-list)
+ */
+
+
 export function renderFolderChildren(parentElement, folders, requests, handlers) {
     // 1. Cari container child-list di scope parentElement
     let childList = parentElement.querySelector(':scope > .child-list');
-
+    
     // 2. Logika Toggle (Jika sudah ada, cukup tampilkan/sembunyikan)
-    if (childList) {
-        const isHidden = childList.style.display === 'none';
-        childList.style.display = isHidden ? 'block' : 'none';
-        
-        const header = parentElement.querySelector(':scope > .folder-header');
-        const icon = header ? header.querySelector('.toggle-icon') : null;
-        if (icon) icon.textContent = isHidden ? '▼' : '▶';
-        return;
+
+    if (!childList) {
+        childList = document.createElement('div');
+        childList.className = 'child-list';
+        childList.style.paddingLeft = '20px';
+        childList.style.display = 'block';
+        parentElement.appendChild(childList);
+    } else {
+        // Jika sudah ada, cukup bersihkan isinya
+        childList.innerHTML = '';
     }
 
-    // 3. Jika tidak ada data, hentikan
-    if (!folders || folders.length === 0) return;
+    // 3. Jika folder dan request sama-sama kosong, abaikan
+    if ((!folders || folders.length === 0) && (!requests || requests.length === 0)) {
+        return;
+    }
+    
 
     // 4. Buat container childList baru
-    childList = document.createElement('div');
-    childList.className = 'child-list';
-    childList.style.paddingLeft = '20px';
-    childList.style.display = 'block';
-    parentElement.appendChild(childList);
 
-    // 5. Render setiap folder ke dalam childList
+
+    // 5. Render Requests (Muncul di dalam folder/level saat ini)
+    if (requests && requests.length > 0) {
+        requests.forEach(req => {
+            const reqItem = document.createElement('div');
+            reqItem.className = 'request-item';
+            reqItem.dataset.id = req.id;
+            
+            // Perbaikan Defensif: Mengecek apakah fungsi ada sebelum memanggil
+            if (typeof RequestUI.renderRequestItem === 'function') {
+                RequestUI.renderRequestItem(req, reqItem, handlers.requestHandlers, handlers.onOpenTab);
+            } else {
+                // Fallback jika fungsi renderRequestItem tidak ditemukan
+                console.error("Fungsi RequestUI.renderRequestItem tidak ditemukan!");
+                reqItem.innerHTML = `<span style="padding: 5px; color: #555;">${req.name || 'Unnamed Request'}</span>`;
+            }
+            
+            childList.appendChild(reqItem);
+        });
+    }
+
+    // 6. Render Folders
     folders.forEach(folder => {
         const item = document.createElement('div');
         item.className = 'folder-item';
         item.dataset.id = folder.id; 
-        
         item.innerHTML = `
-            <div class="folder-header">
-                <span class="toggle-icon">▶</span>
+            <div class="folder-header" style="cursor: pointer; display: flex; align-items: center; padding: 4px 0;">
+                <span class="toggle-icon" style="width: 20px;">▶</span>
                 <span class="folder-name" data-id="${folder.id}">📁 ${folder.name}</span>
             </div>
+            <div class="request-container" id="requests-container-folder-${folder.id}"></div>
         `;
         childList.appendChild(item);
     });
 
-    // 6. EVENT DELEGATION
-    if (!parentElement.dataset.listenerAttached) {
-        parentElement.addEventListener('click', (e) => {
-            const toggleIcon = e.target.closest('.toggle-icon');
-            if (!toggleIcon) return;
+    // 7. GLOBAL EVENT DELEGATION
+    if (!window.hasFolderGlobalListeners) {
+        document.addEventListener('click', (e) => {
+            const header = e.target.closest('.folder-header');
+            if (!header) return;
             
-            const item = toggleIcon.closest('.folder-item');
+            const item = header.closest('.folder-item');
             if (!item) return;
 
             const existingSub = item.querySelector(':scope > .child-list');
+            const toggleIcon = header.querySelector('.toggle-icon');
             
-            // Jika sub-folder sudah ada, kita cukup toggle saja (klik kedua dst.)
             if (existingSub) {
                 const isHidden = existingSub.style.display === 'none';
                 existingSub.style.display = isHidden ? 'block' : 'none';
-                toggleIcon.textContent = isHidden ? '▼' : '▶';
-            } 
-            // Jika belum ada, ini adalah KLIK PERTAMA, kita panggil onExpand
-            else {
-                // Jangan ubah icon di sini agar tidak 'fighting' dengan render berikutnya
+                if (toggleIcon) toggleIcon.textContent = isHidden ? '▼' : '▶';
+            } else {
+                if (toggleIcon) toggleIcon.textContent = '▼';
                 handlers.onExpand(item.dataset.id, item);
             }
         });
 
-        parentElement.addEventListener('contextmenu', (e) => {
+        document.addEventListener('contextmenu', (e) => {
             const nameEl = e.target.closest('.folder-name');
             if (!nameEl) return;
             e.preventDefault();
-            e.stopPropagation();
             handlers.onOpenMenu(e, { 
                 id: nameEl.dataset.id, 
                 name: nameEl.textContent.replace('📁 ', '') 
             });
         });
 
-        parentElement.dataset.listenerAttached = "true";
+        window.hasFolderGlobalListeners = true;
     }
 }
 
@@ -104,6 +128,11 @@ function toggleExpand(item, folder, handlers) {
  * Menampilkan context menu khusus folder
  */
 export function showFolderContextMenu(e, folder, handlers) {
+    // 1. Hapus menu lama jika masih ada (mencegah penumpukan)
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) existingMenu.remove();
+
+    // 2. Buat elemen menu
     const menu = document.createElement('div');
     menu.className = 'context-menu';
     Object.assign(menu.style, {
@@ -113,7 +142,10 @@ export function showFolderContextMenu(e, folder, handlers) {
         background: '#252526',
         border: '1px solid #454545',
         padding: '5px 0',
-        zIndex: '1000'
+        zIndex: '1000',
+        borderRadius: '4px',
+        color: '#fff',
+        cursor: 'pointer'
     });
 
     menu.innerHTML = `
@@ -125,9 +157,40 @@ export function showFolderContextMenu(e, folder, handlers) {
 
     document.body.appendChild(menu);
 
-    menu.querySelector('#ctx-rename').onclick = () => { handlers.onRename(folder.id); menu.remove(); };
-    menu.querySelector('#ctx-add-folder').onclick = () => { handlers.onAddFolder(folder.id); menu.remove(); };
-    menu.querySelector('#ctx-delete').onclick = () => { handlers.onDelete(folder.id); menu.remove(); };
+    // 3. Fungsi Helper untuk menutup menu dengan aman
+    const closeMenu = () => {
+        if (menu && menu.parentNode) {
+            menu.remove();
+        }
+    };
 
-    document.addEventListener('click', () => menu.remove(), { once: true });
+    // 4. Binding Event dengan Closure yang benar
+    menu.querySelector('#ctx-rename').onclick = () => { 
+        handlers.onRename(folder.id); 
+        closeMenu(); 
+    };
+
+    menu.querySelector('#ctx-add-folder').onclick = () => { 
+        handlers.onAddFolder(folder.id); 
+        closeMenu(); 
+    };
+
+    menu.querySelector('#ctx-delete').onclick = () => { 
+        handlers.onDelete(folder.id); 
+        closeMenu(); 
+    };
+
+    menu.querySelector('#ctx-add-request').onclick = () => {
+        // Menggunakan handler yang di-inject dari FolderController
+        if (handlers.onAddRequest) {
+            handlers.onAddRequest(folder.id, folder.collection_id);
+        } else {
+            console.error("Handler onAddRequest tidak ditemukan!");
+        }
+        closeMenu(); 
+    };
+
+    // 5. Tutup jika klik di luar area menu
+    document.addEventListener('click', closeMenu, { once: true });
 }
+

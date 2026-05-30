@@ -1,13 +1,15 @@
 import { FolderService } from "../folder-service.js";
 import { renderFolderChildren, showFolderContextMenu } from "../ui/folder-ui.js";
+import { RequestUI } from "../ui/request-ui.js"; // <--- TAMBAHKAN INI
 
 export class FolderController {
-    constructor(ui, State, { onUpdateUI, workspaceId, collectionId }) {
+    constructor(ui, State, { onUpdateUI, workspaceId, collectionId, requestCtrl }) {
         this.ui = ui;
         this.State = State;
         this.onUpdateUI = onUpdateUI;
         this.workspaceId = workspaceId;
         this.collectionId = collectionId;
+        this.requestCtrl = requestCtrl;
         
          // BroadcastChannel untuk sinkronisasi antar tab
         this.bc = new BroadcastChannel('folder_channel');
@@ -17,6 +19,20 @@ export class FolderController {
             const payload = e.detail;
             if (payload.type && payload.type.startsWith('FOLDER_')) {
                 this.handleSocketMessage(payload);
+            }
+        });
+
+        // Di constructor atau init FolderController
+        window.addEventListener('request:created', (e) => {
+            const newReq = e.detail;
+            // Cek apakah request ini miliknya folder yang sedang aktif/terbuka
+            // Jika ya, cukup panggil renderFolder untuk folder spesifik itu saja
+            const folderEl = document.querySelector(`.folder-item[data-id="${newReq.folder_id}"]`);
+            if (folderEl) {
+                this.renderFolder(newReq.folder_id, folderEl);
+            } else if (!newReq.folder_id) {
+                // Jika folder_id null, render di level root (koleksi)
+                this.renderRoot(); 
             }
         });
     }
@@ -33,6 +49,19 @@ export class FolderController {
             this.handleSocketMessage(event.data);
         };
     }
+
+
+    async getFoldersByCollection(collectionId) {
+        // Kita filter dulu dari State lokal (jika sudah ada)
+        const local = this.State.folders.filter(f => String(f.collection_id) === String(collectionId));
+        
+        // Jika State masih kosong (misal belum di-init), fetch dari service
+        if (local.length === 0) {
+            return await FolderService.getByCollection(collectionId);
+        }
+        return local;
+    }
+
 
     handleSocketMessage(payload) {
         const { type, data, folder_id } = payload;
@@ -62,15 +91,15 @@ export class FolderController {
     
 
         const expandedFolders = document.querySelectorAll('.folder-item');
-expandedFolders.forEach(el => {
-const childList = el.querySelector('.child-list');
-if (childList) {
-const folderId = parseInt(el.dataset.id);
-// Kita panggil refreshFolderView agar ia merender ulang 
-// isi di dalam elemen tersebut dengan data terbaru dari State
-this.refreshFolderView(folderId, el);
-}
-});
+        expandedFolders.forEach(el => {
+            const childList = el.querySelector('.child-list');
+            if (childList) {
+            const folderId = parseInt(el.dataset.id);
+            // Kita panggil refreshFolderView agar ia merender ulang 
+            // isi di dalam elemen tersebut dengan data terbaru dari State
+            this.refreshFolderView(folderId, el);
+            }
+    });
 
         // 3. TARGETED RE-RENDER
         // Menggunakan requestAnimationFrame untuk mencegah race condition DOM
@@ -98,59 +127,114 @@ this.refreshFolderView(folderId, el);
         if (parentElement.getAttribute('data-rendering') === 'true') return;
         parentElement.setAttribute('data-rendering', 'true');
         
-        console.log("DEBUG: Memulai render folderId:", folderId, "pada elemen:", parentElement);
-    
-        // 2. Filter folder dengan logika yang konsisten
+        const existingChildList = parentElement.querySelector(':scope > .child-list');
+        if (existingChildList) {
+            existingChildList.innerHTML = ''; // Hapus semua isi lama
+        }
+        console.log("DEBUG: Memulai render folderId:", folderId);
+        
+        // 2. AMBIL DATA DARI SUMBER TERPERCAYA
+        // Jika FolderController punya akses ke requestCtrl, pakai itu.
+        // Jika tidak, baru pakai this.State.requests
+        const allRequests = (this.requestCtrl && this.requestCtrl.State) 
+                            ? this.requestCtrl.State.requests 
+                            : (this.State.requests || []);
+        
+        console.log("DEBUG: Total requests yang tersedia di controller:", allRequests.length);
+        
+        // 3. Filter folder
         const subFolders = this.State.folders.filter(f => {
             const isTargetParent = (folderId === null) 
                 ? (f.parent_id === null) 
                 : (String(f.parent_id) === String(folderId));
-                
             return isTargetParent && String(f.collection_id) === String(this.collectionId);
         });
-    
-        console.log(`[DEBUG] Rendering level: ${folderId}, Found: ${subFolders.length} folders.`);
-    
-        // 3. Panggil fungsi UI
-        // Kita gunakan try-finally agar data-rendering selalu dihapus meski terjadi error
+        
+        // 4. Filter request dengan logika yang lebih fleksibel
+        const requests = allRequests.filter(r => {
+            // 1. Normalisasi: Ubah semua menjadi string atau null agar konsisten
+            const reqFolderId = r.folder_id ? String(r.folder_id) : null;
+            const targetFolderId = folderId ? String(folderId) : null;
+            
+            // 2. Bandingkan dengan logika yang eksplisit
+            const isTargetFolder = (reqFolderId === targetFolderId);
+            const isTargetCollection = String(r.collection_id) === String(this.collectionId);
+            
+            return isTargetFolder && isTargetCollection;
+        });
+        
+        
+        console.log(`[DEBUG] Render folderId ${folderId}. Ditemukan: ${subFolders.length} Folders, ${requests.length} Requests.`);
+        
         try {
-            renderFolderChildren(parentElement, subFolders, [], {
+            renderFolderChildren(parentElement, subFolders, requests, {
                 onOpenMenu: (e, folder) => showFolderContextMenu(e, folder, {
                     onRename: (id) => { 
                         const name = prompt("New name:", folder.name); 
                         if (name) this.renameFolder(id, name); 
                     },
                     onDelete: (id) => this.deleteFolder(id),
-                    onExpand: (id, el) => this.renderFolder(id, el),
                     onAddFolder: (parentId) => { 
                         const name = prompt("Folder name:"); 
-                        if (name) {
-                            const wsId = this.State.workspaceId;
-                            this.createFolder(wsId, this.collectionId, parentId, name); 
-                        } 
+                        if (name) this.createFolder(this.State.workspaceId, this.collectionId, parentId, name); 
+                    },
+                    onAddRequest: async (fId, cId) => {
+                        if (this.requestCtrl) {
+                            // 1. Buat request
+                            const newRequest = await this.requestCtrl.createRequest({
+                                workspace_id: this.State.workspaceId,
+                                collection_id: this.collectionId,
+                                folder_id: fId,
+                                name: "New Request" // Anda mungkin ingin prompt nama di sini
+                            });
+                    
+                            // 2. Trik UI: Paksa update State agar tidak perlu refresh
+                            if (newRequest) {
+                                // Tambahkan request baru ke array state agar langsung terdeteksi
+                                if (!this.requestCtrl.State.requests) this.requestCtrl.State.requests = [];
+                                this.requestCtrl.State.requests.push(newRequest);
+                                
+                                // 3. Re-render folder yang sedang dibuka saja
+                                // Kita cari elemen parent-nya dan render ulang
+                                const parentElement = document.querySelector(`.folder-item[data-id="${fId}"]`) 
+                                                      || document.querySelector(`[data-collection-id="${this.collectionId}"]`);
+                                
+                                if (parentElement) {
+                                    // Kita panggil renderFolder lagi untuk elemen ini
+                                    this.renderFolder(fId, parentElement);
+                                }
+                            }
+                        }
                     }
                 }),
                 onExpand: (id, el) => {
-                    // Memastikan el adalah elemen yang benar-benar diklik
                     this.renderFolder(id, el);
+                },
+                requestHandlers: this.requestCtrl ? this.requestCtrl.handlers : {},
+                onOpenTab: (r) => {
+                    if (this.requestCtrl && this.requestCtrl.tabCtrl) {
+                        this.requestCtrl.tabCtrl.openTab(r);
+                    }
                 }
             });
         } catch (err) {
             console.error("DEBUG: Terjadi error saat render folder:", err);
         } finally {
-            // 4. Lepaskan Lock (diletakkan di finally agar aman)
             parentElement.removeAttribute('data-rendering');
         }
     }
 
     refreshFolderView(folderId, itemElement) {
-        const subFolders = this.State.folders.filter(f => f.parent_id === folderId);
-        const requests = this.State.requests ? this.State.requests.filter(r => r.folder_id === folderId) : [];
+        // 1. Ambil data dari state
+        const subFolders = this.State.folders.filter(f => String(f.parent_id) === String(folderId));
+        const requests = this.State.requests 
+            ? this.State.requests.filter(r => String(r.folder_id) === String(folderId)) 
+            : [];
         
-        renderFolderChildren(itemElement, subFolders, requests, {
-            onOpenMenu: (e, folder) => showFolderContextMenu(e, folder, {
+        // 2. Definisi Handler
+        const folderHandlers = {
             onRename: (id) => {
-                const name = prompt("New name:", folder.name);
+                const name = prompt("New name:", this.State.folders.find(f => f.id === id)?.name);
                 if(name) this.renameFolder(id, name);
             },
             onDelete: (id) => this.deleteFolder(id),
@@ -158,10 +242,41 @@ this.refreshFolderView(folderId, el);
             onAddFolder: (parentId) => {
                 const name = prompt("Folder name:");
                 if(name) this.createFolder(this.workspaceId, this.collectionId, parentId, name);
+            },
+            onAddRequest: (fId, cId) => {
+                const targetColId = cId || this.collectionId;
+                const wsId = this.workspaceId || (this.State && this.State.workspaceId);
+                
+                if (this.requestCtrl) {
+                    this.requestCtrl.createRequest({
+                        workspace_id: wsId,
+                        collection_id: targetColId,
+                        folder_id: fId
+                    });
+                }
             }
-            }),
+        };
+        
+        // 3. Render Struktur Folder (Child List)
+        renderFolderChildren(itemElement, subFolders, requests, {
+            onOpenMenu: (e, folder) => showFolderContextMenu(e, folder, folderHandlers),
             onExpand: (id, el) => this.refreshFolderView(id, el)
         });
+        
+        // 4. Render Request khusus ke container folder ini
+        const reqContainer = itemElement.querySelector(`#requests-container-folder-${folderId}`);
+        
+        if (reqContainer) {
+            reqContainer.innerHTML = ''; // Membersihkan kontainer folder saat ini saja
+            requests.forEach(req => {
+                const handlers = this.requestCtrl ? this.requestCtrl.handlers : {};
+                const openTab = this.requestCtrl && this.requestCtrl.tabCtrl 
+                    ? (r) => this.requestCtrl.tabCtrl.openTab(r) 
+                    : () => {};
+                
+                RequestUI.renderRequestItem(req, reqContainer, handlers, openTab);
+            });
+        }
     }
         
 

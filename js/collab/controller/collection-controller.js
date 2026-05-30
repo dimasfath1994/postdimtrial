@@ -93,17 +93,17 @@ export class CollectionController {
 
     // --- RENDER TRIGGER ---
     async render() {
-        //console.log("Rendering collections:", this.State.collections); // Debugging: Cek apakah ini muncul di console
+        // 1. Update UI Koleksi saja
         if (this.onUpdateUI) {
             this.onUpdateUI(this.State.collections);
         }
-
-        if (this.requestCtrl) {
-            this.State.collections.forEach(col => {
-                this.requestCtrl.loadRequestsByCollection(col.id);
-            });
-        }
         
+        // HAPUS BAGIAN INI:
+        // if (this.requestCtrl) {
+        //     this.State.collections.forEach(col => {
+        //         this.requestCtrl.loadRequestsByCollection(col.id);
+        //     });
+        // }
     }
 
 
@@ -174,6 +174,11 @@ showContextMenu(e, col) {
         if (newName && newName !== col.name) {
             this.renameCollection(col.id, newName);
         }
+        menu.remove();
+    };
+
+    menu.querySelector('#ctx-add-request').onclick = () => {
+        this.addRequest(col.id); // Panggil method di atas
         menu.remove();
     };
 
@@ -268,8 +273,10 @@ showContextMenu(e, col) {
     // --- EXTENDED FEATURES (PLACEHOLDERS) ---
 
     async addRequest(collectionId) {
-        console.log("Add Request to collection:", collectionId);
-        // Implementasi integrasi API request di sini
+        await this.requestCtrl.createRequest({
+            workspace_id: this.State.workspaceId,
+            collection_id: collectionId
+        });
     }
 
     async addFolder(collectionId) {
