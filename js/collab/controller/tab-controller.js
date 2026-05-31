@@ -101,38 +101,49 @@ export class TabController {
             }
         }
     }
-
     attachAutoSave(element) {
-        if (!element) return;
-        
         element.addEventListener('blur', (e) => {
-            console.log(`[DEBUG] Blur terdeteksi pada: ${e.target.id}`);
+            // Jika sedang loading data, abaikan blur ini
+            if (this.isApplyingData) return; 
+            
             if (!this.activeTabId) return;
-        
-            // Ganti jadi onUpdateFull
-            if (this.handlers && this.handlers.onUpdateFull) {
-                this.handlers.onUpdateFull(this.activeTabId); 
-            } else {
-                console.error("[ERROR] handler onUpdateFull tidak ditemukan!");
-            }
+            this.handlers.onUpdateFull(this.activeTabId);
         });
     }
 
+    saveField(e) {
+        const el = e.target;
+        // Cek apakah nilai DOM sama dengan nilai di state request yang sedang aktif
+        const currentReq = this.tabs.find(t => t.id === this.activeTabId);
+        if (el.value === (currentReq[el.id] || "")) {
+            return; // Tidak ada perubahan, jangan panggil API
+        }
+        
+        this.handlers.onUpdateFull(this.activeTabId);
+    }
 
     loadToEditor(request) {
+        // 1. Set flag agar attachAutoSave tahu kita sedang loading data, bukan user yang mengetik
+        this.isApplyingData = true;
+    
         const fields = ['method', 'url', 'body', 'authType', 'authValue'];
         
         fields.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
                 el.value = request[id] || "";
-                // Pasang listener jika belum terpasang
+                
                 if (!el.dataset.autoSaveBound) {
                     this.attachAutoSave(el);
                     el.dataset.autoSaveBound = "true";
                 }
             }
         });
+    
+        // 2. Beri waktu sedikit sebelum mengizinkan auto-save lagi
+        setTimeout(() => {
+            this.isApplyingData = false;
+        }, 100); 
     }
     
 }

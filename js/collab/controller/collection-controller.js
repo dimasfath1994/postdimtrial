@@ -93,17 +93,17 @@ export class CollectionController {
 
     // --- RENDER TRIGGER ---
     async render() {
-        // 1. Update UI Koleksi saja
+        //console.log("Rendering collections:", this.State.collections); // Debugging: Cek apakah ini muncul di console
         if (this.onUpdateUI) {
             this.onUpdateUI(this.State.collections);
         }
+
+        if (this.requestCtrl) {
+            this.State.collections.forEach(col => {
+                this.requestCtrl.loadRequestsByCollection(col.id);
+            });
+        }
         
-        // HAPUS BAGIAN INI:
-        // if (this.requestCtrl) {
-        //     this.State.collections.forEach(col => {
-        //         this.requestCtrl.loadRequestsByCollection(col.id);
-        //     });
-        // }
     }
 
 

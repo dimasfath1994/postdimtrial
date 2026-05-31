@@ -202,13 +202,19 @@ export class RequestController {
         try {
             const newRequests = await RequestService.getByCollection(collectionId, folderId);
             
+        
             // 1. SMART MERGE: Jangan timpa seluruh State
             // Hapus request lama yang berada di collection/folder yang sama, lalu masukkan yang baru
             this.State.requests = this.State.requests.filter(r => 
                 !(String(r.collection_id) === String(collectionId) && String(r.folder_id || null) === String(folderId))
             );
-            this.State.requests.push(...newRequests);
-    
+
+            const existingIds = new Set(this.State.requests.map(r => r.id));
+        
+            // 3. Hanya masukkan request yang BELUM ada di state
+            const uniqueNewRequests = newRequests.filter(r => !existingIds.has(r.id));
+
+            this.State.requests.push(...uniqueNewRequests);
             // 2. SMART TARGETING: Cari container berdasarkan folder/koleksi
             // Jangan pakai ID statis yang kaku, gunakan selector yang dinamis
             const container = folderId 
@@ -257,7 +263,7 @@ export class RequestController {
         });
 
         // 1. Update State lokal
- 
+        console.log("apa isi is context folder_id?: ", context.folder_id);
         // 2. SMART UI UPDATE:
         if (context.folder_id) {
             // Jika ada folder_id, minta FolderController render ulang folder tsb
@@ -276,7 +282,7 @@ export class RequestController {
                 if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
             }
     
-            this.render(); 
+            //this.render(); 
         }
 
         // 3. Broadcast & Tab
@@ -326,34 +332,42 @@ export class RequestController {
         }
     }
 
-    // Di dalam RequestController class
+
 
     async updateRequestFull(id) {
-        // 1. Ambil semua data dari input form yang ada di UI
-        // Kita harus memastikan data yang dikirim adalah data terbaru dari DOM
+        // 1. Ambil data lama dari State
+        const oldData = this.getRequestById(id);
+        if (!oldData) {
+            console.error(`[ERROR] Request dengan ID ${id} tidak ditemukan di State!`);
+            return;
+        }
+    
+        // 2. Buat payload lengkap: 
+        // Ambil semua properti lama, lalu timpa dengan nilai baru dari DOM
         const payload = {
-            name: document.getElementById('name')?.value || this.getRequestById(id).name,
+            ...oldData, // Mengambil semua field: workspace_id, folder_id, collection_id, dll
+            name: document.getElementById('name')?.value || oldData.name,
             method: document.getElementById('method')?.value,
             url: document.getElementById('url')?.value,
             body: document.getElementById('body')?.value,
             auth_type: document.getElementById('authType')?.value,
             auth_value: document.getElementById('authValue')?.value
-            // Tambahkan field lain yang ada di form Anda
         };
-
+    
         try {
             console.log(`[SYNC] Full update untuk request ${id}:`, payload);
             
-            // 2. Kirim payload lengkap ke service
+            // 3. Kirim payload lengkap ke service
             const updatedReq = await RequestService.update(id, payload);
             
-            // 3. Update State Lokal dengan data yang benar-benar berasal dari DB
+            // 4. Update State Lokal
             const idx = this.State.requests.findIndex(r => r.id === id);
             if (idx !== -1) {
+                // Kita merge state lama + hasil response server
                 this.State.requests[idx] = { ...this.State.requests[idx], ...updatedReq };
             }
-
-            // 4. Broadcast ke user lain/tab lain
+    
+            // 5. Broadcast perubahan
             this.bc.postMessage({ type: 'REQUEST_UPDATED', data: updatedReq });
             
         } catch (err) {

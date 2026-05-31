@@ -53,6 +53,7 @@ tabCtrl.handlers = {
     ...requestCtrl.handlers,
     onUpdateFull: (id) => requestCtrl.updateRequestFull(id)
 };
+//tabCtrl.handlers = requestCtrl.handlers;
 tabCtrl.setRequestGetter((id) => requestCtrl.getRequestById(id));
 
  //=============== INITIALIZE WORKSPACE ================

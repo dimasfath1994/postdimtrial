@@ -152,17 +152,17 @@ export class FolderController {
         
         // 4. Filter request dengan logika yang lebih fleksibel
         const requests = allRequests.filter(r => {
-            // 1. Normalisasi: Ubah semua menjadi string atau null agar konsisten
-            const reqFolderId = r.folder_id ? String(r.folder_id) : null;
-            const targetFolderId = folderId ? String(folderId) : null;
+            const reqFolderId = r.folder_id != null ? String(r.folder_id) : null;
+            const targetFolderId = folderId != null ? String(folderId) : null;
             
-            // 2. Bandingkan dengan logika yang eksplisit
-            const isTargetFolder = (reqFolderId === targetFolderId);
+            const isTargetFolder = (targetFolderId === null) 
+                ? (reqFolderId === null || reqFolderId === 'null') 
+                : (reqFolderId === targetFolderId);
+                
             const isTargetCollection = String(r.collection_id) === String(this.collectionId);
             
             return isTargetFolder && isTargetCollection;
         });
-        
         
         console.log(`[DEBUG] Render folderId ${folderId}. Ditemukan: ${subFolders.length} Folders, ${requests.length} Requests.`);
         
