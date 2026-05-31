@@ -123,7 +123,7 @@ syncWorkspaceData(id, newData) {
     }
 }
 
-    // Tambahkan ini di WorkspaceController
+
 async silentSwitch(id) {
     // 1. Update State
     this.State.workspaceId = id;
@@ -131,7 +131,7 @@ async silentSwitch(id) {
     this.State.workspace = ws;
     
     // 2. Update UI Nama saja
-    this.renderActiveWorkspace(ws);
+    //this.renderActiveWorkspace(ws);
     
     // 3. Update Dropdown (pilih option-nya)
     const select = this.ui.workspaceSwitcher;

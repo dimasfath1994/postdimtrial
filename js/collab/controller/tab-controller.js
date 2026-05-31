@@ -8,6 +8,12 @@ export class TabController {
         this.activeTabId = null;
         this.handlers = handlers;
         this.getRequestData = null;
+
+        document.addEventListener('blur', (e) => {
+            if (e.target.classList.contains('auto-save')) {
+                this.saveField(e);
+            }
+        }, true);
     }
 
     // Tambahkan method ini untuk sinkronisasi getter
@@ -96,10 +102,38 @@ export class TabController {
         }
     }
 
-    loadToEditor(request) {
-        document.getElementById("method").value = request.method || "GET";
-        document.getElementById("url").value = request.url || "";
-        document.getElementById("body").value = request.body || "";
-        // ... (isi field lainnya: headers, auth, dll)
+    attachAutoSave(element) {
+        if (!element) return;
+        
+        element.addEventListener('blur', (e) => {
+            console.log(`[DEBUG] Blur terdeteksi pada: ${e.target.id}`);
+            if (!this.activeTabId) return;
+        
+            // Ganti jadi onUpdateFull
+            if (this.handlers && this.handlers.onUpdateFull) {
+                this.handlers.onUpdateFull(this.activeTabId); 
+            } else {
+                console.error("[ERROR] handler onUpdateFull tidak ditemukan!");
+            }
+        });
     }
+
+
+    loadToEditor(request) {
+        const fields = ['method', 'url', 'body', 'authType', 'authValue'];
+        
+        fields.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.value = request[id] || "";
+                // Pasang listener jika belum terpasang
+                if (!el.dataset.autoSaveBound) {
+                    this.attachAutoSave(el);
+                    el.dataset.autoSaveBound = "true";
+                }
+            }
+        });
+    }
+    
 }
+

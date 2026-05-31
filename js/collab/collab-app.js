@@ -49,7 +49,10 @@ const requestCtrl = new RequestController(ui, State, {
     }
 });
 
-tabCtrl.handlers = requestCtrl.handlers;
+tabCtrl.handlers = {
+    ...requestCtrl.handlers,
+    onUpdateFull: (id) => requestCtrl.updateRequestFull(id)
+};
 tabCtrl.setRequestGetter((id) => requestCtrl.getRequestById(id));
 
  //=============== INITIALIZE WORKSPACE ================

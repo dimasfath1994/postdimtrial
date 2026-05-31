@@ -165,8 +165,7 @@ export class RequestController {
     async render() {
         // 1. Bersihkan HANYA container utama (root level)
         // Gunakan selector yang spesifik agar tidak menyentuh container di dalam folder
-       
-    
+
         // 2. Loop semua request dan filter hanya yang folder_id-nya null (root)
         this.State.requests.forEach(req => {
             // PERBAIKAN LOGIKA: Hanya render jika folder_id benar-benar null atau undefined
@@ -242,9 +241,6 @@ export class RequestController {
             ...request,
             name: newName // Ini sudah benar, ini akan menimpa field name yang lama
         };
-    
-        // DEBUG: Cek isi payload sebelum dikirim
-        console.log("DEBUG: Final Payload yang dikirim:", JSON.stringify(payload));
         
         await this.updateRequest(id, payload);
     }
@@ -266,7 +262,7 @@ export class RequestController {
         if (context.folder_id) {
             // Jika ada folder_id, minta FolderController render ulang folder tsb
             if (window.folderCtrl) {
-                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+               // if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
                 const folderEl = document.querySelector(`.folder-item[data-id="${context.folder_id}"]`);
                 if (folderEl) window.folderCtrl.renderFolder(context.folder_id, folderEl);
                
@@ -306,7 +302,7 @@ export class RequestController {
             // Update State
             this.State.requests = this.State.requests.filter(r => r.id !== id);
         } catch (err) {
-            console.error("Gagal delete request:", err);
+            //console.error("Gagal delete request:", err);
             alert("Gagal menghapus request");
         }
     }
@@ -323,8 +319,46 @@ export class RequestController {
             if (idx !== -1) {
                 this.State.requests[idx] = { ...this.State.requests[idx], ...updatedReq };
             }
+
+            console.log(`[SYNC] Field ${Object.keys(payload)} berhasil disimpan.`);
         } catch (err) {
             console.error("Gagal update request:", err);
+        }
+    }
+
+    // Di dalam RequestController class
+
+    async updateRequestFull(id) {
+        // 1. Ambil semua data dari input form yang ada di UI
+        // Kita harus memastikan data yang dikirim adalah data terbaru dari DOM
+        const payload = {
+            name: document.getElementById('name')?.value || this.getRequestById(id).name,
+            method: document.getElementById('method')?.value,
+            url: document.getElementById('url')?.value,
+            body: document.getElementById('body')?.value,
+            auth_type: document.getElementById('authType')?.value,
+            auth_value: document.getElementById('authValue')?.value
+            // Tambahkan field lain yang ada di form Anda
+        };
+
+        try {
+            console.log(`[SYNC] Full update untuk request ${id}:`, payload);
+            
+            // 2. Kirim payload lengkap ke service
+            const updatedReq = await RequestService.update(id, payload);
+            
+            // 3. Update State Lokal dengan data yang benar-benar berasal dari DB
+            const idx = this.State.requests.findIndex(r => r.id === id);
+            if (idx !== -1) {
+                this.State.requests[idx] = { ...this.State.requests[idx], ...updatedReq };
+            }
+
+            // 4. Broadcast ke user lain/tab lain
+            this.bc.postMessage({ type: 'REQUEST_UPDATED', data: updatedReq });
+            
+        } catch (err) {
+            console.error("Gagal update full request:", err);
+            alert("Gagal menyimpan perubahan.");
         }
     }
 

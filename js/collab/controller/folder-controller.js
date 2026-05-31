@@ -192,7 +192,7 @@ export class FolderController {
                             if (newRequest) {
                                 // Tambahkan request baru ke array state agar langsung terdeteksi
                                 if (!this.requestCtrl.State.requests) this.requestCtrl.State.requests = [];
-                                this.requestCtrl.State.requests.push(newRequest);
+                                //this.requestCtrl.State.requests.push(newRequest);
                                 
                                 // 3. Re-render folder yang sedang dibuka saja
                                 // Kita cari elemen parent-nya dan render ulang
