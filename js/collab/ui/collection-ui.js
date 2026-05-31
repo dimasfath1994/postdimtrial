@@ -6,10 +6,6 @@
  * @param {Array} collections - Array data koleksi
  * @param {Object} handlers - Callback untuk aksi (rename, delete, dll)
  */
-// js/collab/ui/collection-ui.js
-// js/collab/ui/collection-ui.js
-
-// js/collab/ui/collection-ui.js
 
 export function renderCollectionSidebar(container, collections, handlers) {
     container.innerHTML = ''; 
@@ -21,19 +17,20 @@ export function renderCollectionSidebar(container, collections, handlers) {
         
         item.innerHTML = `
             <div class="col-header">
-                <span class="toggle-icon">▶</span>
-                <span class="col-name">${col.name}</span>
+                <span class="toggle-icon" style="display:inline-block; width: 15px; cursor: pointer;">▶</span>
+                <span class="col-name" style="cursor: pointer;">${col.name}</span>
             </div>
-            <div id="requests-container-${col.id}" class="requests-list" style="display:none; padding-left: 20px;"></div>
+            <div class="collection-body" id="collection-body-${col.id}" style="display:none;">
+                <div id="requests-container-${col.id}" class="requests-list" style="padding-left: 20px;"></div>
+                <div id="child-list-${col.id}" class="child-list" style="padding-left: 20px;"></div>
+            </div>
         `;
 
-        // Event: Klik panah untuk expand/collapse
-        item.querySelector('.toggle-icon').onclick = (e) => {
+        item.querySelector('.col-header').onclick = (e) => {
             e.stopPropagation();
             toggleExpand(item, col, handlers);
         };
 
-        // Event: Klik kanan pada nama koleksi untuk memunculkan menu (pengganti titik tiga)
         item.querySelector('.col-name').oncontextmenu = (e) => {
             e.preventDefault();
             handlers.onOpenMenu(e, col);
@@ -45,35 +42,31 @@ export function renderCollectionSidebar(container, collections, handlers) {
 
 function toggleExpand(item, col, handlers) {
     const icon = item.querySelector('.toggle-icon');
-    const container = item.querySelector(`#requests-container-${col.id}`);
-    const isExpanded = icon.textContent === '▼';
+    const body = item.querySelector(`#collection-body-${col.id}`);
+    const isCurrentlyExpanded = body.style.display === 'block';
 
-    // 1. Toggle icon
-    icon.textContent = isExpanded ? '▶' : '▼';
+    if (isCurrentlyExpanded) {
+        // COLLAPSE
+        icon.textContent = '▶';
+        body.style.display = 'none';
 
-    // 2. Toggle visibility container
-    if (container) {
-        container.style.display = isExpanded ? 'none' : 'block';
-    }
-
-    // 3. Panggil handler jika di-expand
-    if (!isExpanded) {
-        // Trigger untuk memuat data request (menggunakan requestCtrl yang dikirim via handlers)
-        if (handlers.requestCtrl) {
-            handlers.requestCtrl.loadRequestsByCollection(col.id);
-        }
-        
-        // Panggil handler original untuk folder (jika ada)
-        if (handlers.onExpand) {
-            handlers.onExpand(col.id, item);
-        }
+        // --- INI KUNCINYA ---
+        // Kita paksa cari SEMUA elemen yang merupakan anak dari item
+        // DAN buang semuanya, tidak peduli dia ada di dalam body atau "bocor" keluar
+        const allChildren = item.querySelectorAll(':scope > .collection-body, :scope > .child-list');
+        allChildren.forEach(el => {
+            // Hapus isi di dalamnya
+            el.innerHTML = '';
+        });
     } else {
-        // Logika untuk collapse (opsional: bersihkan container atau biarkan tersembunyi)
-        // const childList = item.querySelector('.child-list');
-        // if (childList) childList.remove();
+        // EXPAND
+        icon.textContent = '▼';
+        body.style.display = 'block';
+        
+        if (handlers.requestCtrl) handlers.requestCtrl.loadRequestsByCollection(col.id);
+        if (handlers.onExpand) handlers.onExpand(col.id, item);
     }
 }
-
 export function setupCollectionActions(ctrl) {
     const btn = document.getElementById('newCollection');
     

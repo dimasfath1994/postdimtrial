@@ -113,7 +113,7 @@ export class RequestController {
         switch (type) {
             case 'REQUEST_CREATED':
             if (!this.State.requests.find(r => r.id === data.id)) {
-                //this.State.requests.push(data);
+                this.State.requests.push(data);
                 
                 // JANGAN panggil loadRequestsByCollection kalau itu akan merender ulang semua.
                 // Cukup panggil render() untuk root, atau panggil folder render untuk folder.
@@ -165,11 +165,7 @@ export class RequestController {
     async render() {
         // 1. Bersihkan HANYA container utama (root level)
         // Gunakan selector yang spesifik agar tidak menyentuh container di dalam folder
-        const rootContainers = document.querySelectorAll('.collection-item > .requests-list');
-        rootContainers.forEach(container => {
-            container.innerHTML = '';
-        });
-        
+       
     
         // 2. Loop semua request dan filter hanya yang folder_id-nya null (root)
         this.State.requests.forEach(req => {
@@ -188,6 +184,10 @@ export class RequestController {
                         (r) => this.tabCtrl.openTab(r)
                     );
                 } else {
+                    const rootContainers = document.querySelectorAll('.requests-list');
+                    rootContainers.forEach(container => {
+                        container.innerHTML = '';
+                    });
                     console.warn(`[DEBUG] Container koleksi ${req.collection_id} tidak ditemukan.`);
                 }
             }
@@ -261,15 +261,15 @@ export class RequestController {
         });
 
         // 1. Update State lokal
-        
-
+ 
         // 2. SMART UI UPDATE:
         if (context.folder_id) {
             // Jika ada folder_id, minta FolderController render ulang folder tsb
             if (window.folderCtrl) {
+                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
                 const folderEl = document.querySelector(`.folder-item[data-id="${context.folder_id}"]`);
                 if (folderEl) window.folderCtrl.renderFolder(context.folder_id, folderEl);
-                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+               
             }
         } else {
             // Jika folder_id null/undefined, kita di Root (di luar folder)
@@ -279,6 +279,7 @@ export class RequestController {
                 this.State.requests.push(newReq);
                 if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
             }
+    
             this.render(); 
         }
 
