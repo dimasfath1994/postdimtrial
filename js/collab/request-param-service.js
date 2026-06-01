@@ -66,7 +66,9 @@ export const RequestParamService = {
             enabled:
               Boolean(
                 payload.enabled
-              )
+              ),
+
+            sort_order: payload.sort_order ?? 0 
           })
       }
     );
@@ -125,7 +127,9 @@ export const RequestParamService = {
             enabled:
               Boolean(
                 payload.enabled
-              )
+              ),
+
+            sort_order: payload.sort_order ?? 0 
 
           })
 

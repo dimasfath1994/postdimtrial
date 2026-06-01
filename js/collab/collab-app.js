@@ -15,6 +15,9 @@ import { renderFolderChildren, showFolderContextMenu } from "./ui/folder-ui.js";
 import { RequestController } from "./controller/request-controller.js";
 import { TabController } from "./controller/tab-controller.js";
 
+import { TabManagerUI } from './ui/tabmanager-ui.js';
+import { RequestParamController } from './controller/request-param-controller.js';
+
 
 function hydrateState(data) { console.log("Hydrate data", data); }
 
@@ -31,13 +34,16 @@ const State = {
     collections: [],
     activeCollectionId: null,
     folders: [] ,
-    requests: []
+    requests: [],
+    params: []
  };
  const dispatcher = new SocketDispatcher();
 
+// =============== INITIALIZE REQUEST-PARAM-CONTROLLER ================
+const paramCtrl = new RequestParamController(State);
 
 //=============== INITIALIZE TAB REQUEST ================
-const tabCtrl = new TabController(ui, null);
+const tabCtrl = new TabController(ui, null, State, paramCtrl);
 
  //=============== INITIALIZE REQUEST ================
 const requestCtrl = new RequestController(ui, State, {
@@ -121,12 +127,12 @@ const collectionCtrl = new CollectionController(ui, State, {
 
 setupCollectionActions(collectionCtrl);
 
-
 // =============== INITIALIZE SOCKET DISPATCHER ================
 dispatcher.register('WORKSPACE_', workspaceCtrl);
 dispatcher.register('COLLECTION_', collectionCtrl);
 dispatcher.register('FOLDER_', folderCtrl);
 dispatcher.register('REQUEST_', requestCtrl);
+dispatcher.register('PARAM_', paramCtrl);
 
 
 // Saat inisialisasi socket, cukup panggil dispatcher.dispatch
@@ -219,6 +225,11 @@ async function loadCollections(id) {
     // Panggil method init yang kita buat di CollectionController
     await collectionCtrl.init(id); 
 }
+
+
+
+TabManagerUI.init();
+
 
 
 

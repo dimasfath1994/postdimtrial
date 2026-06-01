@@ -263,26 +263,14 @@ pre {
   margin-top: 10px;
 }
 
-.hidden {
-  display: none;
-}
 
-/* ================= PARAMS ================= */
+
 
 #paramsBox {
   margin-top: 10px;
 }
 
-.param-row {
-  display: grid;
-  grid-template-columns: 30px 1fr 1fr 1fr 40px;
 
-  gap: 6px;
-
-  margin-bottom: 6px;
-
-  align-items: center;
-}
 
 .proxy-container {
   display: flex;
@@ -292,15 +280,6 @@ pre {
   white-space: nowrap;
 }
 
-.param-row input {
-  padding: 6px;
-  font-size: 12px;
-}
-
-.param-row.header {
-  font-weight: bold;
-  opacity: 0.6;
-}
 
 /* ================= MODAL ================= */
 
@@ -968,3 +947,11 @@ pre {
 .picker-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #333; }
 .picker-item:hover { background: #3c3c3c; }
 
+
+.param-delete:hover {
+  color: #ff4d4f !important; /* Warna merah saat delete di-hover */
+}
+input:focus {
+  outline: none;
+
+}

@@ -3,11 +3,14 @@
 import { RequestUI } from "../ui/request-ui.js"; 
 
 export class TabController {
-    constructor(ui, handlers) {
+    constructor(ui, handlers, State, paramCtrl) {
         this.tabs = [];
         this.activeTabId = null;
         this.handlers = handlers;
         this.getRequestData = null;
+        this.State = State;
+
+        this.paramCtrl = paramCtrl;
 
         document.addEventListener('blur', (e) => {
             if (e.target.classList.contains('auto-save')) {
@@ -84,6 +87,12 @@ export class TabController {
             
         // Load data ke Editor Tengah
         this.loadToEditor(request);
+
+       // LIVE SYNC: Jika panel params aktif, panggil init
+       const paramsBox = document.getElementById('paramsBox');
+       if (paramsBox && !paramsBox.closest('.hidden')) {
+            this.paramCtrl.init(id, paramsBox);
+       }
     }
 
     updateTab(requestId, updatedData) {
