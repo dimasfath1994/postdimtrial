@@ -25,7 +25,7 @@ export class RequestController {
 
         this.handlers = {
             onRename: (id, newName) => this.renameRequest(id, newName),
-            onDuplicate: (req) => console.log("Duplicating...", req),
+            onDuplicate: (req) => this.duplicateRequest(req),
             onPin: (id, pinned) => this.updateRequest(id, { pinned }),
             onDelete: (id) => this.deleteRequest(id)
         };
@@ -296,6 +296,47 @@ export class RequestController {
     }
 }
 
+
+// Di dalam RequestController class
+
+async duplicateRequest(req) {
+    try {
+        // 1. Siapkan payload duplikat
+        const duplicatePayload = {
+            ...req,
+            name: `${req.name} (Copy)`,
+            // Hilangkan ID agar backend membuat ID baru
+            id: undefined, 
+            created_at: null,
+            updated_at: null
+        };
+
+        // 2. Kirim ke server
+        // Kita gunakan fungsi create yang sudah ada agar broadcast otomatis terkirim
+        const newReq = await RequestService.create(duplicatePayload);
+
+        // 3. Update State Lokal (opsional jika broadcast sudah menangani, 
+        // tapi bagus untuk optimis UI)
+        if (!this.State.requests.find(r => r.id === newReq.id)) {
+            this.State.requests.push(newReq);
+            
+            // Render ke UI
+            const container = document.querySelector(`[data-collection-id="${newReq.collection_id}"] .requests-list`);
+            if (container) {
+                RequestUI.renderRequestItem(newReq, container, this.handlers, (r) => this.tabCtrl.openTab(r));
+            }
+        }
+
+        // 4. Broadcast sudah ditangani di dalam service/handleSocket
+        console.log(`[SYNC] Request ${req.id} berhasil diduplikasi menjadi ${newReq.id}`);
+        
+    } catch (err) {
+        console.error("Gagal menduplikasi request:", err);
+        alert("Gagal melakukan duplikasi request.");
+    }
+}
+
+
     async deleteRequest(id) {
         if (!confirm("Are you sure you want to delete this request?")) return;
 
@@ -332,6 +373,8 @@ export class RequestController {
         }
     }
 
+
+    
 
 
     async updateRequestFull(id) {
