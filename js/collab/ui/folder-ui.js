@@ -67,7 +67,6 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
                 <span class="toggle-icon" style="width: 20px;">▶</span>
                 <span class="folder-name" data-id="${folder.id}">📁 ${folder.name}</span>
             </div>
-            <div class="request-container" id="requests-container-folder-${folder.id}"></div>
         `;
         childList.appendChild(item);
     });
@@ -108,21 +107,7 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
     }
 }
 
-function toggleExpand(item, folder, handlers) {
-    const icon = item.querySelector('.toggle-icon');
-    const isExpanded = icon.textContent === '▼';
-    
-    icon.textContent = isExpanded ? '▶' : '▼';
-    
-    if (!isExpanded) {
-        // Panggil handler untuk mengambil data anak dari backend/state
-        // Handler ini harus memanggil renderFolderChildren kembali jika ada data baru
-        handlers.onExpand(folder.id, item); 
-    } else {
-        const childList = item.querySelector('.child-list');
-        if (childList) childList.remove();
-    }
-}
+
 
 /**
  * Menampilkan context menu khusus folder
