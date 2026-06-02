@@ -83,6 +83,14 @@ export class RequestController {
                 const nameEl = itemEl.querySelector('.name');
                 if (nameEl) nameEl.textContent = updatedData.name;
             }
+            if (updatedData.url) {
+                const urlEl = document.getElementById('url');
+                if (urlEl) urlEl.value = updatedData.url;
+            }
+            if (updatedData.body) {
+                const bodyEl = document.getElementById('body');
+                if (bodyEl) bodyEl.value = updatedData.body;
+            }
             // Jika nanti ada perubahan 'method', bisa update badge-nya di sini
             if (updatedData.method) {
                 const methodEl = itemEl.querySelector('.method-badge');
@@ -90,6 +98,43 @@ export class RequestController {
                     methodEl.className = `method-badge ${updatedData.method}`;
                     methodEl.textContent = updatedData.method;
                 }
+            }
+
+
+            // Tambahkan logika update untuk tab yang sedang aktif (jika ada)
+            const authTypeEl = document.getElementById('authType');
+            const authValueEl = document.getElementById('authValue');
+
+            if (authTypeEl && updatedData.auth_type !== undefined) {
+                authTypeEl.value = updatedData.auth_type;
+            }
+            if (authValueEl && updatedData.auth_value !== undefined) {
+                authValueEl.value = updatedData.auth_value;
+            }
+
+
+            // if (updatedData.pre_script !== undefined || updatedData.post_script !== undefined) {
+            //     this.tabCtrl.monacoCtrl.setValues(updatedData.pre_script, updatedData.post_script);
+            // }
+            
+        }
+
+        if (this.tabCtrl.activeTabId === requestId && this.tabCtrl.monacoCtrl) {
+            const newPre = updatedData.pre_script;
+            const newPost = updatedData.post_script;
+        
+            // Hanya update jika nilainya berbeda dengan yang ada di editor
+            // Ini mencegah kursor reset ke atas kalau data sama
+            if (newPre !== undefined && this.tabCtrl.monacoCtrl.preEditor.getValue() !== newPre) {
+                this.tabCtrl.isApplyingData = true;
+                this.tabCtrl.monacoCtrl.preEditor.setValue(newPre);
+                this.tabCtrl.isApplyingData = false;
+            }
+            
+            if (newPost !== undefined && this.tabCtrl.monacoCtrl.postEditor.getValue() !== newPost) {
+                this.tabCtrl.isApplyingData = true;
+                this.tabCtrl.monacoCtrl.postEditor.setValue(newPost);
+                this.tabCtrl.isApplyingData = false;
             }
         }
 
@@ -424,17 +469,21 @@ async duplicateRequest(req) {
             console.error(`[ERROR] Request dengan ID ${id} tidak ditemukan di State!`);
             return;
         }
+        const scripts = this.tabCtrl.monacoCtrl.getValues();
     
         // 2. Buat payload lengkap: 
         // Ambil semua properti lama, lalu timpa dengan nilai baru dari DOM
         const payload = {
             ...oldData, // Mengambil semua field: workspace_id, folder_id, collection_id, dll
+            ...scripts, // Ini akan memasukkan pre_script dan post_script
             name: document.getElementById('name')?.value || oldData.name,
             method: document.getElementById('method')?.value,
             url: document.getElementById('url')?.value,
             body: document.getElementById('body')?.value,
             auth_type: document.getElementById('authType')?.value,
             auth_value: document.getElementById('authValue')?.value
+            //,pre_script: document.getElementById('preEditor')?.value,
+            //post_script: document.getElementById('postEditor')?.value
         };
     
         try {

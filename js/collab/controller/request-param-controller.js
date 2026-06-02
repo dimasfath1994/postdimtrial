@@ -81,10 +81,8 @@ export class RequestParamController {
             case 'PARAM_DELETED':
                 this.State.params = this.State.params.filter(p => p.id !== param_id);
                 RequestParamUI.removeParamRow(param_id);
-                const textarea = document.getElementById('bulk-textarea');
-                if (textarea && document.activeElement !== textarea) {
-                    RequestParamUI.updateBulkText(this.State.params);
-                }
+                const textarea = document.getElementById('param-bulk-textarea');
+                //RequestParamUI.updateBulkText(this.State.params, this.container);
                 break;
 
             case 'PARAMS_BULK_UPDATED':
@@ -93,12 +91,14 @@ export class RequestParamController {
                 break;
         }
     }
-
-    static updateBulkText(params) {
-        const textarea = document.getElementById('bulk-textarea');
+    static updateBulkText(params, container) {
+        const textarea = container.querySelector('#param-bulk-textarea');
         if (textarea) {
-            // Update isi textarea dengan state params terbaru
-            textarea.value = params.map(p => `${p.key}:${p.value}`).join('\n');
+            const textToDisplay = params.map(p => `${p.key}:${p.value}`).join('\n');
+            textarea.value = textToDisplay; // Update value
+            
+            // Log ini untuk memastikan!
+            console.log("DEBUG: Textarea.value sekarang adalah:", textarea.value);
         }
     }
     /**
@@ -134,10 +134,13 @@ export class RequestParamController {
     async syncParamDelete(id) {
         const success = await RequestParamService.delete(id);
         if (success) {
-            this.bc.postMessage({ type: 'PARAM_DELETED', param_id: id });
-            this.State.params = this.State.params.filter(p => p.id !== id);
+            this.State.params = this.State.params.filter(p => Number(p.id) !== Number(id));
             RequestParamUI.removeParamRow(id);
-            RequestParamUI.updateBulkText(this.State.params);
+            
+            // PENTING: Kirim this.container di sini
+            //RequestParamUI.updateBulkText(this.State.params, this.container);
+            
+            this.bc.postMessage({ type: 'PARAM_DELETED', param_id: id });
         }
     }
 

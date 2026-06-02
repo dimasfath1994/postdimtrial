@@ -108,7 +108,7 @@ export class TabController {
             const headersBox = document.getElementById('headersBox');
             if (headersBox) this.headerCtrl.init(id, headersBox);
         }
-        // Tambahkan else if untuk 'body', 'auth', dll jika perlu
+
     }
 
     updateTab(requestId, updatedData) {
@@ -156,20 +156,34 @@ export class TabController {
         fields.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
-                el.value = request[id] || "";
+                // Karena di request object fieldnya adalah auth_type, 
+                // kita harus map ke ID elemen authType (dan sebaliknya)
+                if (id === 'authType') el.value = request.auth_type || 'none';
+                else if (id === 'authValue') el.value = request.auth_value || '';
+                else if (id === 'body') el.value = request.body || '';
+                //else if (id === 'preEditor' || "postEditor") this.scriptCtrl.setScripts(request.pre_script, request.post_script);
+                else el.value = request[id] || "";
                 
+                // Pasang listener auto-save
                 if (!el.dataset.autoSaveBound) {
                     this.attachAutoSave(el);
                     el.dataset.autoSaveBound = "true";
                 }
             }
+
         });
+        // 2. Set nilai Monaco secara terpisah melalui controller
+        if (this.monacoCtrl) {
+            this.monacoCtrl.setValues(request.pre_script, request.post_script);
+        }
     
         // 2. Beri waktu sedikit sebelum mengizinkan auto-save lagi
         setTimeout(() => {
             this.isApplyingData = false;
         }, 100); 
     }
+
+    
     
 }
 

@@ -26,7 +26,7 @@ export class RequestParamUI {
                 <button id="add-param-btn" style="margin-top: 10px; background: none; border: none; color: #007bff; cursor: pointer; font-size: 13px;">+ Add Parameter</button>
             </div>
             <div id="bulk-view" style="display: none;">
-                <textarea id="bulk-textarea" style="width: 100%; height: 150px; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px;" placeholder="key:value&#10;key2:value2"></textarea>
+                <textarea id="param-bulk-textarea" class="param-bulk-textarea" style="width: 100%; height: 150px; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px;" placeholder="key:value&#10;key2:value2"></textarea>
             </div>
         `;
     
@@ -44,24 +44,29 @@ export class RequestParamUI {
         const saveBulkBtn = container.querySelector('#save-bulk-btn');
         const tableView = container.querySelector('#table-view');
         const bulkView = container.querySelector('#bulk-view');
-        const textarea = container.querySelector('#bulk-textarea');
+        const textarea = container.querySelector('#param-bulk-textarea');
     
-        toggleBtn.onclick = () => {
-            const isBulk = bulkView.style.display === 'none';
-            if (isBulk) {
-                const text = params.map(p => `${p.key}:${p.value}`).join('\n');
-                textarea.value = text;
-                tableView.style.display = 'none';
-                bulkView.style.display = 'block';
-                saveBulkBtn.style.display = 'inline-block';
-                toggleBtn.textContent = 'Table Edit';
-            } else {
-                tableView.style.display = 'block';
-                bulkView.style.display = 'none';
-                saveBulkBtn.style.display = 'none';
-                toggleBtn.textContent = 'Bulk Edit';
-            }
-        };
+        // Di dalam renderParams()
+toggleBtn.onclick = () => {
+    const isBulk = bulkView.style.display === 'none';
+    if (isBulk) {
+        // --- INI KUNCI UTAMANYA ---
+        // Kita tidak bergantung pada update di belakang layar.
+        // Saat user klik, kita ambil data terbaru dari argument `params`
+        const text = params.map(p => `${p.key}:${p.value}`).join('\n');
+        textarea.value = text;
+        
+        tableView.style.display = 'none';
+        bulkView.style.display = 'block';
+        saveBulkBtn.style.display = 'inline-block';
+        toggleBtn.textContent = 'Table Edit';
+    } else {
+        tableView.style.display = 'block';
+        bulkView.style.display = 'none';
+        saveBulkBtn.style.display = 'none';
+        toggleBtn.textContent = 'Bulk Edit';
+    }
+};
     
         // Handler Save Bulk
         saveBulkBtn.onclick = () => {
@@ -75,10 +80,15 @@ export class RequestParamUI {
     }
 
     static updateBulkText(params) {
-        const textarea = document.getElementById('bulk-textarea');
+        // Cari elemen di seluruh dokumen agar selalu mendapatkan elemen yang aktif di layar
+        // Gunakan class agar lebih aman
+        const textarea = document.querySelector('.param-bulk-textarea');
+        
         if (textarea) {
-            // Update isi textarea dengan state params terbaru
             textarea.value = params.map(p => `${p.key}:${p.value}`).join('\n');
+            console.log("UI: Textarea berhasil diupdate!");
+        } else {
+            console.error("UI: Textarea .param-bulk-textarea TIDAK DITEMUKAN di DOM!");
         }
     }
 

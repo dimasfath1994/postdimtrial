@@ -19,6 +19,7 @@ import { TabManagerUI } from './ui/tabmanager-ui.js';
 import { RequestParamController } from './controller/request-param-controller.js';
 
 import { RequestHeaderController } from './controller/request-header-controller.js';
+import { MonacoController } from "./controller/monaco-controller.js";
 
 
 function hydrateState(data) { console.log("Hydrate data", data); }
@@ -67,6 +68,18 @@ tabCtrl.handlers = {
 };
 //tabCtrl.handlers = requestCtrl.handlers;
 tabCtrl.setRequestGetter((id) => requestCtrl.getRequestById(id));
+
+
+ //=============== INITIALIZE Monaco ================
+ const monacoCtrl = new MonacoController(() => {
+    if (tabCtrl.activeTabId) {
+        requestCtrl.updateRequestFull(tabCtrl.activeTabId);
+    }
+}, tabCtrl); // <--- Kirim tabCtrl di sini
+
+monacoCtrl.init();
+tabCtrl.monacoCtrl = monacoCtrl;
+
 
  //=============== INITIALIZE WORKSPACE ================
 const workspaceCtrl = new WorkspaceController(ui, State, {
