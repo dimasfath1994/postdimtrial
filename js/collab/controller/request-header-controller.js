@@ -121,9 +121,7 @@ export class RequestHeaderController {
         });
         
         if (newHeader) {
-            this.State.headers.push(newHeader);
             this.bc.postMessage({ type: 'HEADER_CREATED', data: newHeader });
-            this.render();
         }
     }
 
