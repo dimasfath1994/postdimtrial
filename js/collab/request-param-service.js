@@ -186,6 +186,41 @@ export const RequestParamService = {
 
     return true;
 
-  }
+  },
+
+
+
+  // ================= BULK UPDATE =================
+  async bulkUpdate(requestId, params) {
+    const r = await fetch(
+      `${API}/params/bulk`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Auth.getToken()}`
+        },
+        body: JSON.stringify({
+          request_id: requestId,
+          params: params.map(p => ({
+            request_id: requestId,
+            key: p.key ?? "",
+            value: p.value ?? "",
+            description: p.description ?? "",
+            enabled: Boolean(p.enabled),
+            sort_order: p.sort_order ?? 0
+          }))
+        })
+      }
+    );
+
+    if (!r.ok) {
+      console.error("[PARAM BULK UPDATE ERROR]", await r.text());
+      return null;
+    }
+
+    return await r.json();
+  },
+
 
 };

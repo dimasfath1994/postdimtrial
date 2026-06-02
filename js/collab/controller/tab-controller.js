@@ -3,7 +3,7 @@
 import { RequestUI } from "../ui/request-ui.js"; 
 
 export class TabController {
-    constructor(ui, handlers, State, paramCtrl) {
+    constructor(ui, handlers, State, paramCtrl, headerCtrl) {
         this.tabs = [];
         this.activeTabId = null;
         this.handlers = handlers;
@@ -11,6 +11,7 @@ export class TabController {
         this.State = State;
 
         this.paramCtrl = paramCtrl;
+        this.headerCtrl = headerCtrl;
 
         document.addEventListener('blur', (e) => {
             if (e.target.classList.contains('auto-save')) {
@@ -81,18 +82,33 @@ export class TabController {
         this.activeTabId = id;
         const request = this.tabs.find(t => t.id === id);
         
-        // Update Highlight UI Tabs
+        // 1. Update Highlight UI Tabs
         document.querySelectorAll('.tab-item').forEach(el => 
             el.classList.toggle('active', el.dataset.id == id));
             
-        // Load data ke Editor Tengah
+        // 2. Load data ke Editor Tengah
         this.loadToEditor(request);
+    
+        // 3. Render HANYA panel yang sedang aktif di UI (tidak memaksa buka hidden)
+        // Cek panel mana yang tidak memiliki class 'hidden'
+        const activePanel = document.querySelector('.tab-panel:not(.hidden)');
+        const activePanelType = activePanel ? activePanel.getAttribute('data-panel') : 'params';
+    
+        this.refreshActivePanel(activePanelType);
+    }
 
-       // LIVE SYNC: Jika panel params aktif, panggil init
-       const paramsBox = document.getElementById('paramsBox');
-       if (paramsBox && !paramsBox.closest('.hidden')) {
-            this.paramCtrl.init(id, paramsBox);
-       }
+    refreshActivePanel(panelType) {
+        if (!this.activeTabId) return;
+    
+        const id = this.activeTabId;
+        if (panelType === 'params') {
+            const paramsBox = document.getElementById('paramsBox');
+            if (paramsBox) this.paramCtrl.init(id, paramsBox);
+        } else if (panelType === 'headers') {
+            const headersBox = document.getElementById('headersBox');
+            if (headersBox) this.headerCtrl.init(id, headersBox);
+        }
+        // Tambahkan else if untuk 'body', 'auth', dll jika perlu
     }
 
     updateTab(requestId, updatedData) {

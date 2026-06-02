@@ -22,6 +22,9 @@ export class RequestController {
             }
         });
 
+        window.addEventListener('popstate', () => {
+            this.syncParamsFromUrl();
+        });
 
         this.handlers = {
             onRename: (id, newName) => this.renameRequest(id, newName),
@@ -236,6 +239,43 @@ export class RequestController {
             console.error("Gagal load requests:", err);
         }
     }
+
+
+    updateUrlFromParams(params) {
+        // 1. Ambil hanya yang enabled
+        const activeParams = params.filter(p => p.enabled && p.key.trim() !== '');
+        
+        // 2. Buat string query
+        const queryString = activeParams.map(p => 
+            `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`
+        ).join('&');
+        
+        // 3. Update URL browser tanpa refresh (ReplaceState)
+        const baseUrl = window.location.pathname;
+        const newUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl;
+        window.history.replaceState(null, '', newUrl);
+    }
+    
+    /**
+     * Parsing URL manual ke State params
+     */
+    syncParamsFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const newParams = [];
+        
+        urlParams.forEach((value, key) => {
+            newParams.push({ key, value, enabled: true, description: '' });
+        });
+    
+        // Panggil service untuk menyimpan ke DB dan broadcast
+        // Anda perlu akses ke instance RequestParamController di sini
+        if (window.paramCtrl) {
+            window.paramCtrl.syncBulkUpdate(
+                newParams.map(p => `${p.key}:${p.value}`).join('\n')
+            );
+        }
+    }
+
 
 
     async renameRequest(id, newName) {

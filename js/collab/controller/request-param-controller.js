@@ -14,19 +14,28 @@ export class RequestParamController {
      * Inisialisasi: Render parameter untuk request yang sedang aktif
      */
     async init(requestId, container) {
+        console.log("DEBUG: RequestHeaderController.init dipanggil untuk reqId:", requestId);
         this.currentRequestId = requestId;
         this.container = container;
+        this.container.innerHTML = '';
 
         const params = await RequestParamService.getByRequest(requestId);
         this.State.params = params; // Simpan di state global/lokal
+
+        if (params.length === 0 && window.location.search) {
+            this.parseUrlParams();
+        }
 
         console.log("Data mentah dari DB:", params);
 
         RequestParamUI.renderParams(params, container, {
             onUpdate: (id, data) => this.syncParamUpdate(id, data),
             onDelete: (id) => this.syncParamDelete(id),
-            onAdd: () => this.addParam()
+            onAdd: () => this.addParam(),
+            onBulkUpdate: (text) => this.syncBulkUpdate(text)
         });
+
+        console.log("DEBUG: renderHeaders selesai dijalankan.");
     }
 
     /**
@@ -72,10 +81,26 @@ export class RequestParamController {
             case 'PARAM_DELETED':
                 this.State.params = this.State.params.filter(p => p.id !== param_id);
                 RequestParamUI.removeParamRow(param_id);
+                const textarea = document.getElementById('bulk-textarea');
+                if (textarea && document.activeElement !== textarea) {
+                    RequestParamUI.updateBulkText(this.State.params);
+                }
+                break;
+
+            case 'PARAMS_BULK_UPDATED':
+                this.State.params = data;
+                this.render(); // Refresh total karena struktur data berubah total
                 break;
         }
     }
 
+    static updateBulkText(params) {
+        const textarea = document.getElementById('bulk-textarea');
+        if (textarea) {
+            // Update isi textarea dengan state params terbaru
+            textarea.value = params.map(p => `${p.key}:${p.value}`).join('\n');
+        }
+    }
     /**
      * Sinkronisasi ke Server & Broadcast ke tab lain
      */
@@ -98,6 +123,11 @@ export class RequestParamController {
             if (idx !== -1) {
                 this.State.params[idx] = { ...this.State.params[idx], ...updated };
             }
+
+            // Di dalam syncBulkUpdate atau callback update
+            if (window.requestCtrl) {
+                window.requestCtrl.updateUrlFromParams(this.State.params);
+            }
         }
     }
 
@@ -107,6 +137,7 @@ export class RequestParamController {
             this.bc.postMessage({ type: 'PARAM_DELETED', param_id: id });
             this.State.params = this.State.params.filter(p => p.id !== id);
             RequestParamUI.removeParamRow(id);
+            RequestParamUI.updateBulkText(this.State.params);
         }
     }
 
@@ -130,6 +161,44 @@ export class RequestParamController {
         }
     }
 
+    async syncBulkUpdate(text) {
+        const lines = text.split('\n');
+        
+        // Kita buat array params baru dengan mempertahankan data lama dari State
+        // berdasarkan urutan index baris.
+        const params = lines.map((line, index) => {
+            const parts = line.split(':');
+            const key = parts[0]?.trim() || '';
+            const value = parts.slice(1).join(':').trim() || '';
+            
+            // Coba cari data lama berdasarkan index yang sama
+            const existingParam = this.State.params[index];
+            
+            return { 
+                // Jika key/value di baris index ini adalah baris yang sama dengan sebelumnya, 
+                // ambil description-nya.
+                description: existingParam ? existingParam.description : '', 
+                key, 
+                value, 
+                enabled: existingParam ? existingParam.enabled : true,
+                sort_order: index // Mengikuti urutan baris baru
+            };
+        }).filter(p => p.key !== '');
+    
+        // Panggil Service Bulk Update
+        const updatedParams = await RequestParamService.bulkUpdate(this.currentRequestId, params);
+    
+        if (updatedParams) {
+            this.bc.postMessage({ type: 'PARAMS_BULK_UPDATED', data: updatedParams });
+            this.State.params = updatedParams;
+            this.render();
+            // Di dalam syncBulkUpdate atau callback update
+            if (window.requestCtrl) {
+                window.requestCtrl.updateUrlFromParams(this.State.params);
+            }
+        }
+    }
+
     setupBroadcastListener() {
         this.bc.onmessage = (event) => {
             console.log("[DEBUG BROADCAST PARAM] Menerima:", event.data);
@@ -141,7 +210,33 @@ export class RequestParamController {
         RequestParamUI.renderParams(this.State.params, this.container, {
             onUpdate: (id, data) => this.syncParamUpdate(id, data),
             onDelete: (id) => this.syncParamDelete(id),
-            onAdd: () => this.addParam()
+            onAdd: () => this.addParam(),
+            onBulkUpdate: (text) => this.syncBulkUpdate(text)
         });
+    }
+
+    // Di dalam class RequestParamController
+
+    parseUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if ([...urlParams].length === 0) return; // Keluar jika tidak ada parameter di URL
+
+        const newParams = [];
+        urlParams.forEach((value, key) => {
+            newParams.push({ 
+                key: key, 
+                value: value, 
+                enabled: true, 
+                description: 'Auto-imported from URL' 
+            });
+        });
+
+        // Panggil fungsi bulk update untuk memasukkan data hasil parse ke DB
+        // Pastikan kita sudah berada di context request yang benar
+        if (this.currentRequestId) {
+            this.syncBulkUpdate(
+                newParams.map(p => `${p.key}:${p.value}`).join('\n')
+            );
+        }
     }
 }

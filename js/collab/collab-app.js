@@ -18,6 +18,8 @@ import { TabController } from "./controller/tab-controller.js";
 import { TabManagerUI } from './ui/tabmanager-ui.js';
 import { RequestParamController } from './controller/request-param-controller.js';
 
+import { RequestHeaderController } from './controller/request-header-controller.js';
+
 
 function hydrateState(data) { console.log("Hydrate data", data); }
 
@@ -35,15 +37,19 @@ const State = {
     activeCollectionId: null,
     folders: [] ,
     requests: [],
-    params: []
+    params: [],
+    headers: []
  };
  const dispatcher = new SocketDispatcher();
 
 // =============== INITIALIZE REQUEST-PARAM-CONTROLLER ================
 const paramCtrl = new RequestParamController(State);
 
+// =============== INITIALIZE REQUEST-HEADER-CONTROLLER ================
+const headerCtrl = new RequestHeaderController(State);
+
 //=============== INITIALIZE TAB REQUEST ================
-const tabCtrl = new TabController(ui, null, State, paramCtrl);
+const tabCtrl = new TabController(ui, null, State, paramCtrl, headerCtrl);
 
  //=============== INITIALIZE REQUEST ================
 const requestCtrl = new RequestController(ui, State, {
@@ -133,6 +139,7 @@ dispatcher.register('COLLECTION_', collectionCtrl);
 dispatcher.register('FOLDER_', folderCtrl);
 dispatcher.register('REQUEST_', requestCtrl);
 dispatcher.register('PARAM_', paramCtrl);
+dispatcher.register('HEADER_', headerCtrl);
 
 
 // Saat inisialisasi socket, cukup panggil dispatcher.dispatch
@@ -228,7 +235,7 @@ async function loadCollections(id) {
 
 
 
-TabManagerUI.init();
+TabManagerUI.init(tabCtrl);
 
 
 

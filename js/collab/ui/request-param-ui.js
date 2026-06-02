@@ -5,7 +5,10 @@ export class RequestParamUI {
         container.innerHTML = `
             <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-size: 13px; font-weight: bold; color: #666;">Query Parameters</span>
-                <button id="toggle-bulk-btn" style="background: none; border: none; color: #007bff; cursor: pointer; font-size: 12px;">Bulk Edit</button>
+                <div>
+                    <button id="save-bulk-btn" style="display: none; background: #007bff; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 12px; margin-right: 5px;">Save</button>
+                    <button id="toggle-bulk-btn" style="background: none; border: none; color: #007bff; cursor: pointer; font-size: 12px;">Bulk Edit</button>
+                </div>
             </div>
             <div id="table-view">
                 <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
@@ -26,42 +29,57 @@ export class RequestParamUI {
                 <textarea id="bulk-textarea" style="width: 100%; height: 150px; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px;" placeholder="key:value&#10;key2:value2"></textarea>
             </div>
         `;
-
+    
         // Logic Rendering Table
         const body = container.querySelector('#params-body');
         params.forEach(param => body.appendChild(this.createParamRow(param, handlers)));
-
+    
         // Tombol Add
         container.querySelector('#add-param-btn').onclick = () => {
-            // Panggil handler onAdd. Kita tidak merender manual di sini, 
-            // biarkan controller yang mengurus rendering setelah DB berhasil
-            if (handlers.onAdd) {
-                handlers.onAdd(); 
-            }
+            if (handlers.onAdd) handlers.onAdd();
         };
-
-        // Toggle View
+    
+        // Toggle View & Bulk Logic
         const toggleBtn = container.querySelector('#toggle-bulk-btn');
+        const saveBulkBtn = container.querySelector('#save-bulk-btn');
         const tableView = container.querySelector('#table-view');
         const bulkView = container.querySelector('#bulk-view');
         const textarea = container.querySelector('#bulk-textarea');
-
+    
         toggleBtn.onclick = () => {
             const isBulk = bulkView.style.display === 'none';
             if (isBulk) {
-                // Masuk ke Bulk Edit: Convert table ke text
                 const text = params.map(p => `${p.key}:${p.value}`).join('\n');
                 textarea.value = text;
                 tableView.style.display = 'none';
                 bulkView.style.display = 'block';
+                saveBulkBtn.style.display = 'inline-block';
                 toggleBtn.textContent = 'Table Edit';
             } else {
-                // Keluar ke Table Edit: (Simpan hasil edit di sini bisa dikembangkan)
                 tableView.style.display = 'block';
                 bulkView.style.display = 'none';
+                saveBulkBtn.style.display = 'none';
                 toggleBtn.textContent = 'Bulk Edit';
             }
         };
+    
+        // Handler Save Bulk
+        saveBulkBtn.onclick = () => {
+            console.log("Tombol Save Bulk ditekan!"); // <--- Cek ini di Console
+            if (handlers.onBulkUpdate) {
+                handlers.onBulkUpdate(textarea.value);
+            } else {
+                console.error("Handler onBulkUpdate tidak ditemukan!"); // <--- Cek ini
+            }
+        };
+    }
+
+    static updateBulkText(params) {
+        const textarea = document.getElementById('bulk-textarea');
+        if (textarea) {
+            // Update isi textarea dengan state params terbaru
+            textarea.value = params.map(p => `${p.key}:${p.value}`).join('\n');
+        }
     }
 
     static createParamRow(param, handlers) {
