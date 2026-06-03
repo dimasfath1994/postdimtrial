@@ -201,21 +201,27 @@
 </main>
 
 <!-- ================= ENV PANEL ================= -->
-<div id="envPanel" class="env-panel hidden">
-
+<div id="envPanel" class="env-panel">
   <div class="env-header">
-    <h3>Workspace Variables</h3>
+    <h3>Environment & Global Variables</h3>
     <button id="closeEnvPanel">✕</button>
   </div>
 
-  <div id="envList" class="env-list"></div>
+  <div style="flex: 1; overflow-y: auto;">
+    <div id="envList-workspace"></div>
+    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+    <div id="envList-global"></div>
+  </div>
 
   <div class="env-form">
+    <select id="addTypeSelect">
+      <option value="env">Workspace</option>
+      <option value="global">Global</option>
+    </select>
     <input id="envKey" placeholder="key">
     <input id="envValue" placeholder="value">
     <button id="addEnv">+ Add</button>
   </div>
-
 </div>
 
 <!-- ================= MONACO ================= -->

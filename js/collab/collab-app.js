@@ -10,7 +10,6 @@ import { CollectionController } from "./controller/collection-controller.js";
 import { renderCollectionSidebar, setupCollectionActions } from "./ui/collection-ui.js";
 
 import { FolderController } from "./controller/folder-controller.js";
-import { renderFolderChildren, showFolderContextMenu } from "./ui/folder-ui.js";
 
 import { RequestController } from "./controller/request-controller.js";
 import { TabController } from "./controller/tab-controller.js";
@@ -24,6 +23,11 @@ import { MonacoController } from "./controller/monaco-controller.js";
 import { RequestBodyParamController } from './controller/request-body-param-controller.js';
 import { initBodyTabs } from './ui/body-tabs.js';
 
+import { EnvController } from "./controller/env-controller.js";
+import { GlobalController } from "./controller/global-controller.js";
+
+import { EnvUI } from './ui/env-ui.js';
+
 
 function hydrateState(data) { console.log("Hydrate data", data); }
 
@@ -31,8 +35,14 @@ const ui = {
     workspaceSwitcher: document.getElementById("workspaceSwitcher"),
     workspaceTitle: document.getElementById("workspaceTitle"),
     activeWorkspaceName: document.getElementById("activeWorkspaceName"),
-    collectionList: document.getElementById("collectionList") // Tambahan
+    collectionList: document.getElementById("collectionList")
 };
+
+// --- Element Selectors ---
+const openEnvModal = document.getElementById('openEnvModal');
+const closeEnvPanel = document.getElementById('closeEnvPanel');
+const envPanel = document.getElementById('envPanel');
+
 const State = { 
     workspaceId: null,
     workspace: null,
@@ -45,7 +55,9 @@ const State = {
     headers: [],
     bodyParams: [],
  };
- const dispatcher = new SocketDispatcher();
+const dispatcher = new SocketDispatcher();
+
+
 
 // =============== INITIALIZE REQUEST-PARAM-CONTROLLER ================
 const paramCtrl = new RequestParamController(State);
@@ -155,6 +167,13 @@ const collectionCtrl = new CollectionController(ui, State, {
 });
 
 setupCollectionActions(collectionCtrl);
+
+
+
+// =============== INITIALIZE ENV & GLOBAL CONTROLLER ================
+const envCtrl = new EnvController(State);
+const globalCtrl = new GlobalController(State);
+
 
 // =============== INITIALIZE SOCKET DISPATCHER ================
 dispatcher.register('WORKSPACE_', workspaceCtrl);
@@ -272,6 +291,24 @@ async function loadCollections(id) {
 
 TabManagerUI.init(tabCtrl);
 
+// --- Buka/Tutup Modal ---
+// --- Buka/Tutup Modal ---
+openEnvModal.addEventListener('click', () => {
+    const wsId = State.activeWorkspaceId || State.workspaceId;
+    
+    // Gunakan class .show untuk menampilkan
+    envPanel.classList.add('show');
+    
+    envCtrl.init(document.getElementById('envList-workspace'), wsId);
+    globalCtrl.init(document.getElementById('envList-global'));
+});
+
+closeEnvPanel.addEventListener('click', () => {
+    // Gunakan class .show untuk menyembunyikan
+    envPanel.classList.remove('show');
+});
+// --- Inisialisasi Handler Add (Hanya 1 baris) ---
+EnvUI.setupAddHandler({ envCtrl, globalCtrl }, State);
 
 
 
