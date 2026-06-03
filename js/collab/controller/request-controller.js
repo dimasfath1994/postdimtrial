@@ -212,10 +212,11 @@ export class RequestController {
 
                     // JIKA mode berubah, trigger UI untuk pindah tab di user kolaborator
                     if (data.body_mode && this.tabCtrl.activeTabId === data.id) {
-                        // Trigger event agar UI body-tabs berpindah otomatis
-                        window.dispatchEvent(new CustomEvent('sync-body-mode', { 
-                            detail: { mode: data.body_mode } 
-                        }));
+                        // Panggil langsung fungsi global yang kita siapkan di body-tabs.js
+                        if (window.syncBodyModeUI) {
+                            // Gunakan isInitial = true agar tidak memicu loop update ke server
+                            window.syncBodyModeUI(data.body_mode, true);
+                        }
                     }
 
                     if (this.tabCtrl) this.tabCtrl.updateTab(data.id, data);
@@ -475,32 +476,22 @@ async duplicateRequest(req) {
     }
 
     async updateRequestBodyMode(id, mode) {
+        // Tambahkan normalisasi di sini agar konsisten dengan apa yang dikirim ke DB
+        const cleanMode = (mode === 'formdata') ? 'formdata' : mode; 
+        
         try {
             const oldData = this.getRequestById(id);
-            if (!oldData) {
-                console.error(`[ERROR] Request dengan ID ${id} tidak ditemukan di State!`);
-                return;
-            }
-            const payload = {
-                ...oldData,
-                body_mode: mode,
-
-            };
-        
+            const payload = { ...oldData, body_mode: cleanMode };
+            
             const updatedReq = await RequestService.update(id, payload);
             
-            // Broadcast data terbaru dari server
+            // State sudah di-merge dengan response server
             this.bc.postMessage({ type: 'REQUEST_UPDATED', data: updatedReq });
-    
-            // Update State dengan Merge (Data lama + Update dari server)
+            
             const idx = this.State.requests.findIndex(r => r.id === id);
-            if (idx !== -1) {
-                this.State.requests[idx] = { ...this.State.requests[idx], ...updatedReq };
-            }
-
-            console.log(`[SYNC] Field ${Object.keys(payload)} berhasil disimpan.`);
+            if (idx !== -1) this.State.requests[idx] = { ...this.State.requests[idx], ...updatedReq };
         } catch (err) {
-            console.error("Gagal update request:", err);
+            console.error("Gagal update mode:", err);
         }
     }
 

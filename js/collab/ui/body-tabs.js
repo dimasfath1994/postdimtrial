@@ -14,71 +14,63 @@ export function initBodyTabs(bodyParamCtrl, tabCtrl) {
     'urlencoded': document.getElementById('urlencodedBox')
   };
 
-  // Fungsi sinkronisasi mode (dipanggil saat pindah tab atau load request)
+  // Fungsi untuk menormalisasi nama mode agar seragam di internal
+  const normalizeMode = (mode) => {
+    if (mode === 'formdata') return 'form-data';
+    return mode;
+  };
+
   const handleModeChange = async (mode, isInitial = false) => {
     const activeRequestId = tabCtrl.activeTabId;
-    
     if (!activeRequestId) return;
 
-    // 1. Update Visual Dropdown (PENTING: sinkronisasi nilai)
-    if (bodyModeSelect) bodyModeSelect.value = mode;
+    // Normalisasi mode yang masuk
+    const normalizedMode = normalizeMode(mode);
 
-    // 2. Update Visual Tombol (hanya jika elemen ada)
+    // 1. Update Visual Dropdown (gunakan normalized agar cocok dengan value di HTML)
+    if (bodyModeSelect) bodyModeSelect.value = normalizedMode;
+
+    // 2. Update Visual Tombol
     tabs.forEach(t => t.classList.remove('active'));
-    const activeTab = Array.from(tabs).find(t => t.dataset.mode === mode);
+    const activeTab = Array.from(tabs).find(t => t.dataset.mode === normalizedMode);
     if (activeTab) activeTab.classList.add('active');
 
-    // 3. Sembunyikan semua box konten body
-    Object.values(boxes).forEach(box => {
-      if (box) box.classList.add('hidden');
-    });
+    // 3. Sembunyikan semua box
+    Object.values(boxes).forEach(box => { if (box) box.classList.add('hidden'); });
 
     // 4. Tampilkan box yang dipilih
-    if (boxes[mode]) {
-      boxes[mode].classList.remove('hidden');
+    if (boxes[normalizedMode]) {
+      boxes[normalizedMode].classList.remove('hidden');
     }
-    
 
-    // 5. Inisialisasi Data ke Controller
+    // 5. Inisialisasi Data ke Controller (Mengirim versi yang diinginkan controller)
     if (bodyParamCtrl) {
-      if (mode === 'raw') {
+      if (normalizedMode === 'raw') {
         const rawEditor = document.getElementById('body');
         const request = tabCtrl.tabs.find(t => t.id === activeRequestId);
-        if (rawEditor && request) {
-            rawEditor.value = request.body || ''; 
-        }
-        const selectEl = document.getElementById('bodyModeSelect');
-        console.log("RAW TES", selectEl);
-        if (selectEl) {
-            selectEl.value = mode;
-            console.log("DEBUG: Nilai setelah delay:", selectEl.value);
-        }
-      } else if (mode === 'form-data') {
-        const container = document.getElementById('formDataList');
-        if (container) await bodyParamCtrl.init(activeRequestId, container, 'formdata');
-      } else if (mode === 'urlencoded') {
-        const container = document.getElementById('urlencodedList');
-        if (container) await bodyParamCtrl.init(activeRequestId, container, 'urlencoded');
+        if (rawEditor && request) rawEditor.value = request.body || ''; 
+      } else if (normalizedMode === 'form-data') {
+        // Controller Anda minta 'formdata' (tanpa strip), kita kirim itu
+        await bodyParamCtrl.init(activeRequestId, document.getElementById('formDataList'), 'formdata');
+      } else if (normalizedMode === 'urlencoded') {
+        await bodyParamCtrl.init(activeRequestId, document.getElementById('urlencodedList'), 'urlencoded');
       }
     }
 
-    // 6. Trigger event global (hindari loop jika ini adalah initial load)
+    // 6. Trigger event global
     if (!isInitial) {
       window.dispatchEvent(new CustomEvent('body-mode-changed', {
-        detail: { mode: mode, requestId: activeRequestId }
+        detail: { mode: normalizedMode, requestId: activeRequestId }
       }));
     }
   };
 
-  // --- EXPOSE FUNGSI AGAR BISA DIPANGGIL DARI LUAR (SAAT PINDAH TAB) ---
   window.syncBodyModeUI = handleModeChange;
 
-  // Event Listener untuk tombol
   tabs.forEach(tab => {
     tab.addEventListener('click', () => handleModeChange(tab.dataset.mode));
   });
 
-  // Event Listener untuk dropdown
   if (bodyModeSelect) {
     bodyModeSelect.addEventListener('change', (e) => handleModeChange(e.target.value));
   }
