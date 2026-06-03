@@ -14,6 +14,14 @@ export class RequestController {
         this.bc = new BroadcastChannel('request_channel');
         this.setupBroadcastListener();
 
+        window.addEventListener('body-mode-changed', (e) => {
+            const { mode, requestId } = e.detail;
+            this.State.activeBodyMode = mode;
+            
+            // Auto-save ke database saat mode berubah
+            this.updateRequestBodyMode(requestId, mode);
+        });
+
         // Socket listener dari pusat (collab-app.js)
         window.addEventListener("socket:message", (e) => {
             const payload = e.detail;
@@ -201,6 +209,14 @@ export class RequestController {
                     
                     // Panggil helper untuk update UI secara dinamis
                     this.updateUIElements(data.id, data);
+
+                    // JIKA mode berubah, trigger UI untuk pindah tab di user kolaborator
+                    if (data.body_mode && this.tabCtrl.activeTabId === data.id) {
+                        // Trigger event agar UI body-tabs berpindah otomatis
+                        window.dispatchEvent(new CustomEvent('sync-body-mode', { 
+                            detail: { mode: data.body_mode } 
+                        }));
+                    }
 
                     if (this.tabCtrl) this.tabCtrl.updateTab(data.id, data);
                 }
@@ -458,6 +474,36 @@ async duplicateRequest(req) {
         }
     }
 
+    async updateRequestBodyMode(id, mode) {
+        try {
+            const oldData = this.getRequestById(id);
+            if (!oldData) {
+                console.error(`[ERROR] Request dengan ID ${id} tidak ditemukan di State!`);
+                return;
+            }
+            const payload = {
+                ...oldData,
+                body_mode: mode,
+
+            };
+        
+            const updatedReq = await RequestService.update(id, payload);
+            
+            // Broadcast data terbaru dari server
+            this.bc.postMessage({ type: 'REQUEST_UPDATED', data: updatedReq });
+    
+            // Update State dengan Merge (Data lama + Update dari server)
+            const idx = this.State.requests.findIndex(r => r.id === id);
+            if (idx !== -1) {
+                this.State.requests[idx] = { ...this.State.requests[idx], ...updatedReq };
+            }
+
+            console.log(`[SYNC] Field ${Object.keys(payload)} berhasil disimpan.`);
+        } catch (err) {
+            console.error("Gagal update request:", err);
+        }
+    }
+
 
     
 
@@ -480,6 +526,7 @@ async duplicateRequest(req) {
             method: document.getElementById('method')?.value,
             url: document.getElementById('url')?.value,
             body: document.getElementById('body')?.value,
+            body_mode: this.State.activeBodyMode || oldData.body_mode || 'none',
             auth_type: document.getElementById('authType')?.value,
             auth_value: document.getElementById('authValue')?.value
             //,pre_script: document.getElementById('preEditor')?.value,

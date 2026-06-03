@@ -118,28 +118,26 @@
     <div class="tab-panel" data-panel="params">
       <div id="paramsBox"></div>
     </div>
-
     <div class="tab-panel hidden" data-panel="body">
-      <div class="body-tabs">
+      <div class="body-dropdown-wrapper">
+        <select id="bodyModeSelect">
+          <option value="none">none</option>
+          <option value="raw">raw</option>
+          <option value="form-data">form-data</option>
+          <option value="urlencoded">x-www-form-urlencoded</option>
+        </select>
+      </div>
+    
+      <div class="body-tabs" style="display: none;">
         <button class="body-tab active" data-mode="none">none</button>
         <button class="body-tab" data-mode="raw">raw</button>
         <button class="body-tab" data-mode="form-data">form-data</button>
         <button class="body-tab" data-mode="urlencoded">x-www-form-urlencoded</button>
       </div>
-
-      <div id="rawBodyBox">
-        <textarea id="body"></textarea>
-      </div>
-
-      <div id="formDataBox" class="hidden">
-        <div id="formDataList"></div>
-        <button id="addFormData">+ Add Field</button>
-      </div>
-
-      <div id="urlencodedBox" class="hidden">
-        <div id="urlencodedList"></div>
-        <button id="addUrlEncoded">+ Add Field</button>
-      </div>
+    
+      <div id="rawBodyBox"><textarea id="body"></textarea></div>
+      <div id="formDataBox" class="hidden"><div id="formDataList"></div></div>
+      <div id="urlencodedBox" class="hidden"><div id="urlencodedList"></div></div>
     </div>
 
     <div class="tab-panel hidden" data-panel="headers">
@@ -240,6 +238,21 @@ mainBtn.addEventListener('click', (e) => {
 // Menutup menu jika klik area luar
 document.addEventListener('click', () => {
   dropdown.style.display = 'none';
+});
+
+
+
+const select = document.getElementById('bodyModeSelect');
+const buttons = document.querySelectorAll('.body-tab');
+
+// Saat dropdown berubah, cari tombol yang punya data-mode sama lalu klik
+select.addEventListener('change', (e) => {
+    const selectedMode = e.target.value;
+    const targetButton = Array.from(buttons).find(btn => btn.dataset.mode === selectedMode);
+    
+    if (targetButton) {
+        targetButton.click(); // Ini akan memicu semua logika JS lama kamu!
+    }
 });
 </script>
 

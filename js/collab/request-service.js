@@ -49,6 +49,7 @@ export class RequestService {
       method: payload.method || "GET",
       url: payload.url || "",
       body: payload.body || null,
+      body_mode: payload.body_mode || "none",
       pinned: payload.pinned || 0,
       auth_type: payload.auth_type || null,
       auth_value: payload.auth_value || null,

@@ -21,6 +21,9 @@ import { RequestParamController } from './controller/request-param-controller.js
 import { RequestHeaderController } from './controller/request-header-controller.js';
 import { MonacoController } from "./controller/monaco-controller.js";
 
+import { RequestBodyParamController } from './controller/request-body-param-controller.js';
+import { initBodyTabs } from './ui/body-tabs.js';
+
 
 function hydrateState(data) { console.log("Hydrate data", data); }
 
@@ -39,18 +42,25 @@ const State = {
     folders: [] ,
     requests: [],
     params: [],
-    headers: []
+    headers: [],
+    bodyParams: [],
  };
  const dispatcher = new SocketDispatcher();
 
 // =============== INITIALIZE REQUEST-PARAM-CONTROLLER ================
 const paramCtrl = new RequestParamController(State);
 
+// =============== INITIALIZE BODY-PARAM-CONTROLLER ================
+const bodyParamCtrl = new RequestBodyParamController(State);
+
+
 // =============== INITIALIZE REQUEST-HEADER-CONTROLLER ================
 const headerCtrl = new RequestHeaderController(State);
 
 //=============== INITIALIZE TAB REQUEST ================
 const tabCtrl = new TabController(ui, null, State, paramCtrl, headerCtrl);
+
+initBodyTabs(bodyParamCtrl, tabCtrl)
 
  //=============== INITIALIZE REQUEST ================
 const requestCtrl = new RequestController(ui, State, {
@@ -224,6 +234,7 @@ function connectSocket(id) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    initBodyTabs(bodyParamCtrl, tabCtrl);
     initWorkspaceUI(workspaceCtrl);
     const allowed = await guardCollaborationAccess();
     if (allowed)
@@ -231,6 +242,17 @@ document.addEventListener("DOMContentLoaded", async () => {
          await workspaceCtrl.loadFlow();
     }
 });
+
+window.addEventListener('request-tab-switched', (e) => {
+    const requestId = e.detail.requestId;
+    
+    // Perintahkan bodyParamCtrl untuk update data secara otomatis
+    // TANPA harus menunggu user klik tab body
+    if (bodyParamCtrl) {
+        bodyParamCtrl.syncWithRequest(requestId);
+    }
+});
+
 
 // Listener dari Workspace Controller
 window.addEventListener("workspace:changed", (event) => {

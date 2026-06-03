@@ -88,6 +88,16 @@ export class TabController {
             
         // 2. Load data ke Editor Tengah
         this.loadToEditor(request);
+
+        // 3. Update Dropdown UI agar sesuai dengan request yang baru aktif
+     if (request && window.syncBodyModeUI) {
+        const mode = request.body_mode || 'none';
+        window.syncBodyModeUI(mode, true); // true = isInitial (agar tidak trigger event loop)
+    }
+
+        window.dispatchEvent(new CustomEvent('request-tab-switched', {
+            detail: { requestId: id }
+        }));
     
         // 3. Render HANYA panel yang sedang aktif di UI (tidak memaksa buka hidden)
         // Cek panel mana yang tidak memiliki class 'hidden'
