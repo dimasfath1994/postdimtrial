@@ -55,27 +55,68 @@ export class TabController {
         this.switchTab(freshData.id);
     }
 
-
-    closeTab(id) {
-        // 1. Hapus dari array state
-        this.tabs = this.tabs.filter(t => t.id !== id);
+    async clearResponse() {
         
-        // 2. Hapus elemen DOM-nya (PENTING!)
+    }
+
+    async closeTab(id) {
+        const closedTabIndex = this.tabs.findIndex(t => t.id === id);
+        
+        // 1. Opsional: Auto-save sebelum tutup
+        // await this.saveCurrentTabData(); 
+    
+        // 2. Tentukan tab mana yang akan aktif selanjutnya
+        let nextActiveId = null;
+        if (this.activeTabId === id) {
+            if (this.tabs.length > 1) {
+                // Jika ada tab lain, pilih tab di sebelah kiri, atau indeks yang sama
+                const newIndex = closedTabIndex === 0 ? 1 : closedTabIndex - 1;
+                nextActiveId = this.tabs[newIndex].id;
+            }
+        } else {
+            nextActiveId = this.activeTabId;
+        }
+    
+        // 3. Hapus dari State & DOM
+        this.tabs = this.tabs.filter(t => t.id !== id);
         const tabEl = document.querySelector(`.tab-item[data-id="${id}"]`);
         if (tabEl) tabEl.remove();
-        
-        // 3. Reset editor jika tab yang dihapus sedang aktif
-        if (this.activeTabId === id) {
+    
+        // 4. Pindah ke tab berikutnya atau bersihkan
+        if (nextActiveId) {
+            this.switchTab(nextActiveId); // Panggil fungsi switchTab kamu
+        } else {
             this.activeTabId = null;
             this.clearEditor();
+            this.clearResponse();
         }
-        console.log("Tab closed, current tabs:", this.tabs);
+    
+        console.log("Tab closed, switched to:", nextActiveId);
     }
 
     clearEditor() {
+        // 1. Reset Method & URL (DOM biasa)
         document.getElementById("method").value = "GET";
         document.getElementById("url").value = "";
-        document.getElementById("body").value = "";
+        
+        
+        // 4. Reset Body Text/Raw
+        const bodyEl = document.getElementById("body");
+        if (bodyEl) bodyEl.value = "";
+
+        // 5. Reset Response Area
+        this.resetResponse();
+
+        
+    }
+    resetResponse() {
+        const statusBar = document.getElementById('statusBar');
+        const contentDiv = document.getElementById('content');
+        const lineNumbersDiv = document.getElementById('line-numbers');
+        
+        if (statusBar) statusBar.innerHTML = '<span>Status: -</span> <span>Time: -</span> <span>Size: -</span>';
+        if (contentDiv) contentDiv.innerHTML = '';
+        if (lineNumbersDiv) lineNumbersDiv.innerHTML = '';
     }
 
     switchTab(id) {

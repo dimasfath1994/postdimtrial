@@ -3,6 +3,18 @@
  * Menangani perenderan hasil request ke DOM.
  */
 export class ResponseHandler {
+    // --- TAMBAHAN: Fungsi untuk membersihkan seluruh area response ---
+    static clear() {
+        const statusBar = document.getElementById('statusBar');
+        const contentDiv = document.getElementById('content');
+        const lineNumbersDiv = document.getElementById('line-numbers');
+        
+        if (statusBar) statusBar.innerHTML = '<span>Status: -</span> <span>Time: -</span> <span>Size: -</span>';
+        if (contentDiv) contentDiv.innerHTML = '';
+        if (lineNumbersDiv) lineNumbersDiv.innerHTML = '';
+        
+        window.latestResponse = null;
+    }
 
     static render(response) {
         const statusBar = document.getElementById('statusBar');
