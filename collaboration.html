@@ -167,36 +167,32 @@
 
   </div>
 
-  <div id="statusBar"></div>
+  <div id="response-container">
+    <div id="statusBar"></div>
 
+    <div id="responseTabs" class="response-tabs">
+        <span class="response-tab active" data-tab="body">Body</span>
+        <span class="response-tab" data-tab="cookies">Cookies</span>
+        <span class="response-tab" data-tab="headers">Headers</span>
+    </div>
 
-  <div id="responseTabs" class="response-tabs">
+    <div id="viewToggle" class="toggle">
+        <span class="opt active" data-mode="raw">Raw</span>
+        <span class="opt" data-mode="tree">Tree</span>
+    </div>
 
-  <span class="response-tab active"
-        data-tab="body">
-    Body
-  </span>
-
-    <span class="response-tab"
-        data-tab="cookies">
-    Cookies
-  </span>
-
-  <span class="response-tab"
-        data-tab="headers">
-    Headers
-  </span>
+    <div id="response-wrapper">
+      <div id="response" class="editor-container">
+          <div id="line-numbers"></div>
+          <pre id="content"></pre>
+      </div>
+  </div>
+  
+</div>
 
 
 
 </div>
-
-  <div id="viewToggle" class="toggle">
-    <span class="opt active" data-mode="raw">Raw</span>
-    <span class="opt" data-mode="tree">Tree</span>
-  </div>
-
-  <div id="response"></div>
 
 </main>
 

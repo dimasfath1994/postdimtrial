@@ -90,11 +90,14 @@ export class TabController {
         this.loadToEditor(request);
 
         // 3. Update Dropdown UI agar sesuai dengan request yang baru aktif
-     if (request && window.syncBodyModeUI) {
-        const mode = request.body_mode || 'none';
-        window.syncBodyModeUI(mode, true); // true = isInitial (agar tidak trigger event loop)
-    }
-
+        if (request && window.syncBodyModeUI) {
+            // Pastikan kita menormalkan mode sebelum dikirim ke UI
+            let mode = request.body_mode || 'none';
+            console.log("MASUK KE TAB CONTROLLER, MODE: ", mode);
+            if (mode === 'formdata') mode = 'form-data'; // Sesuaikan dengan value di HTML kamu
+            
+            window.syncBodyModeUI(mode, true); 
+        }
         window.dispatchEvent(new CustomEvent('request-tab-switched', {
             detail: { requestId: id }
         }));

@@ -9,7 +9,9 @@ export class GlobalController {
     async init(container) {
         this.container = container;
         this.State.globals = await GlobalService.getAll();
-        this.render();
+        if (this.container) { // Hanya render jika container tersedia
+            this.render();
+        }
     }
 
     render() {

@@ -33,6 +33,23 @@ export class RequestHeaderController {
         });
     }
 
+    syncStateFromDOM() {
+        if (!this.container) return;
+        
+        const rows = this.container.querySelectorAll('.header-row');
+        const newHeaders = Array.from(rows).map(row => {
+            const id = parseInt(row.dataset.id);
+            const key = row.querySelector('.header-key')?.value;
+            const value = row.querySelector('.header-value')?.value;
+            const enabled = row.querySelector('.header-enabled')?.checked;
+            
+            return { id, key, value, enabled };
+        });
+
+        // Update state agar data yang belum sempat di-sync ke server tetap terbaca
+        this.State.headers = newHeaders;
+    }
+
     /**
      * Handle Event dari Socket (Server)
      */

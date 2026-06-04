@@ -28,6 +28,13 @@ import { GlobalController } from "./controller/global-controller.js";
 
 import { EnvUI } from './ui/env-ui.js';
 
+import { PMSandbox } from './services/pm-sandbox.js';
+
+import { RequestFormatter } from './services/request-formatter.js';
+import { VariableResolver } from './services/variable-resolver.js';
+import { RequestDispatcher } from './services/request-dispatcher.js';
+import { ResponseHandler } from './services/response-handler.js';
+
 
 function hydrateState(data) { console.log("Hydrate data", data); }
 
@@ -54,6 +61,8 @@ const State = {
     params: [],
     headers: [],
     bodyParams: [],
+    environments: [],
+    globals: []
  };
 const dispatcher = new SocketDispatcher();
 
@@ -253,23 +262,31 @@ function connectSocket(id) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    initBodyTabs(bodyParamCtrl, tabCtrl);
+    //initBodyTabs(bodyParamCtrl, tabCtrl);
     initWorkspaceUI(workspaceCtrl);
     const allowed = await guardCollaborationAccess();
     if (allowed)
     {
          await workspaceCtrl.loadFlow();
+
+         const wsId = State.workspaceId; // Pastikan ID workspace tersedia
+        await envCtrl.init(null, wsId); // Pass null karena kita tidak butuh render ke UI dulu
+        await globalCtrl.init(null);
     }
 });
 
-window.addEventListener('request-tab-switched', (e) => {
+window.addEventListener('request-tab-switched', async (e) => {
     const requestId = e.detail.requestId;
+    console.log(`[SYNC] Menyiapkan data untuk request: ${requestId}`);
+
+    // Jalankan semua sync secara paralel agar tidak terasa lambat
+    await Promise.all([
+        bodyParamCtrl ? bodyParamCtrl.syncWithRequest(requestId) : Promise.resolve(),
+        headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox')) : Promise.resolve(),
+        paramCtrl ? paramCtrl.init(requestId, document.getElementById('paramsBox')) : Promise.resolve()
+    ]);
     
-    // Perintahkan bodyParamCtrl untuk update data secara otomatis
-    // TANPA harus menunggu user klik tab body
-    if (bodyParamCtrl) {
-        bodyParamCtrl.syncWithRequest(requestId);
-    }
+    console.log(`[SYNC] Semua data untuk ${requestId} berhasil dimuat ke State.`);
 });
 
 
@@ -292,7 +309,6 @@ async function loadCollections(id) {
 TabManagerUI.init(tabCtrl);
 
 // --- Buka/Tutup Modal ---
-// --- Buka/Tutup Modal ---
 openEnvModal.addEventListener('click', () => {
     const wsId = State.activeWorkspaceId || State.workspaceId;
     
@@ -309,6 +325,78 @@ closeEnvPanel.addEventListener('click', () => {
 });
 // --- Inisialisasi Handler Add (Hanya 1 baris) ---
 EnvUI.setupAddHandler({ envCtrl, globalCtrl }, State);
+
+
+
+
+
+document.getElementById('send').addEventListener('click', async () => {
+
+    // 1. Kumpulkan data
+    const rawData = RequestFormatter.collectFromUI(State);
+    const scripts = monacoCtrl.getValues(); 
+    
+    // Gabungkan script
+    const finalData = {
+        ...rawData,
+        pre_script: scripts.pre_script,
+        post_script: scripts.post_script
+    };
+
+    // 2. Resolve variabel
+    const resolvedData = VariableResolver.resolveRequest(finalData, State);
+    
+    // 3. Kirim Request
+    const response = await RequestDispatcher.send(resolvedData);
+    ResponseHandler.render(response);
+
+    // 4. EKSKUSI SCRIPT (Hanya jika ada isi)
+    // Trim() memastikan jika user cuma isi spasi/enter, tetap dianggap kosong
+    if (resolvedData.post_script && resolvedData.post_script.trim().length > 0) {
+        console.log("[PMSandbox] Ditemukan script, menjalankan...");
+        
+        await PMSandbox.execute(
+            resolvedData.post_script, 
+            response, 
+            State, 
+            envCtrl
+        );
+    } else {
+        console.log("[PMSandbox] Tidak ada post-script, dilewati.");
+    }
+});
+
+// Event listener untuk ganti tab response
+document.querySelectorAll('.response-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+        const type = e.target.getAttribute('data-tab');
+        const res = window.latestResponse;
+        if (!res) return;
+
+        if (type === 'body') ResponseHandler.renderBody(res.body);
+        if (type === 'headers') ResponseHandler.renderHeaders(res.headers);
+        // Tambahkan logic Cookies nanti
+    });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

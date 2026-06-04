@@ -4,6 +4,7 @@
  * Modul ini menangani perpindahan sub-tab di dalam panel "Body"
  */
 export function initBodyTabs(bodyParamCtrl, tabCtrl) {
+  console.log("masuk ga ke body tab");
   const tabs = document.querySelectorAll('.body-tab');
   const bodyModeSelect = document.getElementById('bodyModeSelect');
   
@@ -21,6 +22,7 @@ export function initBodyTabs(bodyParamCtrl, tabCtrl) {
   };
 
   const handleModeChange = async (mode, isInitial = false) => {
+  
     const activeRequestId = tabCtrl.activeTabId;
     if (!activeRequestId) return;
 

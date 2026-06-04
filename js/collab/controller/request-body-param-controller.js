@@ -25,7 +25,7 @@ export class RequestBodyParamController {
      * Inisialisasi controller untuk request tertentu
      */
     async init(requestId, container, mode = 'formdata') {
-        console.log("DEBUG: Controller.init dipanggil dengan:", { requestId, container, mode });
+        console.log("DEBUG: Request Body Param Controller.init dipanggil dengan:", { requestId, container, mode });
         
         if (container) this.container = container;
         if (!this.container) {
@@ -46,7 +46,7 @@ export class RequestBodyParamController {
         this.render();
         const selectEl = document.getElementById('bodyModeSelect');
         if (selectEl) {
-            selectEl.value = mode;
+            selectEl.value = "mode";
         }
     }
     

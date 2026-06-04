@@ -211,13 +211,7 @@ export class RequestController {
                     this.updateUIElements(data.id, data);
 
                     // JIKA mode berubah, trigger UI untuk pindah tab di user kolaborator
-                    if (data.body_mode && this.tabCtrl.activeTabId === data.id) {
-                        // Panggil langsung fungsi global yang kita siapkan di body-tabs.js
-                        if (window.syncBodyModeUI) {
-                            // Gunakan isInitial = true agar tidak memicu loop update ke server
-                            window.syncBodyModeUI(data.body_mode, true);
-                        }
-                    }
+              
 
                     if (this.tabCtrl) this.tabCtrl.updateTab(data.id, data);
                 }

@@ -20,9 +20,13 @@ export class EnvController {
         this.container = container;
         this.workspaceId = workspaceId;
         
+        
         // Fetch data awal
         this.State.environments = await EnvService.getByWorkspace(workspaceId);
-        this.render();
+        console.log("DEBUG: isi State.environments:", this.State.environments);
+        if (this.container) { // Hanya render jika container tersedia
+            this.render();
+        }
     }
 
     render() {
@@ -31,6 +35,43 @@ export class EnvController {
             onUpdate: (id, data) => this.update(id, data),
             onDelete: (id) => this.delete(id)
         }, 'env');
+    }
+
+
+
+    async updateByName(key, value) {
+        // 1. Cari environment berdasarkan key
+        const env = this.State.environments.find(e => e.env_key === key);
+
+        if (env) {
+            // Jika ketemu, update menggunakan ID
+            const payload = {
+                ...env,
+                env_value: String(value)
+            };
+            await this.update(env.id, payload);
+            console.log(`[EnvController] Berhasil update ${key} ke ${value}`);
+        } else {
+            // Jika tidak ketemu, create baru
+            console.log(`[EnvController] Key ${key} tidak ditemukan, membuat baru...`);
+            
+            try {
+                const newEnv = await EnvService.create(this.workspaceId, key, value);
+                
+                // Tambahkan ke state lokal agar UI update
+                this.State.environments.push(newEnv);
+                
+                // Kirim notifikasi via broadcast agar tab lain terupdate
+                this.bc.postMessage({ type: 'ENV_CREATED', data: newEnv });
+                
+                // Render ulang jika container ada
+                this.render();
+                
+                console.log(`[EnvController] Berhasil create ${key} dengan value ${value}`);
+            } catch (err) {
+                console.error("[EnvController] Gagal create environment:", err);
+            }
+        }
     }
 
     async update(id, data) {

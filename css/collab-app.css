@@ -171,6 +171,81 @@ pre {
   font-size: 12px;
 }
 
+#response-container {
+  display: flex;
+  flex-direction: column;
+  height: 300px; /* Tinggi awal */
+  min-height: 150px;
+  resize: vertical; /* Ini yang membuat bisa ditarik ke atas/bawah */
+  overflow: hidden;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #1e1e1e;
+  margin-top: 10px;
+}
+
+/* Container untuk line numbers dan text */
+#response-wrapper {
+  display: flex;
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: #1e1e1e;
+}
+
+/* Container yang menampung angka dan teks */
+.editor-container {
+  display: flex;
+  overflow: hidden; /* Kita akan handle scroll lewat JS agar sinkron */
+  height: 100%;
+}
+
+#line-numbers {
+  flex-shrink: 0;
+  overflow: hidden; /* Angka tidak boleh punya scrollbar sendiri */
+  padding: 10px 5px;
+  color: #858585;
+  background: #252526;
+  text-align: right;
+  user-select: none; /* User tidak bisa blok nomor baris */
+  border-right: 1px solid #333;
+}
+
+#content {
+  margin: 0;
+  padding: 10px;
+  flex: 1;
+  overflow: auto; /* Semua scroll terjadi di sini */
+  overflow-x: auto;
+  color: #d4d4d4;
+  white-space: pre; /* Mempertahankan format JSON */
+}
+
+#response {
+  flex: 1;
+  padding: 10px;
+  margin: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: #d4d4d4;
+  white-space: pre;
+  line-height: 1.5; /* Harus sama dengan #line-numbers */
+  outline: none;
+}
+
+/* Tombol Copy */
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
 /* ================= STATUS ================= */
 
 #statusBar {
