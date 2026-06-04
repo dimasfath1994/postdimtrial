@@ -3,6 +3,7 @@
 import { RequestBodyParamService } from "../request-body-param-service.js";
 import { RequestBodyParamUI } from "../ui/request-body-param-ui.js";
 
+
 export class RequestBodyParamController {
     constructor(State) {
         this.State = State;
@@ -13,41 +14,33 @@ export class RequestBodyParamController {
         
         this.setupBroadcastListener();
 
-        // Listener mandiri: merespon pindah tab tanpa campur tangan TabController
-        window.addEventListener('tab-changed', (e) => {
-            this.currentRequestId = e.detail.id;
-            // Kita inisialisasi ulang dengan mode yang tersimpan saat ini
-            this.init(this.currentRequestId, this.container, this.currentMode);
-        });
+
     }
 
     /**
      * Inisialisasi controller untuk request tertentu
      */
     async init(requestId, container, mode = 'formdata') {
-        console.log("DEBUG: Request Body Param Controller.init dipanggil dengan:", { requestId, container, mode });
+        // Pastikan container yang diterima valid
+        if (!container) return; 
         
-        if (container) this.container = container;
-        if (!this.container) {
-            console.error("DEBUG: Container KOSONG! Pastikan ID element ada di HTML.");
+        // Jangan hapus container jika requestId belum berubah 
+        // dan container masih sama (untuk menghindari flicker)
+        if (this.currentRequestId === requestId && this.currentMode === mode && this.container === container) {
             return;
         }
-    
+        
+        this.container = container;
         this.currentRequestId = requestId;
         this.currentMode = mode;
-        this.container.innerHTML = ''; // Coba lihat apakah ini terhapus
         
-        if (!this.currentRequestId) return;
+        // Hanya bersihkan jika benar-benar ganti request/mode
+        this.container.innerHTML = ''; 
         
         const allParams = await RequestBodyParamService.getByRequest(this.currentRequestId);
         this.State.bodyParams = allParams.filter(p => p.mode === mode); 
         
-        console.log("DEBUG: Params yang ditemukan:", this.State.bodyParams);
         this.render();
-        const selectEl = document.getElementById('bodyModeSelect');
-        if (selectEl) {
-            selectEl.value = "mode";
-        }
     }
     
     render() {

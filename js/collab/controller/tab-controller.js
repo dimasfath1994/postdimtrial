@@ -88,26 +88,27 @@ export class TabController {
             
         // 2. Load data ke Editor Tengah
         this.loadToEditor(request);
-
-        // 3. Update Dropdown UI agar sesuai dengan request yang baru aktif
-        if (request && window.syncBodyModeUI) {
-            // Pastikan kita menormalkan mode sebelum dikirim ke UI
-            let mode = request.body_mode || 'none';
-            console.log("MASUK KE TAB CONTROLLER, MODE: ", mode);
-            if (mode === 'formdata') mode = 'form-data'; // Sesuaikan dengan value di HTML kamu
-            
-            window.syncBodyModeUI(mode, true); 
-        }
+    
+        // 3. Render Panel Aktif TERLEBIH DAHULU (Pastikan DOM tersedia)
+        const activePanel = document.querySelector('.tab-panel:not(.hidden)');
+        const activePanelType = activePanel ? activePanel.getAttribute('data-panel') : 'params';
+        this.refreshActivePanel(activePanelType);
+    
+        // 4. Barulah SYNC UI Body Mode (Setelah semua panel dirender)
+        // Gunakan requestAnimationFrame untuk memastikan DOM benar-benar sudah siap
+        requestAnimationFrame(() => {
+            if (request && typeof window.syncBodyModeUI === 'function') {
+                let mode = request.body_mode || 'none';
+                if (mode === 'formdata') mode = 'form-data'; 
+                
+                console.log("[DEBUG] Syncing mode setelah UI siap:", mode);
+                window.syncBodyModeUI(mode, true);
+            }
+        });
+    
         window.dispatchEvent(new CustomEvent('request-tab-switched', {
             detail: { requestId: id }
         }));
-    
-        // 3. Render HANYA panel yang sedang aktif di UI (tidak memaksa buka hidden)
-        // Cek panel mana yang tidak memiliki class 'hidden'
-        const activePanel = document.querySelector('.tab-panel:not(.hidden)');
-        const activePanelType = activePanel ? activePanel.getAttribute('data-panel') : 'params';
-    
-        this.refreshActivePanel(activePanelType);
     }
 
     refreshActivePanel(panelType) {

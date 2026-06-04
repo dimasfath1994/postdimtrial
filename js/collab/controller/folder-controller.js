@@ -282,6 +282,7 @@ export class FolderController {
 
     async render() {
         if (this.onUpdateUI) this.onUpdateUI(this.State.folders);
+        window.dispatchEvent(new Event('panel-rendered'));
     }
 
     async createFolder(workspaceId, collectionId, parentId, name) {
