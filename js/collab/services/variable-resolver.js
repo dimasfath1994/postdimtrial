@@ -6,15 +6,44 @@
 export class VariableResolver {
     
     static resolveRequest(requestData, state) {
-        return {
-            ...requestData,
-            url: this.resolveString(requestData.url, state),
-            params: this.resolveObject(requestData.params, state),
-            headers: this.resolveObject(requestData.headers, state),
-            body: typeof requestData.body === 'string' 
-                  ? this.resolveString(requestData.body, state) 
-                  : requestData.body
-        };
+        // Salin requestData agar tidak merusak data asli
+        const resolved = { ...requestData };
+
+        resolved.url = this.resolveString(requestData.url, state);
+        resolved.params = this.resolveObject(requestData.params, state);
+        resolved.headers = this.resolveObject(requestData.headers, state);
+
+        // --- PENANGANAN BODY YANG DINAMIS ---
+        if (requestData.body instanceof FormData) {
+            // Kita harus membongkar FormData, resolve, lalu buat baru
+            const newFormData = new FormData();
+            for (const [key, value] of requestData.body.entries()) {
+                const resolvedKey = this.resolveString(key, state);
+                // Hanya resolve jika value adalah string (bukan File/Blob)
+                const resolvedValue = typeof value === 'string' 
+                    ? this.resolveString(value, state) 
+                    : value; 
+                newFormData.append(resolvedKey, resolvedValue);
+            }
+            resolved.body = newFormData;
+
+        } else if (requestData.body instanceof URLSearchParams) {
+            // Kita harus membongkar URLSearchParams, resolve, lalu buat baru
+            const newSearchParams = new URLSearchParams();
+            for (const [key, value] of requestData.body.entries()) {
+                newSearchParams.append(
+                    this.resolveString(key, state),
+                    this.resolveString(value, state)
+                );
+            }
+            resolved.body = newSearchParams;
+
+        } else if (typeof requestData.body === 'string') {
+            // Raw mode (JSON/Text)
+            resolved.body = this.resolveString(requestData.body, state);
+        }
+
+        return resolved;
     }
 
     static resolveString(str, state) {

@@ -73,7 +73,7 @@ const paramCtrl = new RequestParamController(State);
 
 // =============== INITIALIZE BODY-PARAM-CONTROLLER ================
 const bodyParamCtrl = new RequestBodyParamController(State);
-
+window.bodyParamCtrl = bodyParamCtrl;
 
 // =============== INITIALIZE REQUEST-HEADER-CONTROLLER ================
 const headerCtrl = new RequestHeaderController(State);
@@ -333,7 +333,7 @@ EnvUI.setupAddHandler({ envCtrl, globalCtrl }, State);
 document.getElementById('send').addEventListener('click', async () => {
 
     // 1. Kumpulkan data
-    const rawData = RequestFormatter.collectFromUI(State);
+    const rawData = await RequestFormatter.collectFromUI(State);
     const scripts = monacoCtrl.getValues(); 
     
     // Gabungkan script

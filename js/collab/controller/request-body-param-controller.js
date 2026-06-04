@@ -147,31 +147,35 @@ export class RequestBodyParamController {
     }
 }
 
-    async uploadFile(file, paramId = null) {
-        const result = await RequestBodyParamService.uploadFile(file);
-        if (result) {
-            const payload = {
-                request_id: this.currentRequestId,
-                key: file.name,
-                value: result.file_path,
-                file_name: result.file_name,
-                type: 'file',
-                mode: this.currentMode,
-                enabled: true
-            };
+async uploadFile(file, paramId = null) {
+    // Tambahkan loading state jika perlu di UI
+    const result = await RequestBodyParamService.uploadFile(file);
+    if (result) {
+        const payload = {
+            request_id: this.currentRequestId,
+            key: file.name,
+            value: result.file_path, // Path dari server
+            file_name: result.file_name,
+            type: 'file', // Tipe ini penting untuk dibaca di RequestFormatter
+            mode: this.currentMode,
+            enabled: true
+        };
 
-            if (paramId) {
-                await this.syncParamUpdate(paramId, payload);
-            } else {
-                const newParam = await RequestBodyParamService.create(payload);
-                if (newParam) {
-                    this.State.bodyParams.push(newParam);
-                    this.bc.postMessage({ type: 'BODY_PARAM_CREATED', data: newParam });
-                }
+        if (paramId) {
+            await this.syncParamUpdate(paramId, payload);
+            // Tambahan: Update lokal agar file_name muncul instan
+            const idx = this.State.bodyParams.findIndex(p => p.id === paramId);
+            if (idx !== -1) this.State.bodyParams[idx] = { ...this.State.bodyParams[idx], ...payload };
+        } else {
+            const newParam = await RequestBodyParamService.create(payload);
+            if (newParam) {
+                this.State.bodyParams.push(newParam);
+                this.bc.postMessage({ type: 'BODY_PARAM_CREATED', data: newParam });
             }
-            this.render();
         }
+        this.render();
     }
+}
 
     setupBroadcastListener() {
         this.bc.onmessage = (event) => {

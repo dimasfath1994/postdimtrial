@@ -39,6 +39,25 @@ export const RequestBodyParamService = {
     return r.ok;
   },
 
+  // ================= DOWNLOAD FILE (UNTUK PENGIRIMAN ULANG) =================
+  async downloadFileAsBlob(fileName) {
+    // Pastikan FILE_API mengarah ke endpoint yang benar
+    // Contoh: http://localhost:8000/download/nama-file.txt
+    const response = await fetch(`${FILE_API}/download/${encodeURIComponent(fileName)}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${Auth.getToken()}`
+      }
+    });
+
+    if (!response.ok) {
+      console.error("[FILE DOWNLOAD ERROR]", await response.text());
+      throw new Error("Gagal mengunduh file dari server");
+    }
+
+    return await response.blob();
+  },
+
   // ================= GET BY REQUEST =================
   async getByRequest(requestId) {
     const r = await fetch(`${API}/request/${requestId}`, {
