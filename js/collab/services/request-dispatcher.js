@@ -2,6 +2,7 @@
  * RequestDispatcher
  * Bertugas mengirim request ke server dan mengembalikan response mentah.
  */
+import { proxysendRequest } from "../../core/api/proxy-api.js";
 export class RequestDispatcher {
     
     /**
@@ -18,7 +19,7 @@ export class RequestDispatcher {
                 url = `${url}${separator}${searchParams.toString()}`;
             }
             
-            const finalUrl = useProxy ? `/api/proxy?url=${encodeURIComponent(url)}` : url;
+            const finalUrl = url;
 
             const config = {
                 method: method,
@@ -64,7 +65,9 @@ export class RequestDispatcher {
             }
 
             const startTime = performance.now();
-            const response = await fetch(finalUrl, config);
+            const response = useProxy 
+                ? await proxysendRequest(finalUrl, config, true)
+                : await fetch(finalUrl, config);
             const endTime = performance.now();
 
             const duration = Math.round(endTime - startTime);

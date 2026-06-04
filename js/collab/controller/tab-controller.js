@@ -1,6 +1,7 @@
 // js/collab/controller/tab-controller.js
 
 import { RequestUI } from "../ui/request-ui.js"; 
+import { ResponseHandler } from "../services/response-handler.js"; 
 
 export class TabController {
     constructor(ui, handlers, State, paramCtrl, headerCtrl) {
@@ -119,6 +120,16 @@ export class TabController {
         if (lineNumbersDiv) lineNumbersDiv.innerHTML = '';
     }
 
+    // Di dalam class ResponseHandler atau sebagai helper biasa
+    getResponseElements() {
+        return {
+            statusBar: document.getElementById('statusBar'),
+            contentDiv: document.getElementById('content'),
+            lineNumbersDiv: document.getElementById('line-numbers'),
+            copyBtn: document.querySelector('.copy-btn')
+        };
+    }
+
     switchTab(id) {
         this.activeTabId = id;
         const request = this.tabs.find(t => t.id === id);
@@ -129,6 +140,17 @@ export class TabController {
             
         // 2. Load data ke Editor Tengah
         this.loadToEditor(request);
+
+        // --- TAMBAHAN: SWITCH RESPONSE ---
+        // let a = this.getResponseElements();
+        // console.log('ISI THIS TABS', a);
+        // if (request.lastResponse) {
+        //     // Jika tab ini pernah punya response, tampilkan kembali
+        //     ResponseHandler.render(request.lastResponse);
+        // } else {
+        //     // Jika belum pernah atau request baru, bersihkan response
+        //     this.resetResponse();
+        // }
     
         // 3. Render Panel Aktif TERLEBIH DAHULU (Pastikan DOM tersedia)
         const activePanel = document.querySelector('.tab-panel:not(.hidden)');
@@ -146,9 +168,8 @@ export class TabController {
                 window.syncBodyModeUI(mode, true);
             }
         });
-    
         window.dispatchEvent(new CustomEvent('request-tab-switched', {
-            detail: { requestId: id }
+            detail: { requestId: id },
         }));
     }
 

@@ -1,5 +1,6 @@
 import { CollectionService } from "../collection-service.js";
-import { exportPostmanCollection } from "../../core/exporters/postman-exporter.js";
+import { exportPostmanCollection } from "../../core/exporters/postman-exporter-collab.js";
+import { CollectionAggregator } from "../services/collection-aggregator.js";
 
 export class CollectionController {
     constructor(ui, State, { onUpdateUI, folderCtrl, requestCtrl }) {
@@ -116,11 +117,26 @@ export class CollectionController {
             return;
         }
     
-        // 2. Proses data
-        const data = exportPostmanCollection(collection);
+        try {
+            // 2. Ambil isi koleksi (folders & requests) lewat aggregator
+            const collectionDetails = await CollectionAggregator.getFullCollectionData(id);
+            
+            // 3. Gabungkan data agar eksportir bisa memproses hirarki
+            const fullData = { 
+                ...collection, 
+                ...collectionDetails 
+            };
     
-        // 3. Trigger download
-        this.downloadJSON(data, `${collection.name}.postman_collection.json`);
+            // 4. Proses data ke format Postman
+            const data = exportPostmanCollection(fullData);
+    
+            // 5. Trigger download
+            this.downloadJSON(data, `${collection.name}.postman_collection.json`);
+            
+        } catch (error) {
+            console.error("[Export Error]", error);
+            alert("Gagal mengekspor koleksi. Silakan cek konsol.");
+        }
     }
     
     // Tambahkan helper download di dalam class ini agar tidak mengotori file lain

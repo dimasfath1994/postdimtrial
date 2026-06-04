@@ -1210,7 +1210,7 @@ document.addEventListener("keydown", (e) => {
 function exportWorkspace() {
   try {
     syncScriptToTab();
-    tabs.syncTab(); // 🔥 ini penting banget
+    tabs.syncTab(); //  ini penting banget
     const data = {
       tabs: tabs.tabs,
       collections: collections.getCollections(),
