@@ -3,21 +3,47 @@
  * Versi Full (Data Aggregator Compatible)
  */
 
+// Helper untuk memastikan data yang diproses benar-benar memiliki key yang valid
+function sanitizeEntry(entry) {
+    // 1. Jika input berupa array/object, pastikan ada key yang bukan angka/indeks
+    // 2. Jika key-nya adalah "0" atau angka indeks, abaikan.
+    
+    // Asumsi: data adalah objek {key: "...", value: "...", ...} 
+    // atau { "nama_key": {value: "..."} }
+    
+    if (!entry) return null;
+
+    // Jika data adalah array dan itemnya punya properti key/name
+    if (entry.key && entry.key !== "0") return entry;
+    if (entry.name && entry.name !== "0") return { ...entry, key: entry.name };
+    
+    return null;
+}
+
 function parsePostmanUrl(rawUrl = "", params = {}) {
     try {
         const u = new URL(rawUrl);
-        Object.entries(params).forEach(([key, item]) => {
-            if (!item.enabled) return;
-            if (!key) return;
-            u.searchParams.set(key, item.value || "");
-        });
+        // Hapus query string lama dari URL agar tidak terinfeksi "0"
+        u.search = ""; 
+        
+        let queryData = [];
+        if (Array.isArray(params)) {
+            queryData = params.filter(p => p.key && p.key !== "0");
+        } else {
+            queryData = Object.entries(params)
+                .filter(([key, val]) => key && key !== "0")
+                .map(([key, val]) => ({ key, value: val.value || "" }));
+        }
+
+        queryData.forEach(p => u.searchParams.set(p.key, p.value));
+
         return {
             raw: u.toString(),
             protocol: u.protocol.replace(":", ""),
             host: u.hostname.split("."),
             port: u.port ? u.port : undefined,
             path: u.pathname.split("/").filter(Boolean),
-            query: [...u.searchParams.entries()].map(([key, value]) => ({ key, value }))
+            query: queryData.map(p => ({ key: p.key, value: p.value, disabled: false }))
         };
     } catch {
         return { raw: rawUrl };
@@ -25,20 +51,50 @@ function parsePostmanUrl(rawUrl = "", params = {}) {
 }
 
 function mapHeaders(headers = {}) {
-    return Object.entries(headers).map(([key, item]) => ({
-        key,
-        value: item.value || "",
-        disabled: !item.enabled
-    }));
+    if (Array.isArray(headers)) {
+        return headers
+            .filter(h => h.key && h.key !== "0")
+            .map(h => ({ key: h.key, value: h.value || "", disabled: !h.enabled }));
+    }
+    
+    return Object.entries(headers)
+        .filter(([key, item]) => key && key !== "0")
+        .map(([key, item]) => ({
+            key: key,
+            value: item.value || "",
+            disabled: !item.enabled
+        }));
 }
 
 function mapBody(tab) {
-    if (!tab.body) return undefined;
-    return {
-        mode: "raw",
-        raw: tab.body,
-        options: { raw: { language: "json" } }
+
+    // 1. Ambil mode dari tab.body (default ke 'raw' jika tidak ada)
+    const mode = tab.body_mode || "raw";
+    
+    // 2. Siapkan struktur dasar body Postman
+    const postmanBody = {
+        // Memastikan mode tidak undefined, lalu normalisasi nama "form-data" menjadi "formdata"
+        mode: (mode === "form-data" || mode === "formdata") ? "formdata" : (mode || "raw")
     };
+    // 3. Proses berdasarkan mode
+    if (tab.body) {
+        postmanBody.raw = typeof tab.body === 'string' ? tab.body : (tab.body || "");
+        postmanBody.options = { raw: { language: "json" } };
+    } 
+    else if (tab.bodyParams.length > 0) {
+        // Ambil data array-nya (sesuaikan dengan nama properti di datamu)
+        // Kita gunakan .filter untuk membuang key "0" yang tidak valid
+        postmanBody[postmanBody.mode] = tab.bodyParams
+        .filter(item => item && item.key && item.key !== "0")
+        .map(item => ({
+            key: item.key,
+            value: item.value || "",
+            type: item.type || "text",
+            disabled: item.enabled === false
+        }));
+    }
+
+    return postmanBody;
 }
 
 function mapAuth(auth = {}) {
@@ -85,7 +141,14 @@ function mapRequest(tab) {
         header: mapHeaders(tab.headers),
         url: parsePostmanUrl(tab.url, tab.params)
     };
-    if (tab.body) request.body = mapBody(tab);
+    const hasBodyData = (tab.body && tab.body !== "null") || 
+    (tab.body_mode && tab.body_mode !== "none") || 
+    (Array.isArray(tab.bodyParams) && tab.bodyParams.length > 0);
+
+    if (hasBodyData) {
+    request.body = mapBody(tab);
+    }
+
     const auth = mapAuth(tab.auth);
     if (auth) request.auth = auth;
 

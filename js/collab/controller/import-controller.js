@@ -71,7 +71,7 @@ export const ImportController = {
             const file = e.target.files[0];
             const mode = modeSelect ? modeSelect.value : 'collection';
             
-            const activeWorkspaceId = window.STATE?.currentWorkspaceId; 
+            const activeWorkspaceId = window.COLLAB_STATE?.workspaceId; 
             const userId = window.USER_ID; 
 
             // Kita tidak perlu mengirim 'native' lagi karena sudah deteksi otomatis di handleImport
