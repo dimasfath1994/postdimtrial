@@ -228,39 +228,41 @@ export class RequestController {
 
 
     async render() {
-        // 1. Bersihkan HANYA container utama (root level)
-        // Gunakan selector yang spesifik agar tidak menyentuh container di dalam folder
-
-        // 2. Loop semua request dan filter hanya yang folder_id-nya null (root)
-        this.State.requests.forEach(req => {
-            // PERBAIKAN LOGIKA: Hanya render jika folder_id benar-benar null atau undefined
-            if (!req.folder_id) {
-                
-                // Cari container berdasarkan data-collection-id
-                const mainContainer = document.querySelector(`[data-collection-id="${req.collection_id}"] .requests-list`);
-                
-                if (mainContainer) {
-                    // Render item request ke root
+        // 1. Ambil semua koleksi utama
+        const collectionItems = document.querySelectorAll('.collection-item');
+    
+        collectionItems.forEach(colEl => {
+            const colId = colEl.dataset.collectionId;
+            
+            // Cari child-list UTAMA milik koleksi ini (yang ada di bawah collection-body)
+            // Kita gunakan querySelector untuk mencari child-list yang levelnya langsung di bawah koleksi
+            const rootChildList = colEl.querySelector(':scope > .child-list'); 
+    
+            if (rootChildList) {
+                // 2. Filter: Hanya ambil request yang milik koleksi ini DAN tidak punya folder_id
+                const rootRequests = this.State.requests.filter(r => 
+                    String(r.collection_id) === String(colId) && !r.folder_id
+                );
+    
+                // 3. Bersihkan HANYA request-item yang ada di level root ini
+                // Kita tidak menyentuh .folder-item atau .child-list di dalamnya!
+                const existingRequests = rootChildList.querySelectorAll(':scope > .request-item');
+                existingRequests.forEach(el => el.remove());
+    
+                // 4. Render request root
+                rootRequests.forEach(req => {
                     RequestUI.renderRequestItem(
                         req, 
-                        mainContainer, 
+                        rootChildList, 
                         this.handlers, 
                         (r) => this.tabCtrl.openTab(r)
                     );
-                } else {
-                    const rootContainers = document.querySelectorAll('.requests-list');
-                    rootContainers.forEach(container => {
-                        container.innerHTML = '';
-                    });
-                    console.warn(`[DEBUG] Container koleksi ${req.collection_id} tidak ditemukan.`);
-                }
+                });
             }
-            // Jika req.folder_id ada nilainya, biarkan FolderController yang bekerja!
         });
-        
-        console.log(`[DEBUG] Render selesai. Total request root: ${this.State.requests.filter(r => !r.folder_id).length}`);
+    
+        console.log(`[DEBUG] Root render selesai tanpa mengganggu folder.`);
     }
-
 
 
     async loadRequestsByCollection(collectionId, folderId = null) {
