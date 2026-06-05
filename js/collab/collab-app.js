@@ -37,6 +37,14 @@ import { ResponseHandler } from './services/response-handler.js';
 
 import "./controller/export-controller.js";
 
+import { ImportController } from "./controller/import-controller.js";
+
+ImportController.initUIListeners(() => {
+    console.log("Import selesai, UI akan di-refresh...");
+    // Panggil fungsi untuk refresh workspace atau collection list kamu di sini
+    location.reload(); 
+});
+
 
 function hydrateState(data) { console.log("Hydrate data", data); }
 
@@ -67,7 +75,7 @@ const State = {
     globals: []
  };
  window.COLLAB_STATE = State;
- 
+
 const dispatcher = new SocketDispatcher();
 
 
