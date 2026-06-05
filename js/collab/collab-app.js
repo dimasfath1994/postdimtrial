@@ -311,7 +311,6 @@ window.addEventListener("workspace:changed", (event) => {
 });
 
 async function loadCollections(id) { 
-    console.log("Load collections for", id);
     // Panggil method init yang kita buat di CollectionController
     await collectionCtrl.init(id); 
 }

@@ -171,10 +171,32 @@ function mapEnvironment(environment = {}) {
 }
 
 export function exportPostmanCollection(collection) {
-    // collection.folders adalah array yang sudah di-build oleh Aggregator
-    // collection.rootRequests adalah request tanpa folder
-    const folders = collection.folders || [];
+    const rawFolders = collection.folders || [];
     const rootRequests = collection.rootRequests || [];
+
+    // 1. Fungsi untuk mengubah array datar menjadi struktur pohon
+    const buildTree = (folders) => {
+        const map = {};
+        const roots = [];
+
+        // Inisialisasi map
+        folders.forEach(f => {
+            map[f.id] = { ...f, folders: [] }; 
+        });
+
+        // Hubungkan anak ke parent
+        folders.forEach(f => {
+            if (f.parent_id && map[f.parent_id]) {
+                map[f.parent_id].folders.push(map[f.id]);
+            } else {
+                roots.push(map[f.id]);
+            }
+        });
+        return roots;
+    };
+
+    // 2. Gunakan pohon hasil buildTree
+    const foldersTree = buildTree(rawFolders);
 
     const processFolders = (folderList) => {
         return folderList.map(folder => ({
@@ -187,7 +209,7 @@ export function exportPostmanCollection(collection) {
     };
 
     const finalItems = [
-        ...processFolders(folders),
+        ...processFolders(foldersTree),
         ...rootRequests.map(mapRequest)
     ];
 

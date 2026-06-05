@@ -3,7 +3,6 @@
  * Modul ini menangani perpindahan sub-tab di dalam panel "Body"
  */
 export function initBodyTabs(bodyParamCtrl, tabCtrl) {
-  console.log("initBodyTabs: Inisialisasi modul UI Body Tabs");
 
   // Helper untuk mengambil elemen live dari DOM setiap kali dibutuhkan
   const getElements = () => ({

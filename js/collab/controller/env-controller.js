@@ -10,7 +10,6 @@ export class EnvController {
 
 
     async init(container, workspaceId) {
-        console.log("DEBUG: EnvController init, workspaceId:", workspaceId);
         
         if (!workspaceId) {
             console.error("ERROR: workspaceId kosong di EnvController!");
@@ -23,7 +22,6 @@ export class EnvController {
         
         // Fetch data awal
         this.State.environments = await EnvService.getByWorkspace(workspaceId);
-        console.log("DEBUG: isi State.environments:", this.State.environments);
         if (this.container) { // Hanya render jika container tersedia
             this.render();
         }
