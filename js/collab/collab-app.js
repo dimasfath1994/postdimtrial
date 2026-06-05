@@ -39,11 +39,15 @@ import "./controller/export-controller.js";
 
 import { ImportController } from "./controller/import-controller.js";
 
+import { initRequestPicker } from './ui/request-picker.js';
+
 ImportController.initUIListeners(() => {
     console.log("Import selesai, UI akan di-refresh...");
     // Panggil fungsi untuk refresh workspace atau collection list kamu di sini
     location.reload(); 
 });
+
+
 
 
 function hydrateState(data) { console.log("Hydrate data", data); }
@@ -412,89 +416,89 @@ document.querySelectorAll('.response-tab').forEach(tab => {
 
 
 
+initRequestPicker(requestCtrl, State, folderCtrl);
 
+// // 1. Definisikan elemen modal dan trigger
+// const modal = document.getElementById('addRequestModal');
+// const addRequestBtn = document.getElementById('addRequest'); // Tombol di dropdown sidebar
+// const actionDropdown = document.getElementById('actionDropdown');
+// const cancelRequestBtn = document.getElementById('cancelRequest');
 
-// 1. Definisikan elemen modal dan trigger
-const modal = document.getElementById('addRequestModal');
-const addRequestBtn = document.getElementById('addRequest'); // Tombol di dropdown sidebar
-const actionDropdown = document.getElementById('actionDropdown');
-const cancelRequestBtn = document.getElementById('cancelRequest');
+// // 2. Fungsi Utama untuk menampilkan Modal
+// async function showRequestPicker() {
+//     modal.classList.remove('hidden');
+//     const container = document.getElementById('locationPicker');
+//     container.innerHTML = '<div class="picker-item">Loading...</div>';
 
-// 2. Fungsi Utama untuk menampilkan Modal
-async function showRequestPicker() {
-    modal.classList.remove('hidden');
-    const container = document.getElementById('locationPicker');
-    container.innerHTML = '<div class="picker-item">Loading...</div>';
+//     try {
+//         const collections = State.collections;
+//         let html = '';
 
-    try {
-        const collections = State.collections;
-        let html = '';
-
-        for (const col of collections) {
-            // 1. Tambahkan Header Koleksi
-            html += `
-                <div class="picker-item col-head" data-col-id="${col.id}">
-                    📂 <strong>${col.name}</strong>
-                </div>`;
+//         for (const col of collections) {
+//             // 1. Tambahkan Header Koleksi
+//             html += `
+//                 <div class="picker-item col-head" data-col-id="${col.id}">
+//                     📂 <strong>${col.name}</strong>
+//                 </div>`;
             
-            // 2. Ambil folder untuk koleksi ini
-            // Pastikan Anda memanggil API atau mengambil dari State yang sudah ter-filter
-            const folders = await folderCtrl.getFoldersByCollection(col.id); 
+//             // 2. Ambil folder untuk koleksi ini
+//             // Pastikan Anda memanggil API atau mengambil dari State yang sudah ter-filter
+//             const folders = await folderCtrl.getFoldersByCollection(col.id); 
             
-            // 3. Hanya loop dan render folder jika folder.length > 0
-            if (folders && folders.length > 0) {
-                folders.forEach(folder => {
-                    html += `
-                        <div class="picker-item folder-item" 
-                             data-col-id="${col.id}" 
-                             data-folder-id="${folder.id}" 
-                             style="padding-left: 30px;">
-                             📁 ${folder.name}
-                        </div>`;
-                });
-            }
-        }
+//             // 3. Hanya loop dan render folder jika folder.length > 0
+//             if (folders && folders.length > 0) {
+//                 folders.forEach(folder => {
+//                     html += `
+//                         <div class="picker-item folder-item" 
+//                              data-col-id="${col.id}" 
+//                              data-folder-id="${folder.id}" 
+//                              style="padding-left: 30px;">
+//                              📁 ${folder.name}
+//                         </div>`;
+//                 });
+//             }
+//         }
         
-        container.innerHTML = html;
+//         container.innerHTML = html;
 
-        // 4. Pasang Event Listener
-        container.querySelectorAll('.picker-item').forEach(item => {
-            item.onclick = async () => {
-                const colId = item.dataset.colId;
-                const folderId = item.dataset.folderId || null; 
-                console.log("DEBUG: Mengirim ke RequestController:", { colId, folderId });
+//         // 4. Pasang Event Listener
+//         container.querySelectorAll('.picker-item').forEach(item => {
+//             item.onclick = async () => {
+//                 const colId = item.dataset.colId;
+//                 const folderId = item.dataset.folderId || null; 
+//                 console.log("DEBUG: Mengirim ke RequestController:", { colId, folderId });
                 
-                // Eksekusi create request
-                await requestCtrl.createRequest({
-                    workspace_id: State.workspaceId,
-                    collection_id: colId,
-                    folder_id: folderId // Jika folderId null, request masuk ke root collection
-                });
+//                 // Eksekusi create request
+//                 await requestCtrl.createRequest({
+//                     workspace_id: State.workspaceId,
+//                     collection_id: colId,
+//                     folder_id: folderId // Jika folderId null, request masuk ke root collection
+//                 });
                 
-                modal.classList.add('hidden');
-            };
-        });
-    } catch (err) {
-        container.innerHTML = '<div class="picker-item">Error loading locations.</div>';
-        console.error("Gagal memuat picker:", err);
-    }
-}
+//                 modal.classList.add('hidden');
+//             };
+//         });
+//     } catch (err) {
+//         container.innerHTML = '<div class="picker-item">Error loading locations.</div>';
+//         console.error("Gagal memuat picker:", err);
+//     }
+// }
 
-// 3. Event Listener untuk tombol "Add Request" di dropdown
-if (addRequestBtn) {
-    addRequestBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        actionDropdown.style.display = 'none'; // Tutup dropdown
-        showRequestPicker(); // Panggil fungsi modal
-    });
-}
+// // 3. Event Listener untuk tombol "Add Request" di dropdown
+// if (addRequestBtn) {
+//     addRequestBtn.addEventListener('click', (e) => {
+//         e.stopPropagation();
+//         actionDropdown.style.display = 'none'; // Tutup dropdown
+//         showRequestPicker(); // Panggil fungsi modal
+//     });
+// }
 
-// 4. Event Listener untuk tombol Close/Cancel
-if (cancelRequestBtn) {
-    cancelRequestBtn.onclick = () => modal.classList.add('hidden');
-}
+// // 4. Event Listener untuk tombol Close/Cancel
+// if (cancelRequestBtn) {
+//     cancelRequestBtn.onclick = () => modal.classList.add('hidden');
+// }
 
-// Opsional: Tutup modal jika klik di luar area konten
-modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.add('hidden');
-});
+// // Opsional: Tutup modal jika klik di luar area konten
+// modal.addEventListener('click', (e) => {
+//     if (e.target === modal) modal.classList.add('hidden');
+// });
