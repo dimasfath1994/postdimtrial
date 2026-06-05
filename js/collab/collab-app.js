@@ -35,6 +35,8 @@ import { VariableResolver } from './services/variable-resolver.js';
 import { RequestDispatcher } from './services/request-dispatcher.js';
 import { ResponseHandler } from './services/response-handler.js';
 
+import "./controller/export-controller.js";
+
 
 function hydrateState(data) { console.log("Hydrate data", data); }
 
@@ -64,6 +66,8 @@ const State = {
     environments: [],
     globals: []
  };
+ window.COLLAB_STATE = State;
+ 
 const dispatcher = new SocketDispatcher();
 
 
