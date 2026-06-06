@@ -128,22 +128,28 @@ export class RequestController {
         }
 
         if (this.tabCtrl.activeTabId === requestId && this.tabCtrl.monacoCtrl) {
-            const newPre = updatedData.pre_script;
-            const newPost = updatedData.post_script;
+            const { pre_script, post_script } = updatedData;
         
-            // Hanya update jika nilainya berbeda dengan yang ada di editor
-            // Ini mencegah kursor reset ke atas kalau data sama
-            if (newPre !== undefined && this.tabCtrl.monacoCtrl.preEditor.getValue() !== newPre) {
-                this.tabCtrl.isApplyingData = true;
-                this.tabCtrl.monacoCtrl.preEditor.setValue(newPre);
-                this.tabCtrl.isApplyingData = false;
-            }
-            
-            if (newPost !== undefined && this.tabCtrl.monacoCtrl.postEditor.getValue() !== newPost) {
-                this.tabCtrl.isApplyingData = true;
-                this.tabCtrl.monacoCtrl.postEditor.setValue(newPost);
-                this.tabCtrl.isApplyingData = false;
-            }
+            // Helper untuk update editor dengan aman
+            const updateEditor = (editor, newValue) => {
+                // 1. Amankan nilai agar tidak null/undefined
+                const safeValue = newValue ?? ""; 
+                
+                // 2. Hanya update jika berbeda
+                if (editor.getValue() !== safeValue) {
+                    this.tabCtrl.isApplyingData = true;
+                    try {
+                        editor.setValue(safeValue);
+                    } catch (err) {
+                        console.error("Editor setValue failed:", err);
+                    } finally {
+                        this.tabCtrl.isApplyingData = false;
+                    }
+                }
+            };
+        
+            if (pre_script !== undefined) updateEditor(this.tabCtrl.monacoCtrl.preEditor, pre_script);
+            if (post_script !== undefined) updateEditor(this.tabCtrl.monacoCtrl.postEditor, post_script);
         }
 
         // 2. Update Tab Item

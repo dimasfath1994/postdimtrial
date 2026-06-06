@@ -1,7 +1,7 @@
 // js/collab/controller/tab-controller.js
 
 import { RequestUI } from "../ui/request-ui.js"; 
-import { ResponseHandler } from "../services/response-handler.js"; 
+import { DataBridge } from './bridge.js'; // Pastikan import ini
 
 export class TabController {
     constructor(ui, handlers, State, paramCtrl, headerCtrl) {
@@ -27,14 +27,25 @@ export class TabController {
     }
 
     openTab(request) {
-        // 1. Ambil data terbaru dari State (menggunakan getter yang kita buat tadi)
-        const freshData = (this.getRequestData && this.getRequestData(request.id)) || request;
+        const requestId = String(request.id || '');
+        const isDraft = requestId.startsWith('draft_');
+    
+        // 1. Ambil data terbaru
+        // Jika draft, kita ambil objek request yang dikirimkan.
+        // Jika perlu sinkronisasi data terbaru dari DraftStore, bisa pakai DataBridge.
+        let freshData;
+        if (isDraft) {
+            // Gabungkan request dengan data terbaru dari DraftStore jika ada update
+            const draftDetails = DataBridge.getAll(requestId);
+            freshData = { ...request, ...draftDetails };
+        } else {
+            freshData = (this.getRequestData && this.getRequestData(request.id)) || request;
+        }
         
         // 2. Cek apakah tab sudah ada
-        const tabItem = this.tabs.find(t => t.id === freshData.id);
+        const tabItem = this.tabs.find(t => String(t.id) === String(freshData.id));
         
         if (!tabItem) {
-            // Tab belum pernah dibuka, push ke array dan render
             this.tabs.push(freshData);
             RequestUI.renderTab(
                 freshData, 
@@ -43,10 +54,7 @@ export class TabController {
                 this.handlers
             );
         } else {
-            // Tab SUDAH ada, update data di array lokal agar tidak basi
             Object.assign(tabItem, freshData);
-            
-            // Opsional: Update juga textContent di DOM jika nama berubah
             const tabEl = document.querySelector(`.tab-item[data-id="${freshData.id}"]`);
             if (tabEl) {
                 tabEl.querySelector('.tab-name').textContent = freshData.name;
@@ -61,16 +69,34 @@ export class TabController {
     }
 
     async closeTab(id) {
-        const closedTabIndex = this.tabs.findIndex(t => t.id === id);
+        const sid = String(id);
+        const closedTabIndex = this.tabs.findIndex(t => String(t.id) === sid);
         
-        // 1. Opsional: Auto-save sebelum tutup
-        // await this.saveCurrentTabData(); 
+        if (closedTabIndex === -1) return;
+    
+        // 1. Logic "Save Changes?" (Postman Style)
+        if (sid.startsWith('draft_')) {
+            // Cek apakah ada data (bisa dikembangkan jadi pengecekan isDirty yang asli)
+            const draftData = DataBridge.getAll(sid);
+            const isDirty = draftData && (draftData.url !== '' || draftData.body !== null);
+            
+            if (isDirty) {
+                const userChoice = confirm("Do you want to save this request?");
+                if (userChoice) {
+                    // Panggil fungsi save yang sudah ada di sistemmu
+                    // Contoh: await this.saveDraftToDatabase(sid);
+                    console.log("Saving request...");
+                }
+            }
+            
+            // Cukup panggil DataBridge.cleanup untuk menghapus data di memori
+            DataBridge.cleanup(sid);
+        }
     
         // 2. Tentukan tab mana yang akan aktif selanjutnya
         let nextActiveId = null;
-        if (this.activeTabId === id) {
+        if (this.activeTabId === sid) {
             if (this.tabs.length > 1) {
-                // Jika ada tab lain, pilih tab di sebelah kiri, atau indeks yang sama
                 const newIndex = closedTabIndex === 0 ? 1 : closedTabIndex - 1;
                 nextActiveId = this.tabs[newIndex].id;
             }
@@ -79,13 +105,13 @@ export class TabController {
         }
     
         // 3. Hapus dari State & DOM
-        this.tabs = this.tabs.filter(t => t.id !== id);
-        const tabEl = document.querySelector(`.tab-item[data-id="${id}"]`);
+        this.tabs = this.tabs.filter(t => String(t.id) !== sid);
+        const tabEl = document.querySelector(`.tab-item[data-id="${sid}"]`);
         if (tabEl) tabEl.remove();
     
-        // 4. Pindah ke tab berikutnya atau bersihkan
+        // 4. Pindah ke tab berikutnya atau bersihkan editor
         if (nextActiveId) {
-            this.switchTab(nextActiveId); // Panggil fungsi switchTab kamu
+            this.switchTab(nextActiveId);
         } else {
             this.activeTabId = null;
             this.clearEditor();
@@ -130,49 +156,46 @@ export class TabController {
         };
     }
 
+
+
     switchTab(id) {
         this.activeTabId = id;
-        const request = this.tabs.find(t => t.id === id);
         
-        // 1. Update Highlight UI Tabs
+        // 1. Ambil data paling fresh dari DataBridge (Bridge akan memilih: Local vs State)
+        // Kita gunakan getAll agar semua properti (url, method, body, dll) terambil
+        const baseRequest = this.tabs.find(t => String(t.id) === String(id));
+        const freshData = { 
+            ...baseRequest, 
+            ...(DataBridge.getAll(id) || {}) 
+        };
+        
+        // 2. Update Highlight UI Tabs
         document.querySelectorAll('.tab-item').forEach(el => 
-            el.classList.toggle('active', el.dataset.id == id));
-            
-        // 2. Load data ke Editor Tengah
-        this.loadToEditor(request);
-
-        // --- TAMBAHAN: SWITCH RESPONSE ---
-        // let a = this.getResponseElements();
-        // console.log('ISI THIS TABS', a);
-        // if (request.lastResponse) {
-        //     // Jika tab ini pernah punya response, tampilkan kembali
-        //     ResponseHandler.render(request.lastResponse);
-        // } else {
-        //     // Jika belum pernah atau request baru, bersihkan response
-        //     this.resetResponse();
-        // }
+            el.classList.toggle('active', String(el.dataset.id) === String(id)));
+                
+        // 3. Load data ke Editor Tengah (Gunakan freshData agar editor tidak menampilkan data lama)
+        this.loadToEditor(freshData);
     
-        // 3. Render Panel Aktif TERLEBIH DAHULU (Pastikan DOM tersedia)
+        // 4. Render Panel Aktif
         const activePanel = document.querySelector('.tab-panel:not(.hidden)');
         const activePanelType = activePanel ? activePanel.getAttribute('data-panel') : 'params';
         this.refreshActivePanel(activePanelType);
     
-        // 4. Barulah SYNC UI Body Mode (Setelah semua panel dirender)
-        // Gunakan requestAnimationFrame untuk memastikan DOM benar-benar sudah siap
+        // 5. Sync UI Body Mode
         requestAnimationFrame(() => {
-            if (request && typeof window.syncBodyModeUI === 'function') {
-                let mode = request.body_mode || 'none';
+            if (freshData && typeof window.syncBodyModeUI === 'function') {
+                let mode = freshData.body_mode || 'none';
                 if (mode === 'formdata') mode = 'form-data'; 
                 
                 console.log("[DEBUG] Syncing mode setelah UI siap:", mode);
                 window.syncBodyModeUI(mode, true);
             }
         });
+    
         window.dispatchEvent(new CustomEvent('request-tab-switched', {
             detail: { requestId: id },
         }));
     }
-
     refreshActivePanel(panelType) {
         if (!this.activeTabId) return;
     

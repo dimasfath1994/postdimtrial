@@ -13,8 +13,6 @@ import { FolderController } from "./controller/folder-controller.js";
 import { RequestController } from "./controller/request-controller.js";
 import { TabController } from "./controller/tab-controller.js";
 
-import { TabDraftController } from "./controller/tab-draft-controller.js";
-
 import { TabManagerUI } from './ui/tabmanager-ui.js';
 import { RequestParamController } from './controller/request-param-controller.js';
 
@@ -117,11 +115,6 @@ tabCtrl.handlers = {
 //tabCtrl.handlers = requestCtrl.handlers;
 tabCtrl.setRequestGetter((id) => requestCtrl.getRequestById(id));
 
-
-const draftCtrl = new TabDraftController(State, {
-    onSave: (id) => requestCtrl.saveRequest(id),
-    // ... handler lainnya
-});
 
  //=============== INITIALIZE Monaco ================
  const monacoCtrl = new MonacoController(() => {
@@ -400,20 +393,24 @@ initRequestPicker(requestCtrl, State, folderCtrl);
 // Di dalam event listener button "newTab"
 document.getElementById('newTab').addEventListener('click', async () => {
     // 1. Tentukan target koleksi (aktif, atau koleksi pertama, atau null)
-   const collectionId = State.activeCollectionId || null;
-    
-    // Gunakan fungsi untuk membuat draft dan membukanya otomatis
-    // Kamu bisa buat method 'createDraft' di controller jika belum ada
-    const newDraft = {
-        id: `draft_${Date.now()}`,
-        name: "New Draft Request",
+    const targetCollectionId = State.activeCollectionId || (State.collections.length > 0 ? State.collections[0].id : null);
+
+    // 2. Buat objek "Draft" lokal (hanya di memori)
+    const newDraftRequest = {
+        id: 'draft_' + Date.now(), // ID unik sementara
+        name: "New Request",
         method: "GET",
         url: "",
-        collection_id: collectionId,
-        is_draft: true
+        collection_id: targetCollectionId,
+        folder_id: null,
+        is_draft: true // Flag penting untuk penanda
     };
-    
-    draftCtrl.openTab(newDraft);
+
+    // 3. Tambahkan ke state (agar tab bisa merujuk ke request ini)
+    //State.requests.push(newDraftRequest);
+
+    // 4. Buka Tab (langsung terbuka tanpa nunggu API)
+    tabCtrl.openTab(newDraftRequest);
 
     console.log("Draft request created locally with collection:", targetCollectionId);
 });
