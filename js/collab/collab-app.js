@@ -1,5 +1,4 @@
 //collab-app.js
-
 import { WorkspaceController } from "./controller/workspace-controller.js";
 import { initWorkspaceUI } from "./ui/workspace-ui.js";
 import { guardCollaborationAccess } from "./collab-auth-guard.js";
@@ -13,6 +12,8 @@ import { FolderController } from "./controller/folder-controller.js";
 
 import { RequestController } from "./controller/request-controller.js";
 import { TabController } from "./controller/tab-controller.js";
+
+import { TabDraftController } from "./controller/tab-draft-controller.js";
 
 import { TabManagerUI } from './ui/tabmanager-ui.js';
 import { RequestParamController } from './controller/request-param-controller.js';
@@ -41,9 +42,9 @@ import { ImportController } from "./controller/import-controller.js";
 
 import { initRequestPicker } from './ui/request-picker.js';
 
+
 ImportController.initUIListeners(() => {
     console.log("Import selesai, UI akan di-refresh...");
-    // Panggil fungsi untuk refresh workspace atau collection list kamu di sini
     location.reload(); 
 });
 
@@ -97,7 +98,7 @@ const headerCtrl = new RequestHeaderController(State);
 //=============== INITIALIZE TAB REQUEST ================
 const tabCtrl = new TabController(ui, null, State, paramCtrl, headerCtrl);
 
-initBodyTabs(bodyParamCtrl, tabCtrl)
+initBodyTabs(bodyParamCtrl, tabCtrl);
 
  //=============== INITIALIZE REQUEST ================
 const requestCtrl = new RequestController(ui, State, {
@@ -116,6 +117,11 @@ tabCtrl.handlers = {
 //tabCtrl.handlers = requestCtrl.handlers;
 tabCtrl.setRequestGetter((id) => requestCtrl.getRequestById(id));
 
+
+const draftCtrl = new TabDraftController(State, {
+    onSave: (id) => requestCtrl.saveRequest(id),
+    // ... handler lainnya
+});
 
  //=============== INITIALIZE Monaco ================
  const monacoCtrl = new MonacoController(() => {
@@ -319,8 +325,6 @@ async function loadCollections(id) {
     await collectionCtrl.init(id); 
 }
 
-
-
 TabManagerUI.init(tabCtrl);
 
 // --- Buka/Tutup Modal ---
@@ -340,9 +344,6 @@ closeEnvPanel.addEventListener('click', () => {
 });
 // --- Inisialisasi Handler Add (Hanya 1 baris) ---
 EnvUI.setupAddHandler({ envCtrl, globalCtrl }, State);
-
-
-
 
 
 document.getElementById('send').addEventListener('click', async () => {
@@ -394,111 +395,25 @@ document.querySelectorAll('.response-tab').forEach(tab => {
     });
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 initRequestPicker(requestCtrl, State, folderCtrl);
 
-// // 1. Definisikan elemen modal dan trigger
-// const modal = document.getElementById('addRequestModal');
-// const addRequestBtn = document.getElementById('addRequest'); // Tombol di dropdown sidebar
-// const actionDropdown = document.getElementById('actionDropdown');
-// const cancelRequestBtn = document.getElementById('cancelRequest');
+// Di dalam event listener button "newTab"
+document.getElementById('newTab').addEventListener('click', async () => {
+    // 1. Tentukan target koleksi (aktif, atau koleksi pertama, atau null)
+   const collectionId = State.activeCollectionId || null;
+    
+    // Gunakan fungsi untuk membuat draft dan membukanya otomatis
+    // Kamu bisa buat method 'createDraft' di controller jika belum ada
+    const newDraft = {
+        id: `draft_${Date.now()}`,
+        name: "New Draft Request",
+        method: "GET",
+        url: "",
+        collection_id: collectionId,
+        is_draft: true
+    };
+    
+    draftCtrl.openTab(newDraft);
 
-// // 2. Fungsi Utama untuk menampilkan Modal
-// async function showRequestPicker() {
-//     modal.classList.remove('hidden');
-//     const container = document.getElementById('locationPicker');
-//     container.innerHTML = '<div class="picker-item">Loading...</div>';
-
-//     try {
-//         const collections = State.collections;
-//         let html = '';
-
-//         for (const col of collections) {
-//             // 1. Tambahkan Header Koleksi
-//             html += `
-//                 <div class="picker-item col-head" data-col-id="${col.id}">
-//                     📂 <strong>${col.name}</strong>
-//                 </div>`;
-            
-//             // 2. Ambil folder untuk koleksi ini
-//             // Pastikan Anda memanggil API atau mengambil dari State yang sudah ter-filter
-//             const folders = await folderCtrl.getFoldersByCollection(col.id); 
-            
-//             // 3. Hanya loop dan render folder jika folder.length > 0
-//             if (folders && folders.length > 0) {
-//                 folders.forEach(folder => {
-//                     html += `
-//                         <div class="picker-item folder-item" 
-//                              data-col-id="${col.id}" 
-//                              data-folder-id="${folder.id}" 
-//                              style="padding-left: 30px;">
-//                              📁 ${folder.name}
-//                         </div>`;
-//                 });
-//             }
-//         }
-        
-//         container.innerHTML = html;
-
-//         // 4. Pasang Event Listener
-//         container.querySelectorAll('.picker-item').forEach(item => {
-//             item.onclick = async () => {
-//                 const colId = item.dataset.colId;
-//                 const folderId = item.dataset.folderId || null; 
-//                 console.log("DEBUG: Mengirim ke RequestController:", { colId, folderId });
-                
-//                 // Eksekusi create request
-//                 await requestCtrl.createRequest({
-//                     workspace_id: State.workspaceId,
-//                     collection_id: colId,
-//                     folder_id: folderId // Jika folderId null, request masuk ke root collection
-//                 });
-                
-//                 modal.classList.add('hidden');
-//             };
-//         });
-//     } catch (err) {
-//         container.innerHTML = '<div class="picker-item">Error loading locations.</div>';
-//         console.error("Gagal memuat picker:", err);
-//     }
-// }
-
-// // 3. Event Listener untuk tombol "Add Request" di dropdown
-// if (addRequestBtn) {
-//     addRequestBtn.addEventListener('click', (e) => {
-//         e.stopPropagation();
-//         actionDropdown.style.display = 'none'; // Tutup dropdown
-//         showRequestPicker(); // Panggil fungsi modal
-//     });
-// }
-
-// // 4. Event Listener untuk tombol Close/Cancel
-// if (cancelRequestBtn) {
-//     cancelRequestBtn.onclick = () => modal.classList.add('hidden');
-// }
-
-// // Opsional: Tutup modal jika klik di luar area konten
-// modal.addEventListener('click', (e) => {
-//     if (e.target === modal) modal.classList.add('hidden');
-// });
+    console.log("Draft request created locally with collection:", targetCollectionId);
+});
