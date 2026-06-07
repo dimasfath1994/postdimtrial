@@ -132,7 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       setTimeout(() => {
-        window.location.replace("/collaboration.html");
+        window.location.replace("collaboration.html");
       }, 50);
 
     } catch (err) {
