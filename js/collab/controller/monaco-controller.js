@@ -8,7 +8,7 @@ export class MonacoController {
 
     init() {
         // Pastikan path ini benar relatif terhadap lokasi file HTML Anda
-        require.config({ paths: { vs: "./../../../lib/js/monaco-editor/min/vs" } });
+        require.config({ paths: { vs: "./lib/js/monaco-editor/min/vs" } });
         
         require(["vs/editor/editor.main"], () => {
             this.preEditor = monaco.editor.create(document.getElementById("preEditor"), {
