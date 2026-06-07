@@ -38,6 +38,8 @@ import "./controller/export-controller.js";
 
 import { ImportController } from "./controller/import-controller.js";
 
+import { DataBridge } from './controller/bridge.js'; // Pastikan import ini
+
 import { initRequestPicker } from './ui/request-picker.js';
 
 
@@ -295,10 +297,18 @@ window.addEventListener('request-tab-switched', async (e) => {
     const requestId = e.detail.requestId;
     console.log(`[SYNC] Menyiapkan data untuk request: ${requestId}`);
 
-    // 1. Tentukan status isDraft di sini
     const isDraft = String(requestId).startsWith('draft_');
 
-    // 2. Jalankan semua sync dengan mengoper isDraft
+    // JIKA DRAFT, KITA SKIP SYNC DARI SERVER/CONTROLLER PUSAT
+    // Karena Draft harusnya hanya bergantung pada data lokal (DataBridge)
+    if (isDraft) {
+        console.log(`[SYNC] Request ${requestId} adalah Draft, melewati sync server.`);
+        let tes = DataBridge.getAll(requestId);
+        console.log(`[SYNC] Request draft`, tes);
+        return; // Keluar agar tidak mengganggu UI yang sudah di-load oleh TabController
+    }
+
+    // Jika bukan draft, silakan lanjut sinkronisasi seperti biasa
     await Promise.all([
         bodyParamCtrl ? bodyParamCtrl.syncWithRequest(requestId) : Promise.resolve(),
         headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox'), isDraft) : Promise.resolve(),
@@ -307,7 +317,6 @@ window.addEventListener('request-tab-switched', async (e) => {
     
     console.log(`[SYNC] Semua data untuk ${requestId} berhasil dimuat ke State.`);
 });
-
 
 // Listener dari Workspace Controller
 window.addEventListener("workspace:changed", (event) => {

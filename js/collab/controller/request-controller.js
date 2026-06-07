@@ -587,10 +587,26 @@ async duplicateRequest(req) {
         };
 
         if (this.isDraft(id)) {
-            console.log("[DEBUG] Menyimpan URL ke Draft:", payload.url);
-            DataBridge.save(id, 'details', payload, {});
-            this.bc.postMessage({ type: 'REQUEST_UPDATED', data: { ...payload, id } });
-            return; // Selesai di sini, tidak perlu panggil RequestService.update
+            console.log("[DEBUG] Menyimpan payload ke Draft:", payload);
+    
+    // 1. Buat objek flat (tanpa membungkusnya di dalam properti 'details')
+    const draftPayload = {
+        ...oldData,
+        ...payload, // Payload sudah berisi semua field terbaru (name, method, body, dll)
+        id: id      // Pastikan ID tetap ada
+    };
+
+    // 2. HAPUS properti 'details' jika ada, agar tidak terjadi nesting lagi
+    delete draftPayload.details; 
+
+    console.log("[DEBUG] Menyimpan payload flat ke DataBridge:", draftPayload);
+    
+    // 3. Simpan langsung objeknya, tanpa parameter 'details' tambahan
+    // Asumsi: DataBridge.save(id, data) adalah tanda tangan fungsi yang benar
+    DataBridge.save(id, draftPayload); 
+    
+    this.bc.postMessage({ type: 'REQUEST_UPDATED', data: draftPayload });
+    return;
         }
     
         try {

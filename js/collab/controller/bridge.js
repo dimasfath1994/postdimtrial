@@ -28,7 +28,7 @@ export const DataBridge = {
     // MENGAMBIL SEMUA DATA (Penting untuk inisialisasi Tab)
     getAll(id) {
         if (String(id).startsWith('draft_')) {
-            return DraftStore._ensure(id);
+            return DraftStore.getAll(id);
         }
         return null;
     },

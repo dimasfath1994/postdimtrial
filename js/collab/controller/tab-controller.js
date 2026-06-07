@@ -104,6 +104,7 @@ export class TabController {
     }
 
     clearEditor() {
+        console.trace("[DEBUG] Siapa yang manggil clearEditor?");
         // 1. Reset Method & URL (DOM biasa)
         document.getElementById("method").value = "GET";
         document.getElementById("url").value = "";
@@ -150,13 +151,43 @@ export class TabController {
             return;
         }
     
+        let finalData;
         // --- LOGIKA PENJEMPUTAN DATA TERBARU ---
         // Jika draft, kita merge dengan data dari DataBridge agar URL/body tidak hilang
         // Jika non-draft, kita tetap gunakan objek 'request' aslinya
         const rawData = DataBridge.getAll(id);
-        const finalData = isDraft 
-            ? { ...request, ...(rawData?.details || {}), headers: rawData?.headers, params: rawData?.params } 
+        if (isDraft) {
+            const rawData = DataBridge.getAll(id) || {};
+        
+            // FUNGSI HELPER: Mengambil nilai non-null dari dalam nested object
+            const getDeepValue = (key, obj) => {
+                if (obj[key] !== undefined && obj[key] !== null) return obj[key];
+                if (obj.details) return getDeepValue(key, obj.details);
+                return null;
+            };
+
+            // RATA-KAN DATA SECARA MANUAL
+            finalData = { 
+                ...request,
+                ...rawData,
+                body: getDeepValue('body', rawData) ?? request.body,
+                url: getDeepValue('url', rawData) ?? request.url,
+                method: getDeepValue('method', rawData) ?? request.method,
+                body_mode: getDeepValue('body_mode', rawData) ?? request.body_mode,
+                id: id
+            };
+        }
+        else{
+            finalData = isDraft 
+            ? { 
+                ...request,           // 1. Ambil properti dasar (id, etc)
+                ...rawData,           // 2. Ambil semua root rawData (url, method, name, dll)
+                ...(rawData?.details || {}), // 3. Timpa/lengkapi dengan isi details
+                headers: rawData?.headers || request.headers, // 4. Prioritaskan header draft
+                params: rawData?.params || request.params     // 5. Prioritaskan params draft
+            } 
             : request;
+        }
         // ---------------------------------------
         
         // 2. Update Highlight UI Tabs
@@ -243,12 +274,16 @@ export class TabController {
     }
 
     loadToEditor(request) {
-        if (!request) {
-            console.warn("TabController: Request data undefined, skipping editor load.");
-            this.clearEditor(); 
+        // if (!request) {
+        //     console.warn("TabController: Request data undefined, skipping editor load.");
+        //     this.clearEditor(); 
+        //     return;
+        // }
+        if (String(request.id) !== String(this.activeTabId)) {
+            console.log(`[GUARD] loadToEditor menolak render: ${request.id} bukan tab aktif (${this.activeTabId})`);
             return;
         }
-        // 1. Set flag agar attachAutoSave tahu kita sedang loading data, bukan user yang mengetik
+    
         this.isApplyingData = true;
     
         const fields = ['method', 'url', 'body', 'authType', 'authValue'];
@@ -256,29 +291,33 @@ export class TabController {
         fields.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
-                // Karena di request object fieldnya adalah auth_type, 
-                // kita harus map ke ID elemen authType (dan sebaliknya)
-                if (id === 'authType') el.value = request.auth_type || 'none';
-                else if (id === 'authValue') el.value = request.auth_value || '';
-                else if (id === 'body') el.value = request.body || '';
-                else if (id === 'method') el.value = request.method || 'GET';
-                //else if (id === 'preEditor' || "postEditor") this.scriptCtrl.setScripts(request.pre_script, request.post_script);
-                else el.value = request[id] || "";
+                let val = "";
                 
-                // Pasang listener auto-save
+                // Logika mapping dengan proteksi agar tidak menimpa dengan null
+                if (id === 'authType') val = request.auth_type ?? 'none';
+                else if (id === 'authValue') val = request.auth_value ?? '';
+                else if (id === 'body') val = request.body ?? '';
+                else if (id === 'method') val = request.method ?? 'GET';
+                else val = request[id] ?? "";
+    
+                // PERUBAHAN: Hanya update jika value yang diterima valid atau memang ingin di-clear
+                // Jika request.body null (dari proses sync), kita pertahankan nilai yang ada di DOM 
+                // kecuali jika kita memang sedang melakukan switch tab (yang biasanya val-nya ada)
+                if (val !== null && val !== undefined) {
+                    el.value = val;
+                }
+                
                 if (!el.dataset.autoSaveBound) {
                     this.attachAutoSave(el);
                     el.dataset.autoSaveBound = "true";
                 }
             }
-
         });
-        // 2. Set nilai Monaco secara terpisah melalui controller
+    
         if (this.monacoCtrl) {
             this.monacoCtrl.setValues(request.pre_script, request.post_script);
         }
     
-        // 2. Beri waktu sedikit sebelum mengizinkan auto-save lagi
         setTimeout(() => {
             this.isApplyingData = false;
         }, 100); 

@@ -18,6 +18,11 @@ export const DraftStore = {
         return store[id];
     },
 
+    getAll(id) {
+        const store = JSON.parse(sessionStorage.getItem('draft_store') || '{}');
+        return store[id] || null; 
+    },
+
     get(id, key) {
         return this._ensure(id)[key];
     },
