@@ -153,8 +153,9 @@ export class TabController {
         // --- LOGIKA PENJEMPUTAN DATA TERBARU ---
         // Jika draft, kita merge dengan data dari DataBridge agar URL/body tidak hilang
         // Jika non-draft, kita tetap gunakan objek 'request' aslinya
+        const rawData = DataBridge.getAll(id);
         const finalData = isDraft 
-            ? { ...request, ...DataBridge.getAll(id) } 
+            ? { ...request, ...(rawData?.details || {}), headers: rawData?.headers, params: rawData?.params } 
             : request;
         // ---------------------------------------
         
@@ -260,6 +261,7 @@ export class TabController {
                 if (id === 'authType') el.value = request.auth_type || 'none';
                 else if (id === 'authValue') el.value = request.auth_value || '';
                 else if (id === 'body') el.value = request.body || '';
+                else if (id === 'method') el.value = request.method || 'GET';
                 //else if (id === 'preEditor' || "postEditor") this.scriptCtrl.setScripts(request.pre_script, request.post_script);
                 else el.value = request[id] || "";
                 

@@ -106,6 +106,10 @@ export class RequestController {
                 if (methodEl) {
                     methodEl.className = `method-badge ${updatedData.method}`;
                     methodEl.textContent = updatedData.method;
+
+
+                    const methEl = document.getElementById('method');
+                    methEl.value = updatedData.method;
                 }
             }
 
