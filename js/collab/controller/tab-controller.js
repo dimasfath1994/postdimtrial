@@ -2,6 +2,7 @@
 
 import { RequestUI } from "../ui/request-ui.js"; 
 import { DataBridge } from './bridge.js'; // Pastikan import ini
+import { showDraftPicker } from '../ui/request-picker-draft.js';
 
 export class TabController {
     constructor(ui, handlers, State, paramCtrl, headerCtrl) {
@@ -70,6 +71,23 @@ export class TabController {
     }
 
     async closeTab(id) {
+        const isDraft = String(id).startsWith('draft_');
+
+        if (isDraft) {
+            const wantsToSave = confirm("You have unsaved changes in this draft. Do you want to save it before closing?");
+            
+            if (wantsToSave) {
+                console.log("[TabController] Membuka picker untuk:", id);
+                // Kita buka picker-nya
+                showDraftPicker(id);
+                // KITA HARUS BERHENTI DI SINI! 
+                // Jangan tutup tab-nya sekarang, karena user sedang memilih lokasi di modal.
+                return; 
+            }
+            
+            // Jika user tidak mau save, kita hapus draft-nya secara lokal
+            DataBridge.cleanup(id);
+        }
         const closedTabIndex = this.tabs.findIndex(t => t.id === id);
         
         // 1. Opsional: Auto-save sebelum tutup
@@ -162,13 +180,14 @@ export class TabController {
                 url: rawData.url || request.url || "",
                 body: rawData.body || "",
                 body_mode: rawData.body_mode || (rawData.details?.body_mode) || request.body_mode || "none",
-                auth_type: rawData.auth_type || "No Auth",
+                auth_type: rawData.auth_type || "none",
                 auth_value: rawData.auth_value || "",
                 pre_script: rawData.pre_script || "",
                 post_script: rawData.post_script || "",
                 headers: rawData.headers || request.headers || [],
                 params: rawData.params || request.params || []
             };
+
             console.log("[DEBUG] Data hasil rawData.body:", rawData.body);
             console.log("[DEBUG] Data hasil rawData.details?.body:", rawData.details?.body);
             console.log("[DEBUG] Data hasil request.body:", request.body);

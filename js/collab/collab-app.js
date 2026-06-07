@@ -25,6 +25,8 @@ import { initBodyTabs } from './ui/body-tabs.js';
 import { EnvController } from "./controller/env-controller.js";
 import { GlobalController } from "./controller/global-controller.js";
 
+import { DraftServerController } from "./controller/draft-server-controller.js";
+
 import { EnvUI } from './ui/env-ui.js';
 
 import { PMSandbox } from './services/pm-sandbox.js';
@@ -41,6 +43,8 @@ import { ImportController } from "./controller/import-controller.js";
 import { DataBridge } from './controller/bridge.js'; // Pastikan import ini
 
 import { initRequestPicker } from './ui/request-picker.js';
+
+import { initDraftPicker } from './ui/request-picker-draft.js';
 
 
 ImportController.initUIListeners(() => {
@@ -196,6 +200,16 @@ setupCollectionActions(collectionCtrl);
 
 
 window.tabCtrl = tabCtrl;
+//=============== INITIALIZE DRAFT SERVER CONTROLLER ================
+const draftServerCtrl = new DraftServerController(State, {
+    requestController: requestCtrl,
+    requestParamController: paramCtrl,
+    requestHeaderController: headerCtrl,
+    requestBodyParamController: bodyParamCtrl
+});
+
+// Penting: Daftarkan ke window agar bisa diakses jika dibutuhkan
+window.draftServerCtrl = draftServerCtrl;
 
 // =============== INITIALIZE ENV & GLOBAL CONTROLLER ================
 const envCtrl = new EnvController(State);
@@ -402,6 +416,8 @@ document.querySelectorAll('.response-tab').forEach(tab => {
 });
 
 initRequestPicker(requestCtrl, State, folderCtrl);
+
+initDraftPicker(draftServerCtrl, State, folderCtrl, State.workspaceId);
 
 // Di dalam event listener button "newTab"
 document.getElementById('newTab').addEventListener('click', async () => {

@@ -449,6 +449,46 @@ export class RequestController {
     }
 }
 
+async createRequestToServer(context) {
+    try {
+        const newReq = await RequestService.create({
+            ...context
+        });
+
+        // 1. Update State lokal
+        console.log("apa isi is context folder_id?: ", context.folder_id);
+        // 2. SMART UI UPDATE:
+        if (context.folder_id) {
+            // Jika ada folder_id, minta FolderController render ulang folder tsb
+            if (window.folderCtrl) {
+               // if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+                const folderEl = document.querySelector(`.folder-item[data-id="${context.folder_id}"]`);
+                if (folderEl) window.folderCtrl.renderFolder(context.folder_id, folderEl);
+               
+            }
+        } else {
+            // Jika folder_id null/undefined, kita di Root (di luar folder)
+            // Cukup panggil render() milik RequestController
+            const isExists = this.State.requests.find(r => r.id === newReq.id);
+            if (!isExists) {
+                this.State.requests.push(newReq);
+                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+            }
+    
+            //this.render(); 
+        }
+
+        // 3. Broadcast & Tab
+        this.bc.postMessage({ type: 'REQUEST_CREATED', data: newReq });
+        if (this.tabCtrl) this.tabCtrl.openTab(newReq);
+            
+        return newReq;
+    } catch (err) {
+        console.error("Gagal buat request:", err);
+        alert("Gagal membuat request");
+    }
+}
+
 
 // Di dalam RequestController class
 

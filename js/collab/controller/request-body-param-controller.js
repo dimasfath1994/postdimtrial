@@ -2,6 +2,7 @@
 
 import { RequestBodyParamService } from "../request-body-param-service.js";
 import { RequestBodyParamUI } from "../ui/request-body-param-ui.js";
+import { DataBridge } from './bridge.js'; // Pastikan import ini
 
 
 export class RequestBodyParamController {
@@ -21,11 +22,8 @@ export class RequestBodyParamController {
      * Inisialisasi controller untuk request tertentu
      */
     async init(requestId, container, mode = 'formdata') {
-        // Pastikan container yang diterima valid
         if (!container) return; 
         
-        // Jangan hapus container jika requestId belum berubah 
-        // dan container masih sama (untuk menghindari flicker)
         if (this.currentRequestId === requestId && this.currentMode === mode && this.container === container) {
             return;
         }
@@ -34,10 +32,22 @@ export class RequestBodyParamController {
         this.currentRequestId = requestId;
         this.currentMode = mode;
         
-        // Hanya bersihkan jika benar-benar ganti request/mode
         this.container.innerHTML = ''; 
         
-        const allParams = await RequestBodyParamService.getByRequest(this.currentRequestId);
+        // --- GATEKEEPER START ---
+        let allParams = [];
+        const isDraft = String(requestId).startsWith('draft_');
+    
+        if (isDraft) {
+            // Ambil dari DataBridge (lokal), bukan Service (API)
+            const draftData = DataBridge.getAll(requestId);
+            allParams = draftData?.bodyParams || []; 
+        } else {
+            // Tetap gunakan Service as-is untuk request biasa
+            allParams = await RequestBodyParamService.getByRequest(this.currentRequestId);
+        }
+        // --- GATEKEEPER END ---
+        
         this.State.bodyParams = allParams.filter(p => p.mode === mode); 
         
         this.render();
@@ -87,10 +97,20 @@ export class RequestBodyParamController {
     }
 
     async syncParamUpdate(id, data) {
-        const updated = await RequestBodyParamService.update(id, { 
-            ...data, 
-            request_id: this.currentRequestId 
-        });
+        const isDraft = String(this.currentRequestId).startsWith('draft_');
+        let updated;
+    
+        if (isDraft) {
+            // Gunakan fungsi DataBridge yang sudah kita buat sebelumnya
+            DataBridge.updateArray(this.currentRequestId, 'bodyParams', id, data);
+            updated = { id, ...data }; // Simulasi objek yang terupdate
+        } else {
+            // Logic existing
+            updated = await RequestBodyParamService.update(id, { 
+                ...data, 
+                request_id: this.currentRequestId 
+            });
+        }
     
         if (updated) {
             this.bc.postMessage({ type: 'BODY_PARAM_UPDATED', data: updated });
@@ -100,11 +120,20 @@ export class RequestBodyParamController {
     }
 
     async syncParamDelete(id, file_path = null) {
-        const success = await RequestBodyParamService.delete(id);
+        const isDraft = String(this.currentRequestId).startsWith('draft_');
+        let success = false;
+    
+        if (isDraft) {
+            // Hapus dari DataBridge
+            DataBridge.removeFromArray(this.currentRequestId, 'bodyParams', id);
+            success = true;
+        } else {
+            // Logic existing
+            success = await RequestBodyParamService.delete(id);
+            if (success && file_path) await RequestBodyParamService.deleteFile(file_path);
+        }
+    
         if (success) {
-            if (file_path) {
-                await RequestBodyParamService.deleteFile(file_path);
-            }
             this.bc.postMessage({ type: 'BODY_PARAM_DELETED', param_id: id });
             this.State.bodyParams = this.State.bodyParams.filter(p => p.id !== id);
             RequestBodyParamUI.removeParamRow(id);
@@ -112,11 +141,21 @@ export class RequestBodyParamController {
     }
 
     async addParam(type = 'text', mode) {
-        const newParam = await RequestBodyParamService.create({ 
-            request_id: this.currentRequestId,
-            key: '', value: '', type, mode, enabled: true 
-        });
-        
+        const isDraft = String(this.currentRequestId).startsWith('draft_');
+        let newParam;
+    
+        if (isDraft) {
+            // Buat objek dummy (DataBridge.push akan auto-generate ID)
+            newParam = { request_id: this.currentRequestId, key: '', value: '', type, mode, enabled: true };
+            DataBridge.push(this.currentRequestId, 'bodyParams', newParam);
+        } else {
+            // Logic existing
+            newParam = await RequestBodyParamService.create({ 
+                request_id: this.currentRequestId,
+                key: '', value: '', type, mode, enabled: true 
+            });
+        }
+    
         if (newParam) {
             this.State.bodyParams.push(newParam);
             this.bc.postMessage({ type: 'BODY_PARAM_CREATED', data: newParam });
@@ -124,58 +163,88 @@ export class RequestBodyParamController {
         }
     }
     syncWithRequest(requestId) {
-    this.currentRequestId = requestId;
+        this.currentRequestId = requestId;
+        const isDraft = String(requestId).startsWith('draft_');
     
-    // Proteksi: Pastikan requestController ada sebelum mengakses state-nya
-    const req = window.requestController?.State?.requests?.find(r => r.id === requestId);
-    
-    // Jika req tidak ketemu, kita pakai 'none' atau 'formdata' secara aman
-    this.currentMode = req?.body_mode || 'none'; 
-    
-    // Pastikan container yang dicari sesuai dengan mode
-    const container = this.currentMode === 'formdata' 
-        ? document.getElementById('formDataList') 
-        : (this.currentMode === 'urlencoded' ? document.getElementById('urlencodedList') : null);
+        // 1. Mencari data mode: Prioritas utama adalah DataBridge jika draft
+        let req;
+        if (isDraft) {
+            // Ambil data langsung dari sumber kebenaran draft
+            req = DataBridge.getAll(requestId);
+        } else {
+            // Tetap gunakan alur existing untuk request server
+            req = window.requestController?.State?.requests?.find(r => r.id === requestId);
+        }
         
-    // Hanya panggil init jika container ditemukan
-    if (container) {
-        this.init(requestId, container, this.currentMode);
-    } else {
-        // Jika mode 'none' atau container belum tersedia, cukup update dropdown
-        const selectEl = document.getElementById('bodyModeSelect');
-        if (selectEl) selectEl.value = this.currentMode;
+        // 2. Set mode dengan aman
+        this.currentMode = req?.body_mode || 'none'; 
+        
+        // 3. Pastikan container yang dicari sesuai dengan mode
+        const container = this.currentMode === 'formdata' 
+            ? document.getElementById('formDataList') 
+            : (this.currentMode === 'urlencoded' ? document.getElementById('urlencodedList') : null);
+            
+        // 4. Hanya panggil init jika container ditemukan
+        if (container) {
+            this.init(requestId, container, this.currentMode);
+        } else {
+            // Jika mode 'none' atau container belum tersedia, cukup update dropdown
+            const selectEl = document.getElementById('bodyModeSelect');
+            if (selectEl) selectEl.value = this.currentMode;
+        }
     }
-}
 
-async uploadFile(file, paramId = null) {
-    // Tambahkan loading state jika perlu di UI
-    const result = await RequestBodyParamService.uploadFile(file);
-    if (result) {
+    async uploadFile(file, paramId = null) {
+        const isDraft = String(this.currentRequestId).startsWith('draft_');
+
+        // 1. Jika Draft, baca file lokal sebagai Base64
+        let fileMetadata = { key: file.name, value: '', file_name: file.name, type: 'file' };
+        
+        if (isDraft) {
+            fileMetadata.value = await this.fileToBase64(file); // Konversi ke Base64
+        } else {
+            // Jika Normal, tetap upload ke server
+            const result = await RequestBodyParamService.uploadFile(file);
+            if (!result) return;
+            fileMetadata.value = result.file_path;
+            fileMetadata.file_name = result.file_name;
+        }
+
         const payload = {
             request_id: this.currentRequestId,
-            key: file.name,
-            value: result.file_path, // Path dari server
-            file_name: result.file_name,
-            type: 'file', // Tipe ini penting untuk dibaca di RequestFormatter
+            ...fileMetadata,
             mode: this.currentMode,
             enabled: true
         };
 
+        // 2. Lanjutkan dengan logika sinkronisasi (update/add)
         if (paramId) {
             await this.syncParamUpdate(paramId, payload);
-            // Tambahan: Update lokal agar file_name muncul instan
-            const idx = this.State.bodyParams.findIndex(p => p.id === paramId);
-            if (idx !== -1) this.State.bodyParams[idx] = { ...this.State.bodyParams[idx], ...payload };
         } else {
-            const newParam = await RequestBodyParamService.create(payload);
-            if (newParam) {
-                this.State.bodyParams.push(newParam);
-                this.bc.postMessage({ type: 'BODY_PARAM_CREATED', data: newParam });
+            if (isDraft) {
+                DataBridge.push(this.currentRequestId, 'bodyParams', payload);
+                this.State.bodyParams.push(payload);
+                this.bc.postMessage({ type: 'BODY_PARAM_CREATED', data: payload });
+            } else {
+                const newParam = await RequestBodyParamService.create(payload);
+                if (newParam) {
+                    this.State.bodyParams.push(newParam);
+                    this.bc.postMessage({ type: 'BODY_PARAM_CREATED', data: newParam });
+                }
             }
         }
         this.render();
     }
-}
+
+
+    fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+    }
 
     setupBroadcastListener() {
         this.bc.onmessage = (event) => {
