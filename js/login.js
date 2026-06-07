@@ -79,7 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // ================= SAFE REDIRECT =================
       setTimeout(() => {
-        window.location.replace("/collaboration.html");
+        window.location.replace("collaboration.html");
       }, 50);
 
     } catch (err) {
