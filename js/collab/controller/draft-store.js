@@ -1,12 +1,11 @@
-/**
- * draft-store.js
- */
+// draft-store.js
 export const DraftStore = {
-    data: {},
-
+    // Kita gunakan sessionStorage agar data hilang jika browser ditutup, 
+    // tapi aman saat pindah tab atau refresh.
     _ensure(id) {
-        if (!this.data[id]) {
-            this.data[id] = { 
+        let store = JSON.parse(sessionStorage.getItem('draft_store') || '{}');
+        if (!store[id]) {
+            store[id] = { 
                 url: '', 
                 method: 'GET', 
                 params: [], 
@@ -14,8 +13,9 @@ export const DraftStore = {
                 body: null, 
                 name: 'New Request' 
             };
+            sessionStorage.setItem('draft_store', JSON.stringify(store));
         }
-        return this.data[id];
+        return store[id];
     },
 
     get(id, key) {
@@ -23,12 +23,15 @@ export const DraftStore = {
     },
 
     set(id, key, value) {
-        this._ensure(id)[key] = value;
+        let store = JSON.parse(sessionStorage.getItem('draft_store') || '{}');
+        if (!store[id]) store[id] = {};
+        store[id][key] = value;
+        sessionStorage.setItem('draft_store', JSON.stringify(store));
     },
 
     remove(id) {
-        if (this.data[id]) {
-            delete this.data[id];
-        }
+        let store = JSON.parse(sessionStorage.getItem('draft_store') || '{}');
+        delete store[id];
+        sessionStorage.setItem('draft_store', JSON.stringify(store));
     }
 };

@@ -193,6 +193,7 @@ const collectionCtrl = new CollectionController(ui, State, {
 setupCollectionActions(collectionCtrl);
 
 
+window.tabCtrl = tabCtrl;
 
 // =============== INITIALIZE ENV & GLOBAL CONTROLLER ================
 const envCtrl = new EnvController(State);
@@ -294,11 +295,14 @@ window.addEventListener('request-tab-switched', async (e) => {
     const requestId = e.detail.requestId;
     console.log(`[SYNC] Menyiapkan data untuk request: ${requestId}`);
 
-    // Jalankan semua sync secara paralel agar tidak terasa lambat
+    // 1. Tentukan status isDraft di sini
+    const isDraft = String(requestId).startsWith('draft_');
+
+    // 2. Jalankan semua sync dengan mengoper isDraft
     await Promise.all([
         bodyParamCtrl ? bodyParamCtrl.syncWithRequest(requestId) : Promise.resolve(),
-        headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox')) : Promise.resolve(),
-        paramCtrl ? paramCtrl.init(requestId, document.getElementById('paramsBox')) : Promise.resolve()
+        headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox'), isDraft) : Promise.resolve(),
+        paramCtrl ? paramCtrl.init(requestId, document.getElementById('paramsBox'), isDraft) : Promise.resolve()
     ]);
     
     console.log(`[SYNC] Semua data untuk ${requestId} berhasil dimuat ke State.`);

@@ -1024,3 +1024,12 @@ input:focus {
   outline: none;
 
 }
+
+.request-item.draft-item {
+  background-color: #fdfdfd;
+  border-left: 3px solid #ffcc00; /* Warna kuning untuk status draft */
+}
+
+.tab-item.tab-draft {
+  border-bottom: 2px solid #ffcc00;
+}

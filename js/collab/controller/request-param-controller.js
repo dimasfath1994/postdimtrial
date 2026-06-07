@@ -2,6 +2,7 @@
 
 import { RequestParamService } from "../request-param-service.js";
 import { RequestParamUI } from "../ui/request-param-ui.js";
+import { DataBridge } from './bridge.js'; // Pastikan import ini
 
 export class RequestParamController {
     constructor(State) {
@@ -13,7 +14,21 @@ export class RequestParamController {
     /**
      * Inisialisasi: Render parameter untuk request yang sedang aktif
      */
-    async init(requestId, container) {
+    async init(requestId, container, isDraft) {
+        if (!container) return;
+
+        // --- GUARD MUTLAK: HARUS DI BARIS PERTAMA ---
+        // Jangan percaya isDraft yang dikirim dari luar, cek langsung ID-nya
+        const forceIsDraft = String(requestId).startsWith('draft_');
+
+        if (forceIsDraft) {
+            console.log(`[GUARD] Mode Draft aktif untuk ${requestId}. Membatalkan API call.`);
+            this.container = container; 
+            // Ambil dari DataBridge (lokal), bukan dari Service (API)
+            const localParams = DataBridge.load(requestId, 'params') || [];
+            this.renderParams(localParams);
+            return; // PENTING: Return agar kode di bawah tidak tereksekusi!
+        }
         console.log("DEBUG: RequestHeaderController.init dipanggil untuk reqId:", requestId);
         this.currentRequestId = requestId;
         this.container = container;
@@ -38,6 +53,25 @@ export class RequestParamController {
         console.log("DEBUG: renderHeaders selesai dijalankan.");
     }
 
+        // Helper untuk render agar konsisten
+    renderParams(params) {
+        RequestParamUI.renderParams(params, this.container, {
+            onUpdate: (id, data) => this.syncParamUpdate(id, data),
+            onDelete: (id) => this.syncParamDelete(id),
+            onAdd: () => this.addParam(),
+            onBulkUpdate: (text) => this.syncBulkUpdate(text)
+        });
+    }
+
+    // Tambahkan helper agar tidak double code
+    renderHeaders(headers) {
+        RequestHeaderUI.renderHeaders(headers, this.container, {
+            onUpdate: (id, data) => this.syncParamUpdate(id, data),
+            onDelete: (id) => this.syncParamDelete(id),
+            onAdd: () => this.addHeader(),
+            onBulkUpdate: (text) => this.syncBulkUpdate(text)
+        });
+    }
     /**
      * Handle Event dari Socket (Server)
      */
@@ -105,6 +139,14 @@ export class RequestParamController {
      * Sinkronisasi ke Server & Broadcast ke tab lain
      */
     async syncParamUpdate(id, data) {
+        const activeId = window.tabCtrl.activeTabId;
+
+    // 1. Jika ini DRAFT, update ke DataBridge saja, jangan panggil API
+        if (String(activeId).startsWith('draft_')) {
+            console.log(`[SYNC] Updating draft param ${id} in DataBridge`);
+            DataBridge.updateArray(activeId, 'params', id, data);
+            return; 
+        }
         // 1. Update ke Database
         const updated = await RequestParamService.update(id, { 
             ...data, 
@@ -132,6 +174,12 @@ export class RequestParamController {
     }
 
     async syncParamDelete(id) {
+        const activeId = window.tabCtrl.activeTabId;
+        if (String(activeId).startsWith('draft_')) {
+            DataBridge.removeFromArray(activeId, 'params', id);
+            RequestParamUI.removeParamRow(id);
+            return;
+        }
         const success = await RequestParamService.delete(id);
         if (success) {
             this.State.params = this.State.params.filter(p => Number(p.id) !== Number(id));
@@ -145,6 +193,15 @@ export class RequestParamController {
     }
 
     async addParam() {
+        const activeId = window.tabCtrl.activeTabId;
+        console.log("active id", activeId);
+        // Sekarang lanjut ke logika kamu
+        if (String(activeId).startsWith('draft_')) {
+            const newItem = { id: activeId, key: '', value: '', enabled: true };
+            DataBridge.push(activeId, 'params', newItem);
+            this.renderParams(DataBridge.load(activeId, 'params'));
+            return;
+        }
         // 1. Simpan ke Database
         const newParam = await RequestParamService.create({ 
             request_id: this.currentRequestId,
@@ -165,6 +222,27 @@ export class RequestParamController {
     }
 
     async syncBulkUpdate(text) {
+        const activeId = window.tabCtrl.activeTabId;
+        if (String(activeId).startsWith('draft_')) {
+            const lines = text.split('\n');
+            
+            // Cukup petakan ke objek, biarkan DataBridge yang memberi ID
+            const items = lines.map(line => {
+                const parts = line.split(':');
+                return {
+                    key: parts[0]?.trim() || '',
+                    value: parts.slice(1).join(':').trim() || '',
+                    enabled: true
+                };
+            }).filter(item => item.key !== '');
+    
+            // Simpan via DataBridge
+            const savedItems = DataBridge.bulkCreate(activeId, 'headers', items);
+            
+            // Render
+            this.renderHeaders(savedItems);
+            return;
+        }
         const lines = text.split('\n');
         
         // Kita buat array params baru dengan mempertahankan data lama dari State

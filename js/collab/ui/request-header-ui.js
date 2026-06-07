@@ -2,6 +2,10 @@
 
 export class RequestHeaderUI {
     static renderHeaders(headers, container, handlers) {
+        if (!container) {
+            console.error("RequestHeaderUI: Container element is missing (null/undefined)!");
+            return; 
+        }
         container.innerHTML = `
             <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-size: 13px; font-weight: bold; color: #666;">Request Headers</span>

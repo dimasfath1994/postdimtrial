@@ -2,6 +2,7 @@
 
 import { RequestHeaderService } from "../request-header-service.js";
 import { RequestHeaderUI } from "../ui/request-header-ui.js";
+import { DataBridge } from './bridge.js'; // Pastikan import ini
 
 export class RequestHeaderController {
     constructor(State) {
@@ -10,10 +11,27 @@ export class RequestHeaderController {
         this.setupBroadcastListener();
     }
 
+    // --- Tambahkan Getter ini ---
+    get activeId() {
+        return window.tabCtrl?.activeTabId || this.currentRequestId;
+    }
+
     /**
      * Inisialisasi: Render header untuk request yang sedang aktif
      */
-    async init(requestId, container) {
+    async init(requestId, container, isDraft) {
+        if (!container) return;
+        
+        // --- GUARD MUTLAK ---
+        const forceIsDraft = String(requestId).startsWith('draft_');
+        
+        if (forceIsDraft) {
+            console.log(`[GUARD] Mode Draft aktif untuk ${requestId}. Membatalkan API call.`);
+            this.container = container; // Tetap simpan container
+            const localHeaders = DataBridge.load(requestId, 'headers') || [];
+            this.renderHeaders(localHeaders);
+            return; 
+        }
         console.log("DEBUG: init header dipanggil untuk ID:", requestId);
         console.log("DEBUG: container yang diterima:", container);
         this.container = container;
@@ -26,6 +44,15 @@ export class RequestHeaderController {
     
         // Pastikan ini terjalankan
         RequestHeaderUI.renderHeaders(headers, container, {
+            onUpdate: (id, data) => this.syncHeaderUpdate(id, data),
+            onDelete: (id) => this.syncHeaderDelete(id),
+            onAdd: () => this.addHeader(),
+            onBulkUpdate: (text) => this.syncBulkUpdate(text)
+        });
+    }
+
+    renderHeaders(headers) {
+        RequestHeaderUI.renderHeaders(headers, this.container, {
             onUpdate: (id, data) => this.syncHeaderUpdate(id, data),
             onDelete: (id) => this.syncHeaderDelete(id),
             onAdd: () => this.addHeader(),
@@ -106,6 +133,13 @@ export class RequestHeaderController {
      * Sinkronisasi ke Server & Broadcast ke tab lain
      */
     async syncHeaderUpdate(id, data) {
+        const activeId = this.activeId; // Gunakan getter activeId
+        // Cek apakah mode draft
+        if (String(activeId).startsWith('draft_')) {
+            console.log(`[SYNC] Updating draft header ${id} in DataBridge`);
+            DataBridge.updateArray(activeId, 'headers', id, data); // <--- INI PERUBAHANNYA
+            return;
+        }
         const updated = await RequestHeaderService.update(id, { 
             ...data, 
             request_id: this.currentRequestId 
@@ -122,6 +156,13 @@ export class RequestHeaderController {
     }
 
     async syncHeaderDelete(id) {
+        const activeId = this.activeId; // Gunakan getter activeId
+        if (String(activeId).startsWith('draft_')) {
+            console.log(`[SYNC] Updating draft header ${id} in DataBridge`);
+            DataBridge.removeFromArray(activeId, 'headers', id);
+            RequestHeaderUI.removeHeaderRow(id);
+            return;
+        }
         const success = await RequestHeaderService.delete(id);
         if (success) {
             this.bc.postMessage({ type: 'HEADER_DELETED', header_id: id });
@@ -132,6 +173,14 @@ export class RequestHeaderController {
     }
 
     async addHeader() {
+        const activeId = this.activeId;
+
+        if (String(activeId).startsWith('draft_')) {
+            const newItem = { activeId, key: '', value: '', enabled: true };
+            DataBridge.push(activeId, 'headers', newItem);
+            this.renderHeaders(DataBridge.load(activeId, 'headers'));
+            return;
+        }
         const newHeader = await RequestHeaderService.create({ 
             request_id: this.currentRequestId,
             key: '', value: '', enabled: true 
@@ -143,6 +192,28 @@ export class RequestHeaderController {
     }
 
     async syncBulkUpdate(text) {
+        const activeId = this.activeId; // Gunakan getter activeId
+        if (String(activeId).startsWith('draft_')) {
+            const lines = text.split('\n');
+            
+            // Cukup petakan ke objek, biarkan DataBridge yang memberi ID
+            const items = lines.map(line => {
+                const parts = line.split(':');
+                return {
+                    key: parts[0]?.trim() || '',
+                    value: parts.slice(1).join(':').trim() || '',
+                    enabled: true
+                };
+            }).filter(item => item.key !== '');
+    
+            // Simpan via DataBridge
+            const savedItems = DataBridge.bulkCreate(activeId, 'headers', items);
+            
+            // Render
+            this.renderHeaders(savedItems);
+            return;
+        }
+        
         const lines = text.split('\n');
         
         const headers = lines.map((line, index) => {

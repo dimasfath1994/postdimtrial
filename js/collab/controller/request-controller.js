@@ -2,6 +2,7 @@
 
 import { RequestService } from "../request-service.js";
 import { RequestUI } from "../ui/request-ui.js"; 
+import { DataBridge } from './bridge.js'; // Pastikan import ini
 
 export class RequestController {
     constructor(ui, State, { onUpdateUI, tabCtrl }) {
@@ -164,6 +165,10 @@ export class RequestController {
 
     getRequestById(id) {
         return this.State.requests.find(r => r.id === id);
+    }
+
+    isDraft(id) {
+        return String(id).startsWith('draft_');
     }
 
     handleSocketMessage(payload) {
@@ -362,6 +367,32 @@ export class RequestController {
     }
 
 
+
+    async createDraft(context) {
+        const draftId = 'draft_' + Date.now(); // Generate ID lokal
+        const draftData = {
+            id: draftId,
+            ...context,
+            name: "New Draft Request",
+            method: "GET",
+            is_draft: true
+        };
+
+        // 1. Simpan ke DataBridge
+        DataBridge.save(draftId, 'details', draftData, {});
+
+        // 2. Update State lokal agar muncul di UI
+        this.State.requests.push(draftData);
+        if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+
+        // 3. Broadcast ke tab lain
+        this.bc.postMessage({ type: 'REQUEST_CREATED', data: draftData });
+
+        // 4. Buka Tab
+        if (this.tabCtrl) this.tabCtrl.openTab(draftData);
+
+        return draftData;
+    }
     // --- CRUD ACTIONS ---
 
     async createRequest(context) {
@@ -466,6 +497,12 @@ async duplicateRequest(req) {
 
     async updateRequest(id, payload) {
         try {
+            if (this.isDraft(id)) {
+                // Logika Lokal
+                DataBridge.save(id, 'details', payload);
+                this.bc.postMessage({ type: 'REQUEST_UPDATED', data: { ...payload, id } });
+                return;
+            }
             const updatedReq = await RequestService.update(id, payload);
             
             // Broadcast data terbaru dari server
@@ -486,6 +523,16 @@ async duplicateRequest(req) {
     async updateRequestBodyMode(id, mode) {
         // Tambahkan normalisasi di sini agar konsisten dengan apa yang dikirim ke DB
         const cleanMode = (mode === 'formdata') ? 'form-data' : mode; 
+
+        if (this.isDraft(id)) {
+            // Ambil data draft dari DataBridge (bukan State karena State mungkin belum sync)
+            const oldData = DataBridge.getAll(id) || this.getRequestById(id);
+            const payload = { ...oldData, body_mode: cleanMode };
+            
+            DataBridge.save(id, 'details', payload, {});
+            this.bc.postMessage({ type: 'REQUEST_UPDATED', data: { ...payload, id } });
+            return;
+        }
         
         try {
             const oldData = this.getRequestById(id);
@@ -509,11 +556,14 @@ async duplicateRequest(req) {
 
     async updateRequestFull(id) {
         // 1. Ambil data lama dari State
-        const oldData = this.getRequestById(id);
-        if (!oldData) {
-            console.error(`[ERROR] Request dengan ID ${id} tidak ditemukan di State!`);
-            return;
+        let oldData = this.getRequestById(id);
+        if (this.isDraft(id)) {
+            oldData = DataBridge.getAll(id) || {}; 
         }
+        // if (!oldData) {
+        //     console.error(`[ERROR] Request dengan ID ${id} tidak ditemukan di State!`);
+        //     return;
+        // }
         const scripts = this.tabCtrl.monacoCtrl.getValues();
     
         // 2. Buat payload lengkap: 
@@ -531,6 +581,13 @@ async duplicateRequest(req) {
             //,pre_script: document.getElementById('preEditor')?.value,
             //post_script: document.getElementById('postEditor')?.value
         };
+
+        if (this.isDraft(id)) {
+            console.log("[DEBUG] Menyimpan URL ke Draft:", payload.url);
+            DataBridge.save(id, 'details', payload, {});
+            this.bc.postMessage({ type: 'REQUEST_UPDATED', data: { ...payload, id } });
+            return; // Selesai di sini, tidak perlu panggil RequestService.update
+        }
     
         try {
             console.log(`[SYNC] Full update untuk request ${id}:`, payload);
