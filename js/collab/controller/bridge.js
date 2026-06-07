@@ -16,12 +16,31 @@ export const DataBridge = {
         return originalState ? originalState[key] : null; 
     },
 
-    // Menyimpan nilai spesifik
-    save(id, key, value, originalState = null) {
+    // Menyimpan nilai spesifik atau objek penuh
+    save(id, keyOrPayload, value = null, originalState = null) {
+        // 1. Validasi: Jika bukan draft dan tidak ada target state, jangan eksekusi
+        if (!String(id).startsWith('draft_') && !originalState) return;
+    
+        // 2. Logika untuk Draft
         if (String(id).startsWith('draft_')) {
-            DraftStore.set(id, key, value);
-        } else if (originalState) {
-            originalState[key] = value;
+            // Jika argumen kedua adalah objek, anggap sebagai payload penuh (Bulk Save)
+            if (typeof keyOrPayload === 'object' && keyOrPayload !== null) {
+                const fullPayload = keyOrPayload;
+                Object.entries(fullPayload).forEach(([k, v]) => {
+                    DraftStore.set(id, k, v);
+                });
+                console.log(`[DataBridge] Bulk save ke draft: ${id}`);
+            } 
+            // Jika key adalah string, simpan per-kunci seperti biasa
+            else {
+                DraftStore.set(id, keyOrPayload, value);
+            }
+            return;
+        }
+    
+        // 3. Logika untuk Request Server (Non-Draft)
+        if (originalState && typeof keyOrPayload === 'string') {
+            originalState[keyOrPayload] = value;
         }
     },
 
@@ -43,7 +62,6 @@ export const DataBridge = {
             
             // Auto-Generate ID jika belum ada
             if (!item.id) {
-                // Menggunakan 4 huruf pertama dari key sebagai prefix (misal: para, head)
                 const prefix = key.slice(0, 4);
                 item.id = generateId(prefix);
             }
@@ -71,7 +89,6 @@ export const DataBridge = {
     bulkCreate(id, key, items) {
         if (String(id).startsWith('draft_')) {
             const prefix = key.slice(0, 4);
-            // Pastikan setiap item memiliki ID yang unik sebelum disimpan
             const processedItems = items.map(item => ({
                 ...item,
                 id: item.id || generateId(prefix)

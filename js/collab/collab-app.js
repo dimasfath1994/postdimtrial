@@ -303,8 +303,8 @@ window.addEventListener('request-tab-switched', async (e) => {
     // Karena Draft harusnya hanya bergantung pada data lokal (DataBridge)
     if (isDraft) {
         console.log(`[SYNC] Request ${requestId} adalah Draft, melewati sync server.`);
-        let tes = DataBridge.getAll(requestId);
-        console.log(`[SYNC] Request draft`, tes);
+        // let tes = DataBridge.getAll(requestId);
+        // console.log(`[SYNC] Request draft`, tes);
         return; // Keluar agar tidak mengganggu UI yang sudah di-load oleh TabController
     }
 

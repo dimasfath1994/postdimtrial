@@ -216,27 +216,35 @@ export class RequestController {
                 }
                 break;
 
-            case 'REQUEST_UPDATED':
-                const idx = this.State.requests.findIndex(r => r.id === data.id);
-                if (idx !== -1) {
-                    // Update state lokal
-                    this.State.requests[idx] = { ...this.State.requests[idx], ...data };
-                    
-                    // Panggil helper untuk update UI secara dinamis
-                    this.updateUIElements(data.id, data);
-
-                    // JIKA mode berubah, trigger UI untuk pindah tab di user kolaborator
-                    if (data.body_mode && this.tabCtrl.activeTabId === data.id) {
-                        // Panggil langsung fungsi global yang kita siapkan di body-tabs.js
-                        if (window.syncBodyModeUI) {
-                            // Gunakan isInitial = true agar tidak memicu loop update ke server
-                            window.syncBodyModeUI(data.body_mode, true);
+                case 'REQUEST_UPDATED':
+                    let idx = this.State.requests.findIndex(r => r.id === data.id);
+                    const isDraft = String(data.id).startsWith('draft_');
+                
+                    // Jika request ditemukan di State OR ini adalah Draft, kita proses UI-nya
+                    if (idx !== -1 || isDraft) {
+                        
+                        // 1. Update state lokal HANYA jika bukan draft
+                        if (!isDraft && idx !== -1) {
+                            this.State.requests[idx] = { ...this.State.requests[idx], ...data };
+                        }
+                        
+                        // 2. Panggil helper untuk update UI secara dinamis
+                        // (Ini tetap jalan untuk draft karena tidak bergantung pada State)
+                        this.updateUIElements(data.id, data);
+                
+                        // 3. Sync Body Mode
+                        if (data.body_mode && this.tabCtrl.activeTabId === data.id) {
+                            if (window.syncBodyModeUI) {
+                                window.syncBodyModeUI(data.body_mode, true);
+                            }
+                        }
+                
+                        // 4. Update tab di UI
+                        if (this.tabCtrl) {
+                            this.tabCtrl.updateTab(data.id, data);
                         }
                     }
-
-                    if (this.tabCtrl) this.tabCtrl.updateTab(data.id, data);
-                }
-                break;
+                    break;
         }
     }
 
@@ -589,24 +597,23 @@ async duplicateRequest(req) {
         if (this.isDraft(id)) {
             console.log("[DEBUG] Menyimpan payload ke Draft:", payload);
     
-    // 1. Buat objek flat (tanpa membungkusnya di dalam properti 'details')
-    const draftPayload = {
-        ...oldData,
-        ...payload, // Payload sudah berisi semua field terbaru (name, method, body, dll)
-        id: id      // Pastikan ID tetap ada
-    };
-
-    // 2. HAPUS properti 'details' jika ada, agar tidak terjadi nesting lagi
-    delete draftPayload.details; 
-
-    console.log("[DEBUG] Menyimpan payload flat ke DataBridge:", draftPayload);
+            // Buat objek flat dan pastikan bersih
+            const draftPayload = {
+                ...oldData,
+                ...payload,
+                id: id
+            };
     
-    // 3. Simpan langsung objeknya, tanpa parameter 'details' tambahan
-    // Asumsi: DataBridge.save(id, data) adalah tanda tangan fungsi yang benar
-    DataBridge.save(id, draftPayload); 
+            // Hapus nesting agar tidak korup
+            //delete draftPayload.details;
     
-    this.bc.postMessage({ type: 'REQUEST_UPDATED', data: draftPayload });
-    return;
+            console.log("[DEBUG] Menyimpan payload flat ke DataBridge:", draftPayload);
+            
+            // Simpan sebagai bulk object (DataBridge kita sudah bisa handle object)
+            DataBridge.save(id, draftPayload);
+            
+            this.bc.postMessage({ type: 'REQUEST_UPDATED', data: draftPayload });
+            return;
         }
     
         try {

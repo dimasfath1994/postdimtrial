@@ -37,6 +37,7 @@ export class TabController {
         if (isDraft) {
             // Gabungkan request dengan data terbaru dari DraftStore jika ada update
             const draftDetails = DataBridge.getAll(requestId);
+            console.log("dari open tab", draftDetails);
             freshData = { ...request, ...draftDetails };
         } else {
             freshData = (this.getRequestData && this.getRequestData(request.id)) || request;
@@ -141,76 +142,59 @@ export class TabController {
 
     switchTab(id) {
         this.activeTabId = id;
-        
-        // 1. Deteksi apakah ini draft
         const isDraft = String(id).startsWith('draft_');
         const request = this.tabs.find(t => String(t.id) === String(id));
         
-        if (!request) {
-            console.error(`[TabController] Request dengan ID ${id} tidak ditemukan di daftar tab.`);
-            return;
-        }
+        if (!request) return;
     
         let finalData;
-        // --- LOGIKA PENJEMPUTAN DATA TERBARU ---
-        // Jika draft, kita merge dengan data dari DataBridge agar URL/body tidak hilang
-        // Jika non-draft, kita tetap gunakan objek 'request' aslinya
-        const rawData = DataBridge.getAll(id);
+    
         if (isDraft) {
             const rawData = DataBridge.getAll(id) || {};
-        
-            // FUNGSI HELPER: Mengambil nilai non-null dari dalam nested object
-            const getDeepValue = (key, obj) => {
-                if (obj[key] !== undefined && obj[key] !== null) return obj[key];
-                if (obj.details) return getDeepValue(key, obj.details);
-                return null;
-            };
-
-            // RATA-KAN DATA SECARA MANUAL
+            
+            // 1. Ambil data secara eksplisit (Pilih field yang valid saja)
+            // Ini membuang properti 'details' secara otomatis karena kita tidak memanggilnya
             finalData = { 
                 ...request,
-                ...rawData,
-                body: getDeepValue('body', rawData) ?? request.body,
-                url: getDeepValue('url', rawData) ?? request.url,
-                method: getDeepValue('method', rawData) ?? request.method,
-                body_mode: getDeepValue('body_mode', rawData) ?? request.body_mode,
-                id: id
+                id: id,
+                name: rawData.name || request.name || "New Request",
+                method: rawData.method || request.method || "GET",
+                url: rawData.url || request.url || "",
+                body: rawData.body || "",
+                body_mode: rawData.body_mode || (rawData.details?.body_mode) || request.body_mode || "none",
+                auth_type: rawData.auth_type || "No Auth",
+                auth_value: rawData.auth_value || "",
+                pre_script: rawData.pre_script || "",
+                post_script: rawData.post_script || "",
+                headers: rawData.headers || request.headers || [],
+                params: rawData.params || request.params || []
             };
+            console.log("[DEBUG] Data hasil rawData.body:", rawData.body);
+            console.log("[DEBUG] Data hasil rawData.details?.body:", rawData.details?.body);
+            console.log("[DEBUG] Data hasil request.body:", request.body);
+            console.log("[DEBUG] Data hasil pembersihan:", finalData);
+        } else {
+            // Untuk non-draft, ambil dari request (State server)
+            finalData = { ...request };
         }
-        else{
-            finalData = isDraft 
-            ? { 
-                ...request,           // 1. Ambil properti dasar (id, etc)
-                ...rawData,           // 2. Ambil semua root rawData (url, method, name, dll)
-                ...(rawData?.details || {}), // 3. Timpa/lengkapi dengan isi details
-                headers: rawData?.headers || request.headers, // 4. Prioritaskan header draft
-                params: rawData?.params || request.params     // 5. Prioritaskan params draft
-            } 
-            : request;
-        }
-        // ---------------------------------------
-        
-        // 2. Update Highlight UI Tabs
+    
+        // Update UI Tab
         document.querySelectorAll('.tab-item').forEach(el => 
             el.classList.toggle('active', String(el.dataset.id) === String(id)));
                 
-        // 3. Load data ke Editor Tengah menggunakan data yang sudah difinalisasi
+        // Load ke Editor
         this.loadToEditor(finalData);
         
-        // 4. Render Panel Aktif
+        // Refresh Panel
         const activePanel = document.querySelector('.tab-panel:not(.hidden)');
         const activePanelType = activePanel ? activePanel.getAttribute('data-panel') : 'params';
-        
-        // Oper isDraft ke refreshActivePanel
         this.refreshActivePanel(activePanelType, isDraft);
         
-        // 5. Sync UI Body Mode
+        // Sync Body Mode
         requestAnimationFrame(() => {
-            // Gunakan finalData agar sinkronisasi body_mode juga menggunakan data terbaru
             if (finalData && typeof window.syncBodyModeUI === 'function') {
                 let mode = finalData.body_mode || 'none';
                 if (mode === 'formdata') mode = 'form-data'; 
-                
                 window.syncBodyModeUI(mode, true);
             }
         });
@@ -279,10 +263,10 @@ export class TabController {
         //     this.clearEditor(); 
         //     return;
         // }
-        if (String(request.id) !== String(this.activeTabId)) {
-            console.log(`[GUARD] loadToEditor menolak render: ${request.id} bukan tab aktif (${this.activeTabId})`);
-            return;
-        }
+        // if (String(request.id) !== String(this.activeTabId)) {
+        //     console.log(`[GUARD] loadToEditor menolak render: ${request.id} bukan tab aktif (${this.activeTabId})`);
+        //     return;
+        // }
     
         this.isApplyingData = true;
     
