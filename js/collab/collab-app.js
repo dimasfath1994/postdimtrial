@@ -46,6 +46,8 @@ import { initRequestPicker } from './ui/request-picker.js';
 
 import { initDraftPicker } from './ui/request-picker-draft.js';
 
+import { initInviteModal } from "./controller/invite-controller.js";
+
 
 ImportController.initUIListeners(() => {
     console.log("Import selesai, UI akan di-refresh...");
@@ -140,6 +142,7 @@ const workspaceCtrl = new WorkspaceController(ui, State, {
 });
 
 workspaceCtrl.onSwitchWorkspace = (id) => {
+    document.body.dataset.currentWsId = id;
     connectSocket(id);
     requestCtrl.init(id); // Reset/Fetch ulang request saat pindah workspace
 };
@@ -304,6 +307,13 @@ document.addEventListener("DOMContentLoaded", async () => {
          const wsId = State.workspaceId; // Pastikan ID workspace tersedia
         await envCtrl.init(null, wsId); // Pass null karena kita tidak butuh render ke UI dulu
         await globalCtrl.init(null);
+
+        const inviteBtn = document.getElementById('inviteBtn');
+        if (inviteBtn) {
+            initInviteModal(); // Ganti 1 dengan ID workspace yang benar
+        } else {
+            console.error("Tombol inviteBtn tidak ditemukan di HTML!");
+        }
     }
 });
 

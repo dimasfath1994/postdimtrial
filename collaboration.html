@@ -74,6 +74,29 @@
 
   <!-- ================= INVITE ================= -->
   <button id="inviteBtn">Invite User</button>
+  <div id="inviteModal" class="modal-hidden">
+    <div class="modal-content">
+        <h3>Invite Member</h3>
+        
+        <div class="search-wrapper" style="position: relative;">
+            <input type="text" id="userEmail" placeholder="Input email..." />
+            <div id="searchResult"></div>
+        </div>
+
+        <div style="margin-top: 10px;">
+          <label for="userRole">Role:</label>
+          <select id="userRole" style="width: 100%; padding: 8px;">
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+          </select>
+      </div>
+
+        <div class="actions">
+            <button id="closeModal">Cancel</button>
+            <button id="confirmInvite">Send Invitation</button>
+        </div>
+    </div>
+</div>
 
 </aside>
 
