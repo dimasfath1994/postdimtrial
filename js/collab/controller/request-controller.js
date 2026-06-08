@@ -4,6 +4,10 @@ import { RequestService } from "../request-service.js";
 import { RequestUI } from "../ui/request-ui.js"; 
 import { DataBridge } from './bridge.js'; // Pastikan import ini
 
+import { RequestBodyParamService } from "../request-body-param-service.js";
+import { RequestHeaderService } from "../request-header-service.js";
+import { RequestParamService } from "../request-param-service.js";
+
 export class RequestController {
     constructor(ui, State, { onUpdateUI, tabCtrl }) {
         this.ui = ui; // Container untuk request di sidebar/folder
@@ -491,7 +495,92 @@ async createRequestToServer(context) {
 
 
 
+async migrateBodyParamsToRequest(reqId, bodyParams) {
+    if (!bodyParams || !Array.isArray(bodyParams) || bodyParams.length === 0) return;
 
+    console.log(`[Migration] Memulai migrasi ${bodyParams.length} body params ke request ID: ${reqId}`);
+
+    for (const bp of bodyParams) {
+        try {
+            // Destructuring untuk membuang ID lokal
+            const { id, ...data } = bp; 
+
+            // Panggil Service create
+            // Data sudah mengandung 'value' (bisa berupa string atau Base64)
+            const createdParam = await RequestBodyParamService.create({ 
+                ...data, 
+                request_id: reqId,
+                enabled: data.enabled !== undefined ? data.enabled : true
+            });
+            
+            if (createdParam) {
+                console.log(`[Migration] Berhasil memigrasi body param: ${createdParam.key || 'file'}`);
+            }
+        } catch (err) {
+            console.error(`[Migration] Gagal memigrasi body param: ${bp.key}`, err);
+        }
+    }
+}
+async migrateHeadersToRequest(reqId, headers) {
+    if (!headers || !Array.isArray(headers) || headers.length === 0) return;
+
+    console.log(`[Migration] Memulai migrasi ${headers.length} headers ke request ID: ${reqId}`);
+
+    for (const h of headers) {
+        try {
+            // Destructuring untuk membuang ID lokal (item_...)
+            const { id, ...data } = h; 
+
+            // Panggil method 'create' milik RequestHeaderService
+            // Kita gunakan RequestHeaderService.create langsung jika sudah tersedia
+            const createdHeader = await RequestHeaderService.create({ 
+                ...data, 
+                request_id: reqId,
+                enabled: data.enabled !== undefined ? data.enabled : true
+            });
+            
+            if (createdHeader) {
+                console.log(`[Migration] Berhasil memigrasi header: ${createdHeader.key}`);
+            }
+        } catch (err) {
+            console.error(`[Migration] Gagal memigrasi header: ${h.key}`, err);
+        }
+    }
+}
+async migrateParamsToRequest(newReqId, params) {
+    if (!params || !Array.isArray(params) || params.length === 0) {
+        console.log("[Migration] Tidak ada parameter untuk dimigrasi.");
+        return;
+    }
+
+    console.log(`[Migration] Memulai migrasi ${params.length} parameter ke request: ${newReqId}`);
+
+    for (const p of params) {
+        try {
+            // 1. Destructuring untuk membuang ID lokal (yang berformat 'item_...')
+            // Kita hanya butuh data asli agar bisa dibuatkan ID baru oleh database server
+            const { id, ...data } = p; 
+
+            // 2. Pastikan request_id di-update ke ID server yang baru
+            const payload = {
+                ...data,
+                request_id: newReqId,
+                enabled: data.enabled !== undefined ? data.enabled : true
+            };
+
+            // 3. Panggil service untuk membuat record di DB
+            const createdParam = await RequestParamService.create(payload);
+            
+            if (createdParam) {
+                console.log(`[Migration] Berhasil membuat param: ${createdParam.id}`);
+            }
+        } catch (err) {
+            console.error(`[Migration] Gagal membuat parameter: ${p.key}`, err);
+        }
+    }
+    
+    console.log("[Migration] Proses migrasi parameter selesai.");
+}
 async duplicateRequest(req) {
     try {
         // 1. Siapkan payload duplikat
@@ -519,6 +608,31 @@ async duplicateRequest(req) {
                 RequestUI.renderRequestItem(newReq, container, this.handlers, (r) => this.tabCtrl.openTab(r));
             }
         }
+
+
+        // 2. Ambil data dari request lama (Lazy Fetch)
+        const safeFetch = async (serviceFn, requestId) => {
+            try {
+                return await serviceFn(requestId);
+            } catch (e) {
+                console.warn(`Gagal fetch data untuk ${requestId}, dianggap kosong.`);
+                return []; // Return array kosong agar tetap bisa diproses
+            }
+        };
+        
+        // Penggunaan di duplicateRequest
+        const [params, headers, bodyParams] = await Promise.all([
+            safeFetch(RequestParamService.getByRequest, req.id),
+            safeFetch(RequestHeaderService.getByRequest, req.id),
+            safeFetch(RequestBodyParamService.getByRequest, req.id)
+        ]);
+        // 3. Gunakan fungsi migrasi yang sudah kamu punya!
+        // Kamu hanya perlu memastikan fungsi migrasi ini bisa menerima req ID baru
+        await Promise.all([
+            this.migrateParamsToRequest(newReq.id, params),
+            this.migrateHeadersToRequest(newReq.id, headers),
+            this.migrateBodyParamsToRequest(newReq.id, bodyParams)
+        ]);
 
         // 4. Broadcast sudah ditangani di dalam service/handleSocket
         console.log(`[SYNC] Request ${req.id} berhasil diduplikasi menjadi ${newReq.id}`);
