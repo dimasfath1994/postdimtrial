@@ -53,28 +53,29 @@ export class RequestBodyParamUI {
         const isFile = param.type === 'file';
         
         const valueField = isFile 
-            ? `<div class="file-input-wrapper" style="padding: 6px;">
-                 <span style="font-size: 11px; color: #888;">${param.file_name || 'No file'}</span>
-                 <input type="file" class="param-file-upload" style="display:none">
-                 <button type="button" class="btn-select-file" style="font-size:10px; cursor:pointer;">Select</button>
-               </div>`
-            : `<input type="text" value="${param.value || ''}" placeholder="Value" class="param-value" style="${inputStyle}">`;
-
-        row.innerHTML = `
-            <td style="text-align: center;"><input type="checkbox" ${param.enabled ? 'checked' : ''} class="param-enabled"></td>
-            <td><input type="text" value="${param.key || ''}" placeholder="Key" class="param-key" style="${inputStyle}"></td>
-            <td>${valueField}</td>
-            <td><input type="text" value="${param.description || ''}" placeholder="Description" class="param-desc" style="${inputStyle}"></td>
-            <td style="text-align: center;">
-                <button class="param-delete" style="border:none; background:none; cursor:pointer; color:#ccc; font-size: 16px;">×</button>
-            </td>
-        `;
+        ? `<div class="file-input-wrapper" style="padding: 6px;">
+             <span style="font-size: 11px; color: #888;">${param.file_name || 'No file'}</span>
+             <input type="file" class="param-file-upload" style="display:none">
+             <button type="button" class="btn-select-file" style="font-size:10px; cursor:pointer;">Select</button>
+           </div>`
+        : `<textarea class="param-value" placeholder="Value" style="${inputStyle} height: 28px; padding: 4px 6px; resize: vertical; box-sizing: border-box;">${param.value || ''}</textarea>`;
+    
+    row.innerHTML = `
+        <td style="text-align: center;"><input type="checkbox" ${param.enabled ? 'checked' : ''} class="param-enabled"></td>
+        <td><input type="text" value="${param.key || ''}" placeholder="Key" class="param-key" style="${inputStyle}"></td>
+        <td>${valueField}</td>
+        <td><textarea class="param-desc" placeholder="Description" style="${inputStyle} height: 28px; padding: 4px 6px; resize: vertical; box-sizing: border-box;">${param.description || ''}</textarea></td>
+        <td style="text-align: center;">
+            <button class="param-delete" style="border:none; background:none; cursor:pointer; color:#ccc; font-size: 16px;">×</button>
+        </td>
+    `;
 
         // Fungsi untuk trigger update
         const triggerUpdate = () => {
+            const valueEl = row.querySelector('.param-value');
             handlers.onUpdate(param.id, {
                 key: row.querySelector('.param-key').value,
-                value: row.querySelector('.param-value')?.value || param.value,
+                value: valueEl ? valueEl.value : param.value,
                 description: row.querySelector('.param-desc').value,
                 enabled: row.querySelector('.param-enabled').checked,
                 type: param.type,
@@ -83,10 +84,11 @@ export class RequestBodyParamUI {
         };
 
         // Menambahkan listener 'blur' agar data tersimpan saat user pindah klik
-        row.querySelectorAll('input:not(.param-file-upload)').forEach(input => {
-            input.addEventListener('change', triggerUpdate);
-            input.addEventListener('blur', triggerUpdate); 
-        });
+       // Ganti bagian selector querySelectorAll menjadi ini:
+row.querySelectorAll('input:not(.param-file-upload), textarea').forEach(el => {
+    el.addEventListener('change', triggerUpdate);
+    el.addEventListener('blur', triggerUpdate); 
+});
 
         if (isFile) {
             const fileInput = row.querySelector('.param-file-upload');
