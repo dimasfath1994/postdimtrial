@@ -69,6 +69,37 @@ export class TabController {
         
     }
 
+    forceCloseTab(id) {
+        console.log("[TabController] Force closing tab:", id);
+        
+        const closedTabIndex = this.tabs.findIndex(t => t.id === id);
+        
+        // Tentukan next active
+        let nextActiveId = null;
+        if (this.activeTabId === id) {
+            if (this.tabs.length > 1) {
+                const newIndex = closedTabIndex === 0 ? 1 : closedTabIndex - 1;
+                nextActiveId = this.tabs[newIndex].id;
+            }
+        } else {
+            nextActiveId = this.activeTabId;
+        }
+    
+        // Hapus dari state & DOM
+        this.tabs = this.tabs.filter(t => t.id !== id);
+        const tabEl = document.querySelector(`.tab-item[data-id="${id}"]`);
+        if (tabEl) tabEl.remove();
+    
+        // Pindah tab atau reset editor
+        if (nextActiveId) {
+            this.switchTab(nextActiveId);
+        } else {
+            this.activeTabId = null;
+            this.clearEditor();
+            this.clearResponse();
+        }
+    }
+
     async closeTab(id) {
         const isDraft = String(id).startsWith('draft_');
 

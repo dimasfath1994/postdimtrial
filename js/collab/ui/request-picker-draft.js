@@ -86,7 +86,7 @@ export async function showDraftPicker(draftId) {
                 modal.style.display = 'none';
                 
                 // Pastikan tab tertutup setelah berhasil save
-                if (window.tabCtrl) window.tabCtrl.closeTab(_currentDraftId);
+                if (window.tabCtrl) window.tabCtrl.forceCloseTab(_currentDraftId);
             };
         });
     } catch (err) {
