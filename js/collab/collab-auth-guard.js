@@ -68,7 +68,7 @@ function block(reason) {
     sessionStorage.removeItem("collab_cache");
   } catch {}
 
-  window.location.replace("/login.html");
+  window.location.replace("login.html");
 
   return false;
 }
