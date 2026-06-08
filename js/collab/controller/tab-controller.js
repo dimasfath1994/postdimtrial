@@ -70,7 +70,7 @@ export class TabController {
     }
 
     forceCloseTab(id) {
-        console.log("[TabController] Force closing tab:", id);
+        //console.log("[TabController] Force closing tab:", id);
         
         const closedTabIndex = this.tabs.findIndex(t => t.id === id);
         
@@ -107,10 +107,9 @@ export class TabController {
             const wantsToSave = confirm("You have unsaved changes in this draft. Do you want to save it before closing?");
             
             if (wantsToSave) {
-                console.log("[TabController] Membuka picker untuk:", id);
+                //console.log("[TabController] Membuka picker untuk:", id);
                 // Kita buka picker-nya
                 showDraftPicker(id);
-                // KITA HARUS BERHENTI DI SINI! 
                 // Jangan tutup tab-nya sekarang, karena user sedang memilih lokasi di modal.
                 return; 
             }
@@ -153,7 +152,7 @@ export class TabController {
     }
 
     clearEditor() {
-        console.trace("[DEBUG] Siapa yang manggil clearEditor?");
+        //console.trace("[DEBUG] Siapa yang manggil clearEditor?");
         // 1. Reset Method & URL (DOM biasa)
         document.getElementById("method").value = "GET";
         document.getElementById("url").value = "";
@@ -218,8 +217,8 @@ export class TabController {
                 params: rawData.params || request.params || []
             };
 
-            console.log("[DEBUG] Data hasil rawData.body_mode:", rawData.body_mode);
-            console.log("[DEBUG] Data hasil pembersihan:", finalData);
+            //console.log("[DEBUG] Data hasil rawData.body_mode:", rawData.body_mode);
+            //console.log("[DEBUG] Data hasil pembersihan:", finalData);
         } else {
             // Untuk non-draft, ambil dari request (State server)
             finalData = { ...request };

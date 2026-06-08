@@ -343,7 +343,7 @@ export class FolderController {
     }
 
     async deleteFolder(id) {
-        if (!confirm("Hapus folder ini?")) return;
+        if (!confirm("Delete this folder?")) return;
         
         // Simpan info parent sebelum dihapus dari state
         const folder = this.State.folders.find(f => f.id === id);
