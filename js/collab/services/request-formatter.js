@@ -1,4 +1,5 @@
 import { RequestBodyParamService } from "../request-body-param-service.js";
+import { DataBridge } from '../controller/bridge.js'; // Pastikan import ini
 
 /**
  * RequestFormatter
@@ -77,13 +78,26 @@ export class RequestFormatter {
                     formData.append(p.key, p.file);
                 } 
                 // 2. Jika tidak ada, tapi ada value (path string), ambil blob dari server
+               // Analisis di tempat kamu memproses FormData:
                 else if (p.value) {
                     try {
-                        const blob = await RequestBodyParamService.downloadFileAsBlob(p.value);
-                        const file = new File([blob], p.file_name || "downloaded_file");
-                        formData.append(p.key, file);
+                        let blob;
+                        const isDraft = String(window.bodyParamCtrl.currentRequestId).startsWith('draft_');
+
+                        if (isDraft) {
+                            // Panggil helper yang baru kita buat
+                            blob = await DataBridge.getBlob(window.bodyParamCtrl.currentRequestId, 'bodyParams', p.id);
+                        } else {
+                            // Tetap pakai logika lama untuk request server
+                            blob = await RequestBodyParamService.downloadFileAsBlob(p.value);
+                        }
+
+                        if (blob) {
+                            const file = new File([blob], p.file_name || "downloaded_file");
+                            formData.append(p.key, file);
+                        }
                     } catch (e) {
-                        console.error(`[FormData] Gagal mendownload file untuk key: ${p.key}`, e);
+                        console.error(`[FormData] Gagal menyiapkan file: ${p.key}`, e);
                     }
                 }
             } else {

@@ -116,5 +116,33 @@ export const DataBridge = {
         if (String(id).startsWith('draft_')) {
             DraftStore.remove(id);
         }
+    },
+
+
+    // Helper untuk mengubah Base64 di draft jadi Blob
+    async getBlob(id, key, itemId) {
+        if (!String(id).startsWith('draft_')) return null;
+
+        const arr = DraftStore.get(id, key); // Ambil array bodyParams
+        if (!Array.isArray(arr)) return null;
+
+        const item = arr.find(p => p.id === itemId);
+        if (!item || !item.value) return null;
+
+        // Jika value adalah base64 (biasanya diawali data:...)
+        return this.base64ToBlob(item.value);
+    },
+
+    base64ToBlob(base64) {
+        const parts = base64.split(';base64,');
+        const contentType = parts[0].split(':')[1];
+        const raw = window.atob(parts[1]);
+        const rawLength = raw.length;
+        const uInt8Array = new Uint8Array(rawLength);
+        for (let i = 0; i < rawLength; ++i) {
+            uInt8Array[i] = raw.charCodeAt(i);
+        }
+        return new Blob([uInt8Array], { type: contentType });
     }
+
 };

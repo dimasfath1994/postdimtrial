@@ -38,7 +38,6 @@ export class TabController {
         if (isDraft) {
             // Gabungkan request dengan data terbaru dari DraftStore jika ada update
             const draftDetails = DataBridge.getAll(requestId);
-            console.log("dari open tab", draftDetails);
             freshData = { ...request, ...draftDetails };
         } else {
             freshData = (this.getRequestData && this.getRequestData(request.id)) || request;
@@ -188,9 +187,7 @@ export class TabController {
                 params: rawData.params || request.params || []
             };
 
-            console.log("[DEBUG] Data hasil rawData.body:", rawData.body);
-            console.log("[DEBUG] Data hasil rawData.details?.body:", rawData.details?.body);
-            console.log("[DEBUG] Data hasil request.body:", request.body);
+            console.log("[DEBUG] Data hasil rawData.body_mode:", rawData.body_mode);
             console.log("[DEBUG] Data hasil pembersihan:", finalData);
         } else {
             // Untuk non-draft, ambil dari request (State server)
