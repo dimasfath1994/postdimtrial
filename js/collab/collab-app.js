@@ -40,7 +40,7 @@ import "./controller/export-controller.js";
 
 import { ImportController } from "./controller/import-controller.js";
 
-import { DataBridge } from './controller/bridge.js'; // Pastikan import ini
+import { Auth } from "../auth.js";
 
 import { initRequestPicker } from './ui/request-picker.js';
 
@@ -443,3 +443,12 @@ document.getElementById('newTab').addEventListener('click', async () => {
 
     console.log("Draft request created locally with collection:", targetCollectionId);
 });
+
+
+function logout() {
+  Auth.logout?.();
+  window.location.replace("./");
+}
+
+document.getElementById("collabLogoutBtn")
+    ?.addEventListener("click", logout);
