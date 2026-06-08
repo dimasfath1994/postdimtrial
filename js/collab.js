@@ -7,7 +7,7 @@ export function initCollabMode() {
   btn.onclick = () => {
 
     if (!Auth.isLoggedIn()) {
-      window.location.href = "/login.html";
+      window.location.href = "login.html";
       return;
     }
 
