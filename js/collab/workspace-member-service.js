@@ -32,6 +32,7 @@ export class WorkspaceMemberService {
   }
 
   // ================= ADD MEMBER =================
+  // Rute: POST /
   static async addMember(workspaceId, userId, role = 'viewer') {
     const res = await fetch(`${API}/members`, {
       method: "POST",
@@ -47,8 +48,9 @@ export class WorkspaceMemberService {
   }
 
   // ================= GET MEMBERS =================
+  // Rute: GET /list/{workspace_id}
   static async getMembers(workspaceId) {
-    const res = await fetch(`${API}/members/${workspaceId}`, {
+    const res = await fetch(`${API}/members/list/${workspaceId}`, {
       headers: this.headers()
     });
 
@@ -57,11 +59,14 @@ export class WorkspaceMemberService {
   }
 
   // ================= UPDATE MEMBER =================
-  static async updateMember(memberId, role, invitedBy = null) {
-    const res = await fetch(`${API}/members/${memberId}`, {
+  // Rute: PUT /manage/{member_id}
+  static async updateMember(memberId, workspaceId, userId, role, invitedBy = null) {
+    const res = await fetch(`${API}/members/manage/${memberId}`, {
       method: "PUT",
       headers: this.headers(),
       body: JSON.stringify({ 
+        workspace_id: Number(workspaceId),
+        user_id: Number(userId),
         role, 
         invited_by: invitedBy 
       })
@@ -71,8 +76,9 @@ export class WorkspaceMemberService {
   }
 
   // ================= REMOVE MEMBER =================
+  // Rute: DELETE /manage/{member_id}
   static async removeMember(memberId) {
-    const res = await fetch(`${API}/members/${memberId}`, {
+    const res = await fetch(`${API}/members/manage/${memberId}`, {
       method: "DELETE",
       headers: this.headers()
     });

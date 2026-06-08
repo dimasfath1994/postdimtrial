@@ -49,6 +49,10 @@ import { initDraftPicker } from './ui/request-picker-draft.js';
 import { initInviteModal } from "./controller/invite-controller.js";
 
 
+import { initWorkspaceModal, showWorkspaceModal } from "./ui/workspace-management.js";
+
+
+
 ImportController.initUIListeners(() => {
     console.log("Import selesai, UI akan di-refresh...");
     location.reload(); 
@@ -314,6 +318,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else {
             console.error("Tombol inviteBtn tidak ditemukan di HTML!");
         }
+
+        initWorkspaceModal();
     }
 });
 
@@ -462,3 +468,8 @@ function logout() {
 
 document.getElementById("collabLogoutBtn")
     ?.addEventListener("click", logout);
+
+
+    document.getElementById('manageWorkspaceBtn').addEventListener('click', () => {
+        showWorkspaceModal(State.workspaceId); // Ganti dengan variabel ID workspace yang aktif
+    });
