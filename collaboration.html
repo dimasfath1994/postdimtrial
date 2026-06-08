@@ -16,10 +16,20 @@
   <div class="collab-header">
     <h3>Collaboration Mode</h3>
 
-    <div id="collabUserBar" class="user-bar">
-      <span id="collabUserEmail"></span>
-      <button id="collabLogoutBtn">Logout</button>
-    </div>
+    <div id="collabUserBar" class="user-bar" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: #888; margin-top: 5px;">
+      <span id="collabUserEmail" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;"></span>
+      <button id="collabLogoutBtn" style="
+        background: transparent; 
+        border: none; 
+        color: #aaa;              /* Lebih terang dari #666 */
+        cursor: pointer; 
+        font-size: 11px;          /* Sedikit lebih besar */
+        font-weight: 500;         /* Lebih tegas/tebal */
+        padding: 0 4px;
+        text-decoration: underline;
+        transition: color 0.2s;
+    ">Logout</button>
+   </div>
   </div>
 
 
@@ -34,14 +44,31 @@
   
 
   <!-- ================= WORKSPACE SWITCHER ================= -->
-  <label style="font-size:12px; opacity:0.7;">Switch Workspace</label>
-
-  <select id="workspaceSwitcher" style="width:100%; margin-top:5px;">
+  <label style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 15px; display: block;">
+    Workspace
+  </label>
+  
+  <select id="workspaceSwitcher" class="minimal-select">
     <option>Loading...</option>
   </select>
 
-  <div class="action-menu" style="margin-top: auto; padding: 10px;">
-    <button id="mainActionBtn" class="btn-fab">+</button>
+  <div class="action-menu" style="padding: 10px 0; border-top: 1px solid #333;">
+    <button id="mainActionBtn" style="
+        background: transparent; 
+        border: 1px solid #444; 
+        color: #aaa; 
+        width: 100%; 
+        padding: 6px; 
+        font-size: 11px; 
+        border-radius: 4px; 
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+    ">
+      <span>+</span>
+    </button>
   
     <div id="actionDropdown" class="action-dropdown">
       <button id="createWorkspaceBtn">New Workspace</button>
@@ -56,25 +83,65 @@
 
  
 
-  <!-- ================= VARIABLES ================= -->
-  <button id="openEnvModal">Variables</button>
+
 
   <!-- ================= EXPORT / IMPORT ================= -->
-  <div style="margin-top:20px;">
-    <button id="exportBtn">Export</button>
+  <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 8px;">
+    <h4 style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin: 0;">Settings & Data</h4>
     
-    <select id="importMode">
-      <option value="workspace">Import as Workspace (Full)</option>
-      <option value="collection">Import as Collection (Append)</option>
-    </select>
-  
-    <input type="file" id="importFile">
+    <button id="openEnvModal" style="
+    background: transparent; 
+    border: none; 
+    color: #999; 
+    padding: 4px 0; 
+    font-size: 11px; 
+    cursor: pointer; 
+    display: block; 
+    text-align: left; 
+    transition: color 0.2s;
+">Variables</button>
+
+<button id="exportBtn" style="
+    background: transparent; 
+    border: none; 
+    color: #999; 
+    padding: 4px 0; 
+    font-size: 11px; 
+    cursor: pointer; 
+    display: block; 
+    text-align: left; 
+    transition: color 0.2s;
+">Export Data</button>
+    
+    <div style="position: relative;">
+      <select id="importMode" style="width: 100%; background: #252525; border: 1px solid #444; color: #ccc; padding: 6px; border-radius: 4px; font-size: 11px;">
+        <option value="workspace">Import Workspace</option>
+        <option value="collection">Import Collection</option>
+      </select>
+    </div>
+    
+    <label for="importFile" style="font-size: 11px; color: #888; cursor: pointer; border: 1px dashed #444; padding: 6px; text-align: center; border-radius: 4px; transition: 0.2s;">
+      Select File
+      <input type="file" id="importFile" style="display: none;">
+    </label>
   </div>
 
 
 
   <!-- ================= INVITE ================= -->
-  <button id="inviteBtn">Invite User</button>
+  <button id="inviteBtn" style="
+    background: transparent; 
+    border: none; 
+    color: #777; 
+    padding: 2px 5px; 
+    font-size: 10px; 
+    cursor: pointer; 
+    text-transform: uppercase; 
+    letter-spacing: 0.5px;
+    transition: color 0.2s;
+">
+   Invite User
+</button>
   <div id="inviteModal" class="modal-hidden">
     <div class="modal-content">
         <h3>Invite Member</h3>
@@ -98,6 +165,14 @@
         </div>
     </div>
 </div>
+
+
+<div style="margin-top: auto; padding: 10px; text-align: center;">
+  <button id="downloadAppBtn" style="background: none; border: none; color: #888; font-size: 11px; cursor: pointer; text-decoration: underline; opacity: 0.8;">
+    💻 Get Desktop App
+  </button>
+</div>
+</aside>
 
 </aside>
 

@@ -829,3 +829,8 @@ pre {
 }
 
 
+#downloadAppBtn:hover {
+  color: #fff;
+  opacity: 1;
+}
+

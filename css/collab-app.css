@@ -1088,3 +1088,61 @@ input:focus {
 .user-item:hover {
   background-color: #f0f0f0;
 }
+
+#collabLogoutBtn:hover { color: #ff5f5f; }
+#downloadAppBtn:hover {
+  color: #fff;
+  opacity: 1;
+}
+
+.minimal-select {
+  width: 100%;
+  margin-top: 5px;
+  background: #1e1e1e; /* Warna senada dengan background modal/sidebar */
+  border: 1px solid #333;
+  color: #eee;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+  /* Menghilangkan panah default browser agar terlihat bersih */
+  appearance: none; 
+  -webkit-appearance: none;
+  background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2210%22%20height%3D%226%22%3E%3Cpolyline%20points%3D%220%200%205%205%2010%200%22%20fill%3D%22none%22%20stroke%3D%22%23666%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E');
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.minimal-select:hover, .minimal-select:focus {
+  border-color: #555;
+}
+
+
+#actionDropdown {
+  display: none;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 5px 0;
+  margin-top: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+#actionDropdown button {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  padding: 8px 15px;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+#actionDropdown button:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
