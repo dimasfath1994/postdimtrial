@@ -57,7 +57,8 @@ export function initBodyTabs(bodyParamCtrl, tabCtrl) {
         if (normalizedMode === 'raw') {
           const rawEditor = document.getElementById('body');
           const request = tabCtrl.tabs.find(t => t.id === activeRequestId);
-          if (rawEditor && request) rawEditor.value = request.body || ''; 
+          console.log("DARI BODY TABS", request);
+          if (rawEditor && request && !String(activeRequestId).startsWith('draft_')) rawEditor.value = request.body || ''; 
         } else if (normalizedMode === 'form-data') {
           const container = document.getElementById('formDataList');
           if (container) await bodyParamCtrl.init(activeRequestId, container, 'formdata');
