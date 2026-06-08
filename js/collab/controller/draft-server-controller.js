@@ -62,26 +62,20 @@ export class DraftServerController {
     }
 
     async saveParams(reqId, params) {
+        // 1. Validasi
         if (!params || !Array.isArray(params)) return;
-        for (const p of params) {
-            const { id, ...data } = p; // Hapus ID lokal
-            await this.requestParamController.create({ ...data, request_id: reqId });
-        }
+        await this.requestParamController.migrateParamsToRequest(reqId, params);
     }
 
     async saveHeaders(reqId, headers) {
         if (!headers || !Array.isArray(headers)) return;
-        for (const h of headers) {
-            const { id, ...data } = h; 
-            await this.requestHeaderController.create({ ...data, request_id: reqId });
-        }
+        
+        await this.requestHeaderController.migrateHeadersToRequest(reqId, headers);
     }
 
     async saveBodyParams(reqId, bodyParams) {
         if (!bodyParams || !Array.isArray(bodyParams)) return;
-        for (const bp of bodyParams) {
-            const { id, ...data } = bp;
-            await this.requestBodyParamController.create({ ...data, request_id: reqId });
-        }
+        
+        await this.requestBodyParamController.migrateBodyParamsToRequest(reqId, bodyParams);
     }
 }

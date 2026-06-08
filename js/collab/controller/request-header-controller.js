@@ -191,6 +191,34 @@ export class RequestHeaderController {
         }
     }
 
+
+    async migrateHeadersToRequest(reqId, headers) {
+        if (!headers || !Array.isArray(headers) || headers.length === 0) return;
+    
+        console.log(`[Migration] Memulai migrasi ${headers.length} headers ke request ID: ${reqId}`);
+    
+        for (const h of headers) {
+            try {
+                // Destructuring untuk membuang ID lokal (item_...)
+                const { id, ...data } = h; 
+    
+                // Panggil method 'create' milik RequestHeaderService
+                // Kita gunakan RequestHeaderService.create langsung jika sudah tersedia
+                const createdHeader = await RequestHeaderService.create({ 
+                    ...data, 
+                    request_id: reqId,
+                    enabled: data.enabled !== undefined ? data.enabled : true
+                });
+                
+                if (createdHeader) {
+                    console.log(`[Migration] Berhasil memigrasi header: ${createdHeader.key}`);
+                }
+            } catch (err) {
+                console.error(`[Migration] Gagal memigrasi header: ${h.key}`, err);
+            }
+        }
+    }
+
     async syncBulkUpdate(text) {
         const activeId = this.activeId; // Gunakan getter activeId
         if (String(activeId).startsWith('draft_')) {

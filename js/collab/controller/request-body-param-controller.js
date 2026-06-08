@@ -246,6 +246,34 @@ export class RequestBodyParamController {
         });
     }
 
+
+    async migrateBodyParamsToRequest(reqId, bodyParams) {
+        if (!bodyParams || !Array.isArray(bodyParams) || bodyParams.length === 0) return;
+    
+        console.log(`[Migration] Memulai migrasi ${bodyParams.length} body params ke request ID: ${reqId}`);
+    
+        for (const bp of bodyParams) {
+            try {
+                // Destructuring untuk membuang ID lokal
+                const { id, ...data } = bp; 
+    
+                // Panggil Service create
+                // Data sudah mengandung 'value' (bisa berupa string atau Base64)
+                const createdParam = await RequestBodyParamService.create({ 
+                    ...data, 
+                    request_id: reqId,
+                    enabled: data.enabled !== undefined ? data.enabled : true
+                });
+                
+                if (createdParam) {
+                    console.log(`[Migration] Berhasil memigrasi body param: ${createdParam.key || 'file'}`);
+                }
+            } catch (err) {
+                console.error(`[Migration] Gagal memigrasi body param: ${bp.key}`, err);
+            }
+        }
+    }
+
     setupBroadcastListener() {
         this.bc.onmessage = (event) => {
             this.handleSocketMessage(event.data);

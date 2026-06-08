@@ -221,6 +221,42 @@ export class RequestParamController {
         }
     }
 
+
+    async migrateParamsToRequest(newReqId, params) {
+        if (!params || !Array.isArray(params) || params.length === 0) {
+            console.log("[Migration] Tidak ada parameter untuk dimigrasi.");
+            return;
+        }
+    
+        console.log(`[Migration] Memulai migrasi ${params.length} parameter ke request: ${newReqId}`);
+    
+        for (const p of params) {
+            try {
+                // 1. Destructuring untuk membuang ID lokal (yang berformat 'item_...')
+                // Kita hanya butuh data asli agar bisa dibuatkan ID baru oleh database server
+                const { id, ...data } = p; 
+    
+                // 2. Pastikan request_id di-update ke ID server yang baru
+                const payload = {
+                    ...data,
+                    request_id: newReqId,
+                    enabled: data.enabled !== undefined ? data.enabled : true
+                };
+    
+                // 3. Panggil service untuk membuat record di DB
+                const createdParam = await RequestParamService.create(payload);
+                
+                if (createdParam) {
+                    console.log(`[Migration] Berhasil membuat param: ${createdParam.id}`);
+                }
+            } catch (err) {
+                console.error(`[Migration] Gagal membuat parameter: ${p.key}`, err);
+            }
+        }
+        
+        console.log("[Migration] Proses migrasi parameter selesai.");
+    }
+
     async syncBulkUpdate(text) {
         const activeId = window.tabCtrl.activeTabId;
         if (String(activeId).startsWith('draft_')) {
