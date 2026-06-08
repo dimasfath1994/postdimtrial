@@ -151,9 +151,27 @@ async silentSwitch(id) {
     }
 
     // Tambahkan wrapper untuk UI
-    handleRenameRequest(currentName) {
-        const name = prompt("New name:", currentName);
-        if (name) this.updateName(this.State.workspaceId, name);
+    async handleRenameRequest(currentName) {
+        const newName = prompt("New name:", currentName);
+        
+        // Jika user menekan Cancel atau input kosong, jangan lanjut
+        if (!newName || newName.trim() === currentName || newName.trim() === "") {
+            return;
+        }
+    
+        try {
+            // Karena updateName sekarang sudah 'async' dan melempar error,
+            // kita perlu menunggu (await) prosesnya selesai.
+            await this.updateName(this.State.workspaceId, newName.trim());
+            
+            console.log("Workspace berhasil di-rename!");
+        } catch (error) {
+            // Di sini kita tidak perlu melakukan apa-apa lagi di sini 
+            // karena alert() sudah ditangani di dalam fungsi updateName().
+            // Namun, jika kamu butuh aksi spesifik (seperti refresh UI), 
+            // bisa ditaruh di sini.
+            console.warn("Rename dibatalkan/gagal karena:", error.message);
+        }
     }
 
     async handleDeleteRequest() {
@@ -280,24 +298,29 @@ async createNewWorkspace() {
 }
 
     async updateName(id, newName) {
-        // 1. Update ke Server
-        await WorkspaceService.updateWorkspace(id, { name: newName });
+            try{
+            // 1. Update ke Server
+            await WorkspaceService.updateWorkspace(id, { name: newName });
+            
+            // 2. Update State utama
+            if (this.State.workspace) this.State.workspace.name = newName;
         
-        // 2. Update State utama
-        if (this.State.workspace) this.State.workspace.name = newName;
-    
-        // 3. Update State List (PENTING: Agar renderActiveWorkspace tidak ambil data lama)
-        const wsInList = this.State.workspaceList?.find(w => Number(w.id) === Number(id));
-        if (wsInList) wsInList.name = newName;
+            // 3. Update State List (PENTING: Agar renderActiveWorkspace tidak ambil data lama)
+            const wsInList = this.State.workspaceList?.find(w => Number(w.id) === Number(id));
+            if (wsInList) wsInList.name = newName;
 
-        // 4. PENTING: Broadcast ke Tab B agar mereka juga update
-        const bc = new BroadcastChannel('workspace_channel');
-        bc.postMessage({ 
-            type: 'SYNC_DATA_GLOBAL', 
-            id: id, 
-            data: { name: newName } 
-        });
-        bc.close();
+            // 4. PENTING: Broadcast ke Tab B agar mereka juga update
+            const bc = new BroadcastChannel('workspace_channel');
+            bc.postMessage({ 
+                type: 'SYNC_DATA_GLOBAL', 
+                id: id, 
+                data: { name: newName } 
+            });
+            bc.close();
+        }
+        catch(error){
+            throw error;
+        }
     }
     initWorkspaceContextMenu() {
         const el = this.ui.activeWorkspaceName;

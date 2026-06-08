@@ -94,22 +94,34 @@ export class WorkspaceService {
 
   // ================= UPDATE =================
   static async updateWorkspace(id, body) {
-    const safeId = this.extractWorkspaceId({ id });
+      try{
+          const safeId = this.extractWorkspaceId({ id });
 
-    if (!safeId) {
-      console.error("[WorkspaceService] invalid id:", id);
-      return;
+          if (!safeId) {
+            console.error("[WorkspaceService] invalid id:", id);
+            return;
+          }
+
+          const res = await fetch(`${API}/workspaces/${safeId}`, {
+            method: "PUT",
+            headers: this.headers(),
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) {
+            throw new Error(`Server returned ${res.status}: ${res.statusText}`);
+        }
+
+          const json = await this.safeJson(res);
+
+          return json?.data ?? json;
+      }
+      catch (error) {
+        // Logging di sini untuk tracking
+        console.error("[WorkspaceService] Update error:", error.message);
+        
+        // Throw ulang agar UI/Controller bisa menangkap error ini dan menampilkan alert
+        throw error; 
     }
-
-    const res = await fetch(`${API}/workspaces/${safeId}`, {
-      method: "PUT",
-      headers: this.headers(),
-      body: JSON.stringify(body)
-    });
-
-    const json = await this.safeJson(res);
-
-    return json?.data ?? json;
   }
 
   //=================== DELETE =======================
