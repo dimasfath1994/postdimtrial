@@ -27,5 +27,5 @@ tauri-plugin-log = "2"
 # rustls-tls: untuk koneksi HTTPS yang aman (standar industri)
 # cookies: agar bisa simpan session antar request
 # multipart: agar bisa upload file
-reqwest = { version = "0.12", features = ["json", "multipart", "cookies", "rustls-tls"] }
+reqwest = { version = "0.12", features = ["json", "multipart", "cookies", "rustls-tls", "fs"] }
 tokio = { version = "1", features = ["full"] }

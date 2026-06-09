@@ -44,30 +44,26 @@ pub async fn http_request(
 
     // LOGIKA BODY
     if let Some(b) = body {
-        // Cek apakah ini multipart (Array dari field)
-        if b.is_array() {
-            let mut form = multipart::Form::new();
-            for item in b.as_array().unwrap() {
-                let key = item["key"].as_str().unwrap_or("");
-                let val = item["value"].as_str().unwrap_or("");
-                let r#type = item["type"].as_str().unwrap_or("text");
+      if b.is_array() {
+          let mut form = multipart::Form::new();
+          for item in b.as_array().unwrap() {
+              let key = item["key"].as_str().unwrap_or("");
+              let val = item["value"].as_str().unwrap_or("");
+              let r#type = item["type"].as_str().unwrap_or("text");
 
-                if r#type == "file" {
-                    // Di sini Rust bisa membaca file dari path jika val adalah path
-                    // Untuk sekarang kita asumsikan val adalah path file lokal
-                    if let Ok(part) = multipart::Part::file(val).await {
-                        form = form.part(key.to_string(), part);
-                    }
-                } else {
-                    form = form.text(key.to_string(), val.to_string());
-                }
-            }
-            request = request.multipart(form);
-        } else {
-            // Raw/JSON body biasa
-            request = request.body(b.as_str().unwrap_or(&b.to_string()).to_string());
-        }
-    }
+              if r#type == "file" {
+                  // Gunakan std::fs untuk file, jangan langsung .await di sini
+                  let part = multipart::Part::file(val).map_err(|e| e.to_string())?;
+                  form = form.part(key.to_string(), part);
+              } else {
+                  form = form.text(key.to_string(), val.to_string());
+              }
+          }
+          request = request.multipart(form);
+      } else {
+          request = request.body(b.as_str().unwrap_or(&b.to_string()).to_string());
+      }
+  }
 
     let response = request.send().await.map_err(|e| e.to_string())?;
     let duration = start.elapsed().as_millis();
