@@ -5,6 +5,17 @@ mod request_handler;
 
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            // Setup log hanya jika di mode debug
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             request_handler::http_request
         ])
