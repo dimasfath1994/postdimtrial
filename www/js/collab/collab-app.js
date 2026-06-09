@@ -59,7 +59,7 @@ if (isTauri) {
 } else {
     // Jika di browser, arahkan ke GitHub Releases
     document.getElementById('downloadAppBtn').addEventListener('click', () => {
-        window.open('https://github.com/username/postdim-repo/releases/latest', '_blank');
+        window.open('https://github.com/dimasfath1994/postdimtrial/releases/latest/download/Postdim-App.exe', '_blank');
     });
 }
 

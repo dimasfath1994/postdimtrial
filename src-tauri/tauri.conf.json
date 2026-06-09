@@ -32,7 +32,7 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "webviewInstallMode": "embeddedHtml"
+      "webviewInstallMode": "OnRequest"
     }
   }
 }
