@@ -3,6 +3,7 @@
  * Bertugas mengirim request ke server dan mengembalikan response mentah.
  */
 import { proxysendRequest } from "../../core/api/proxy-api.js";
+
 export class RequestDispatcher {
     
     /**
@@ -12,7 +13,7 @@ export class RequestDispatcher {
         try {
             let { method, url, headers, params, body, useProxy } = data;
             
-            // --- MENGGABUNGKAN PARAMS KE URL ---
+            // --- 1. MENGGABUNGKAN PARAMS KE URL ---
             if (params && Object.keys(params).length > 0) {
                 const searchParams = new URLSearchParams(params);
                 const separator = url.includes('?') ? '&' : '?';
@@ -20,25 +21,20 @@ export class RequestDispatcher {
             }
             
             const finalUrl = url;
-
             const config = {
                 method: method,
                 headers: { ...headers }
             };
 
-            // --- LOGIKA BODY DYNAMIC ---
+            // --- 2. LOGIKA BODY DYNAMIC ---
             if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
                 if (body instanceof FormData) {
-                    // FormData: Biarkan browser menentukan Content-Type (termasuk boundary)
-                    // Hapus Content-Type manual agar browser menyisipkan boundary otomatis
                     config.body = body;
                     delete config.headers['Content-Type']; 
                 } else if (body instanceof URLSearchParams) {
-                    // URLSearchParams: Gunakan content-type standar form
                     config.body = body;
                     config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
                 } else {
-                    // Raw/JSON/Text: Gunakan stringify jika objek, atau kirim apa adanya
                     if (!config.headers['Content-Type']) {
                         config.headers['Content-Type'] = 'application/json';
                     }
@@ -46,24 +42,33 @@ export class RequestDispatcher {
                 }
             }
 
-            console.log("[DEBUG] Sending Request with Config:", {
-                url: finalUrl,
-                method: method,
-                headers: config.headers,
-                body: body instanceof FormData ? "[FormData Object (Binary)]" : config.body 
-            });
-
-            // --- EKSEKUSI ---
+            // --- 3. EKSEKUSI ---
             if (window.__TAURI__) {
-                const { invoke } = window.__TAURI__;
-                return await invoke('http_request', { 
+                const { invoke } = window.__TAURI__.core;
+                
+                // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
+                const headerArray = Object.entries(config.headers);
+                
+                // Panggil Rust (Tauri)
+                const res = await invoke('http_request', { 
                     method, 
                     url: finalUrl, 
-                    headers: config.headers, 
-                    body: config.body 
+                    headers: headerArray, 
+                    body: config.body || null 
                 });
+
+                // Normalisasi response dari Rust agar sama dengan format 'fetch'
+                return {
+                    status: res.status,
+                    statusText: "OK", // Rust mengirim status code, kita bisa mock statusText
+                    headers: Object.fromEntries(res.headers),
+                    body: res.body,
+                    time: res.time,
+                    size: res.size
+                };
             }
 
+            // --- 4. EKSEKUSI WEB (FETCH) ---
             const startTime = performance.now();
             const response = useProxy 
                 ? await proxysendRequest(finalUrl, config, true)
