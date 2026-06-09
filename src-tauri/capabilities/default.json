@@ -6,15 +6,6 @@
     "main"
   ],
   "permissions": [
-    "core:default",
-    {
-      "identifier": "allow-http-request",
-      "description": "Allow invoking the http_request command",
-      "commands": {
-        "allow": [
-          "http_request"
-        ]
-      }
-    }
+    "core:default"
   ]
 }

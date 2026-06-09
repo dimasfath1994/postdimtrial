@@ -44,7 +44,11 @@ export class RequestDispatcher {
 
             // --- 3. EKSEKUSI ---
             if (window.__TAURI_INTERNALS__ !== undefined) {
-                const { invoke } = window.__TAURI_INTERNALS__?.core;
+                // Coba deteksi berbagai variasi penempatan invoke
+                const invoke = window.__TAURI__?.invoke || 
+                window.__TAURI__?.core?.invoke || 
+                window.__TAURI_INTERNALS__?.invoke || 
+                window.__TAURI_INTERNALS__?.core?.invoke;
                 alert("MASUK TAURI");
                 // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
                 const headerArray = Object.entries(config.headers);
