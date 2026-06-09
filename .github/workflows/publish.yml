@@ -36,6 +36,8 @@ jobs:
           CARGO_NET_TIMEOUT: "300"
         run: |
           cd src-tauri
+          # Langkah KRUSIAL: Menghapus folder gen agar schema di-generate ulang
+          if (Test-Path "gen") { Remove-Item -Recurse -Force "gen" }
           cargo tauri build
         
       - name: Upload to GitHub Releases
