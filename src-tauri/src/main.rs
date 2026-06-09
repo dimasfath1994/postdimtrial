@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::{Deserialize};
 use serde_json::json;
 use std::time::{Duration, Instant};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -35,7 +34,6 @@ pub async fn http_request(
         &url
     ).headers(header_map);
 
-    // LOGIKA BODY
     if let Some(b) = body {
         if b.is_array() {
             let mut form = multipart::Form::new();
@@ -46,7 +44,6 @@ pub async fn http_request(
                     let r#type = item["type"].as_str().unwrap_or("text");
 
                     if r#type == "file" {
-                        // Menggunakan stream untuk menghindari error Part::file
                         let file_content = tokio::fs::read(val).await.map_err(|e| e.to_string())?;
                         let part = multipart::Part::bytes(file_content).file_name(val.split(|c| c == '/' || c == '\\').last().unwrap_or("file").to_string());
                         form = form.part(key.to_string(), part);
@@ -63,15 +60,10 @@ pub async fn http_request(
 
     let response = request.send().await.map_err(|e| e.to_string())?;
     let duration = start.elapsed().as_millis();
-
     let status = response.status().as_u16();
     let body_text = response.text().await.map_err(|e| e.to_string())?;
     
-    Ok(json!({
-        "status": status,
-        "body": body_text,
-        "time": duration
-    }))
+    Ok(json!({"status": status, "body": body_text, "time": duration}))
 }
 
 fn main() {
