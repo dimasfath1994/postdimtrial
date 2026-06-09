@@ -4,6 +4,10 @@ on:
   push:
     tags: [ "v*" ]
 
+# Menambahkan izin akses agar Actions bisa membuat Release
+permissions:
+  contents: write
+
 jobs:
   build-tauri:
     runs-on: windows-latest
@@ -13,28 +17,27 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         
-      # Kita instal tauri-cli agar perintah 'cargo tauri' dikenal
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0"
         
-      # Kita build langsung tanpa npm install
-      # Jika aplikasi butuh build frontend, pastikan langkahnya sesuai
       - name: Build Tauri
         run: cargo tauri build
         
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: src-tauri/target/release/bundle/msi/*.msi
 
   deploy-web:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.MY_GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./www
