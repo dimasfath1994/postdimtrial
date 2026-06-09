@@ -60,6 +60,13 @@ mod commands {
         }
 
         let response = request.send().await.map_err(|e| e.to_string())?;
+        
+        // Ambil headers untuk dikirim balik ke JS
+        let mut res_headers = Vec::new();
+        for (name, value) in response.headers() {
+            res_headers.push((name.to_string(), value.to_str().unwrap_or("").to_string()));
+        }
+
         let duration = start.elapsed().as_millis();
         let status = response.status().as_u16();
         let body_text = response.text().await.map_err(|e| e.to_string())?;
@@ -67,7 +74,8 @@ mod commands {
         Ok(json!({
             "status": status,
             "body": body_text,
-            "time": duration
+            "time": duration,
+            "headers": res_headers // Mengirim header kembali ke JS
         }))
     }
 }
