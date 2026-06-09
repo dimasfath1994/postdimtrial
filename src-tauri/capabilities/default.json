@@ -6,6 +6,12 @@
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    {
+      "identifier": "core:allow-invoke",
+      "allow": [
+        "http_request"
+      ]
+    }
   ]
 }
