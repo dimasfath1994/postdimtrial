@@ -1,10 +1,13 @@
 use serde_json::json;
 
-// 1. Definisikan command di sini agar satu paket dengan aplikasi
-#[tauri::command]
-pub async fn http_request(method: String, url: String) -> Result<serde_json::Value, String> {
-    // Untuk mengetes dulu, kita kembalikan respon statis
-    Ok(json!({"status": 200, "message": "Berhasil dipanggil dari lib.rs!"}))
+// Kita gunakan modul terpisah untuk command agar tidak ter-include dua kali
+mod commands {
+    use super::*;
+    
+    #[tauri::command]
+    pub async fn http_request(method: String, url: String) -> Result<serde_json::Value, String> {
+        Ok(json!({"status": 200, "message": "Berhasil dipanggil dari lib.rs!"}))
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,8 +23,8 @@ pub fn run() {
       }
       Ok(())
     })
-    // 2. Daftarkan command di sini
-    .invoke_handler(tauri::generate_handler![http_request])
+    // Panggil lewat modul
+    .invoke_handler(tauri::generate_handler![commands::http_request])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
