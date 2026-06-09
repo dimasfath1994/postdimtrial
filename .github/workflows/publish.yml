@@ -10,25 +10,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         
-      # Instal tauri-cli agar perintah 'cargo tauri' bisa dikenali
+      # Kita instal tauri-cli agar perintah 'cargo tauri' dikenal
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0"
         
-      # Jika kamu tidak pakai npm, hapus baris npm install. 
-      # Jika pakai, pastikan package.json ada di root.
+      # Kita build langsung tanpa npm install
+      # Jika aplikasi butuh build frontend, pastikan langkahnya sesuai
       - name: Build Tauri
         run: cargo tauri build
         
       - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2 # Gunakan v2 untuk keamanan
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
         with:
