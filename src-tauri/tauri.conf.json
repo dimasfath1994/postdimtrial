@@ -1,18 +1,20 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Postdim App",
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "Postdim",
   "version": "0.1.0",
   "identifier": "io.postdim.desktop",
   "build": {
     "frontendDist": "../www",
-    "devUrl": null
+    "devUrl": null,
+    "beforeBuildCommand": "",
+    "beforeDevCommand": ""
   },
   "app": {
     "windows": [
       {
         "title": "Postdim",
-        "width": 800,
-        "height": 600,
+        "width": 1000,
+        "height": 700,
         "resizable": true,
         "fullscreen": false
       }
@@ -30,6 +32,18 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
-  }
+    ],
+    "identifier": "io.postdim.desktop"
+  },
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "allow-http-request",
+      "allow": [
+        {
+          "name": "http_request"
+        }
+      ]
+    }
+  ]
 }
