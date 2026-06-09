@@ -1,0 +1,6 @@
+src-tauri
+target
+.git
+.github
+node_modules
+*.log
