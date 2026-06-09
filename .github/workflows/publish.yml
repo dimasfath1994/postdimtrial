@@ -16,6 +16,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         
+      # Instalasi Node.js diperlukan jika kamu memiliki frontend (Vite/React/HTML)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+        
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0"
         
@@ -27,8 +33,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # Pastikan file-file ini ada di path tersebut setelah build
           files: |
-            src-tauri/target/release/*.exe
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
 
