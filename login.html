@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Postdim - Login</title>
+  <link rel="stylesheet" href="./css/login.css">
+</head>
+
+<body class="auth-body">
+
+  <div class="auth-container">
+
+    <h2>Postdim Collaboration</h2>
+
+    <!-- TAB TOGGLE -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="loginTab">Login</button>
+      <button class="auth-tab" id="registerTab">Register</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <div id="loginForm" class="auth-form">
+      <input id="loginEmail" placeholder="Email">
+      <input id="loginPassword" type="password" placeholder="Password">
+      <button id="loginBtn">Login</button>
+    </div>
+
+    <!-- REGISTER FORM -->
+    <div id="registerForm" class="auth-form hidden">
+      <input id="regName" placeholder="Name">
+      <input id="regEmail" placeholder="Email">
+      <input id="regPassword" type="password" placeholder="Password">
+      <button id="registerBtn">Register</button>
+    </div>
+
+  </div>
+
+  <script type="module" src="./js/login.js"></script>
+</body>
+</html>

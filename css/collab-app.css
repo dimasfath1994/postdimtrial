@@ -1,0 +1,1148 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: white;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ================= LAYOUT ================= */
+
+.container {
+  margin-left: 220px;
+  padding: 14px;
+  height: 100vh;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+/* ================= SIDEBAR ================= */
+
+#sidebar {
+  width: 220px;
+  position: fixed;
+  inset: 0 auto 0 0;
+
+  background: #0f0f0f;
+  border-right: 1px solid #222;
+
+  padding: 10px;
+
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+
+  z-index: 100;
+}
+
+#collectionList {
+  margin-top: 10px;
+  overflow: auto;
+  flex: 1;
+}
+
+.collection {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-bottom: 4px;
+
+  font-size: 13px;
+
+  transition: 0.15s;
+}
+
+.collection:hover {
+  background: #1d1d1d;
+}
+
+.collection-request {
+  border-radius: 6px;
+  transition: .15s;
+}
+
+.collection-request:hover {
+  background: #222;
+}
+
+/* ================= TOPBAR ================= */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  height: 38px;
+
+  margin-bottom: 10px;
+}
+
+
+/* ================= NEW TAB BUTTON ================= */
+
+#newTab {
+  width: auto;
+
+  height: 28px;
+
+  padding: 0 10px;
+
+  margin: 0;
+
+  background: #1f1f1f;
+  border: 1px solid #333;
+
+  border-radius: 6px;
+
+  font-size: 12px;
+
+  flex-shrink: 0;
+}
+
+#newTab:hover {
+  background: #2b2b2b;
+}
+
+/* ================= FORM ================= */
+
+select,
+input,
+textarea {
+  width: 100%;
+  margin-top: 8px;
+
+  padding: 10px;
+
+  background: #1b1b1b;
+  color: white;
+
+  border: 1px solid #2f2f2f;
+  border-radius: 6px;
+
+  box-sizing: border-box;
+
+  font-size: 13px;
+}
+
+textarea {
+  height: 120px;
+  resize: vertical;
+}
+
+/* ================= BUTTON ================= */
+
+button {
+  margin-top: 10px;
+
+  padding: 10px 12px;
+
+  background: #262626;
+  color: white;
+
+  border: 1px solid #333;
+  border-radius: 6px;
+
+  cursor: pointer;
+
+  transition: 0.15s;
+}
+
+button:hover {
+  background: #333;
+}
+
+/* ================= RESPONSE ================= */
+
+pre {
+  background: #0b0b0b;
+
+  padding: 12px;
+
+  margin-top: 10px;
+
+  height: 300px;
+
+  overflow: auto;
+
+  border: 1px solid #222;
+  border-radius: 8px;
+
+  font-size: 12px;
+}
+
+#response-container {
+  display: flex;
+  flex-direction: column;
+  height: 300px; /* Tinggi awal */
+  min-height: 150px;
+  resize: vertical; /* Ini yang membuat bisa ditarik ke atas/bawah */
+  overflow: hidden;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #1e1e1e;
+  margin-top: 10px;
+}
+
+/* Container untuk line numbers dan text */
+#response-wrapper {
+  display: flex;
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: #1e1e1e;
+}
+
+/* Container yang menampung angka dan teks */
+.editor-container {
+  display: flex;
+  overflow: hidden; /* Kita akan handle scroll lewat JS agar sinkron */
+  height: 100%;
+}
+
+#line-numbers {
+  flex-shrink: 0;
+  overflow: hidden; /* Angka tidak boleh punya scrollbar sendiri */
+  padding: 10px 5px;
+  color: #858585;
+  background: #252526;
+  text-align: right;
+  user-select: none; /* User tidak bisa blok nomor baris */
+  border-right: 1px solid #333;
+}
+
+#content {
+  margin: 0;
+  padding: 10px;
+  flex: 1;
+  overflow: auto; /* Semua scroll terjadi di sini */
+  overflow-x: auto;
+  color: #d4d4d4;
+  white-space: pre; /* Mempertahankan format JSON */
+}
+
+#response {
+  flex: 1;
+  padding: 10px;
+  margin: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: #d4d4d4;
+  white-space: pre;
+  line-height: 1.5; /* Harus sama dengan #line-numbers */
+  outline: none;
+}
+
+/* Tombol Copy */
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* ================= STATUS ================= */
+
+#statusBar {
+  margin-top: 10px;
+
+  padding: 8px 10px;
+
+  background: #1a1a1a;
+
+  border: 1px solid #2b2b2b;
+  border-radius: 6px;
+
+  font-size: 12px;
+
+  display: flex;
+  gap: 10px;
+}
+
+/* ================= TREE ================= */
+
+.tree {
+  font-family: monospace;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.node {
+  margin-left: 12px;
+  cursor: pointer;
+}
+
+.key {
+  color: #9cdcfe;
+}
+
+.value {
+  color: #ce9178;
+}
+
+/* ================= VIEW TOGGLE ================= */
+
+.toggle {
+  display: inline-flex;
+
+  background: #1b1b1b;
+
+  border: 1px solid #2b2b2b;
+  border-radius: 6px;
+
+  overflow: hidden;
+
+  margin-top: 10px;
+}
+
+.toggle .opt {
+  padding: 6px 12px;
+
+  cursor: pointer;
+
+  font-size: 12px;
+
+  color: #888;
+
+  user-select: none;
+}
+
+.toggle .opt.active {
+  background: #333;
+  color: white;
+}
+
+/* ================= REQUEST TABS ================= */
+
+.req-tabs {
+  display: flex;
+  gap: 10px;
+
+  border-bottom: 1px solid #2a2a2a;
+
+  margin-top: 10px;
+}
+
+
+
+
+
+/* ================= TAB PANEL ================= */
+
+.tab-panel {
+  margin-top: 10px;
+}
+
+
+
+
+#paramsBox {
+  margin-top: 10px;
+}
+
+
+
+.proxy-container {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  color: #666;
+  white-space: nowrap;
+}
+
+
+/* ================= MODAL ================= */
+
+.modal {
+  position: fixed;
+  inset: 0;
+
+  background: rgba(0,0,0,.6);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: #1e1e1e;
+
+  padding: 20px;
+
+  width: 500px;
+
+  border-radius: 10px;
+}
+
+/* ================= ENV PANEL ================= */
+.env-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  background: #1e1e1e;
+  color: #e0e0e0;
+  border-left: 1px solid #333;
+  padding: 12px;
+  
+  /* PENTING: Gunakan z-index tinggi agar tidak tertutup */
+  z-index: 999999 !important; 
+  
+  display: flex;
+  flex-direction: column;
+
+  /* Animasi Transisi */
+  transform: translateX(100%);
+  transition: transform 0.3s ease-in-out;
+}
+
+/* Class ini dipakai untuk menampilkan panel */
+.env-panel.show {
+  transform: translateX(0);
+}
+
+.env-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 10px;
+}
+
+.env-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #fff;
+}
+
+/* Style tambahan untuk konten di dalamnya */
+#envList-workspace, #envList-global {
+  margin-bottom: 20px;
+}
+
+.env-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  margin-top: auto; /* Mendorong form ke bawah */
+  padding-top: 15px;
+  border-top: 1px solid #333;
+}
+
+#closeEnvPanel {
+  background: transparent;
+  border: none;
+  color: #ccc;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+#closeEnvPanel:hover {
+  color: #ff4d4f;
+}
+
+.env-panel input {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+/* ================= MONACO ================= */
+
+.monaco-editor {
+  height: 180px;
+
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+
+  overflow: hidden;
+}
+
+.script-section {
+  margin-bottom: 12px;
+}
+
+.script-header {
+  font-size: 12px;
+  color: #aaa;
+  margin: 6px 0;
+}
+
+/* ================= MOBILE ================= */
+
+@media (max-width: 900px) {
+
+  #sidebar {
+    width: 180px;
+  }
+
+  .container {
+    margin-left: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+
+  body {
+    overflow: auto;
+  }
+
+  #sidebar {
+    position: relative;
+
+    width: 100%;
+    height: auto;
+
+    border-right: none;
+    border-bottom: 1px solid #222;
+  }
+
+  .container {
+    margin-left: 0;
+
+    height: auto;
+  }
+
+  .topbar {
+    flex-wrap: nowrap;
+  }
+
+  .tab {
+    max-width: 140px;
+  }
+
+  .param-row {
+    grid-template-columns: 24px 1fr 1fr 30px;
+  }
+
+  .param-row .d {
+    display: none;
+  }
+
+  .env-panel {
+    width: 100%;
+  }
+
+  .modal-content {
+    width: calc(100% - 20px);
+  }
+}
+
+@media (max-width: 480px) {
+
+  .container {
+    padding: 10px;
+  }
+
+  .topbar {
+    gap: 4px;
+  }
+
+  .tab {
+    height: 26px;
+
+    padding: 0 8px;
+
+    font-size: 11px;
+
+    max-width: 120px;
+  }
+
+  #newTab {
+    height: 26px;
+    font-size: 11px;
+  }
+
+  select,
+  input,
+  textarea,
+  button {
+    font-size: 12px;
+  }
+
+  pre {
+    height: 220px;
+  }
+}
+
+#formDataList,
+#urlencodedList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 30px 1fr 1fr 120px 40px;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.row.header {
+  font-weight: bold;
+  opacity: 0.7;
+  border-bottom: 2px solid #444;
+}
+
+.row input,
+.row select {
+  width: 100%;
+  background: transparent;
+  border: 1px solid #333;
+  color: white;
+  padding: 4px;
+}
+
+.collab-btn {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  background: #2a2a2a;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.collab-btn:hover {
+  background: #3a3a3a;
+}
+
+.auth-body {
+  background: #111;
+  color: #fff;
+  display: flex;
+  height: 100vh;
+  justify-content: center;
+  align-items: center;
+  font-family: sans-serif;
+}
+
+.auth-container {
+  width: 320px;
+  padding: 20px;
+  background: #1b1b1b;
+  border-radius: 10px;
+}
+
+.auth-tabs {
+  display: flex;
+  margin-bottom: 15px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 8px;
+  background: #222;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.auth-tab.active {
+  background: #444;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-form input {
+  padding: 8px;
+  background: #222;
+  border: 1px solid #333;
+  color: white;
+}
+
+.auth-form button {
+  padding: 8px;
+  background: #3b82f6;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none;
+}
+
+
+
+
+/* ================= RESPONSE TABS ================= */
+
+.response-tabs{
+  display:flex;
+  gap:8px;
+
+  margin-top:16px;
+  margin-bottom:10px;
+
+  border-bottom:1px solid #2b2b2b;
+
+  padding-bottom:8px;
+}
+
+.response-tab{
+
+  padding:8px 14px;
+
+  cursor:pointer;
+
+  color:#999;
+
+  border-radius:6px;
+
+  transition:.2s;
+}
+
+.response-tab:hover{
+  background:#1e1e1e;
+}
+
+.response-tab.active{
+
+  color:#fff;
+
+  background:#252526;
+
+  border:1px solid #3a3a3a;
+}
+
+/* ================= RESPONSE PANELS ================= */
+
+.response-panel{
+
+  background:#1e1e1e;
+
+  border:1px solid #2b2b2b;
+
+  border-radius:8px;
+
+  padding:12px;
+
+  min-height:120px;
+
+  overflow:auto;
+}
+
+.response-panel.hidden{
+  display:none;
+}
+
+/* header / cookies viewer */
+
+.response-panel pre{
+
+  margin:0;
+
+  padding:10px;
+
+  background:#111;
+
+  border-radius:6px;
+
+  overflow:auto;
+
+  white-space:pre-wrap;
+
+  word-break:break-word;
+
+  font-size:12px;
+}
+
+/* optional */
+
+#responsePanels{
+  margin-top:10px;
+}
+
+
+.col-name {
+  cursor: context-menu; /* Memberi petunjuk visual bahwa ini bisa diklik kanan */
+}
+
+
+.folder-item {
+  display: flex;
+  flex-direction: column; /* Biarkan children tersusun ke bawah */
+}
+.child-list {
+  display: block; /* Pastikan terlihat */
+  margin-left: 20px;
+  border-left: 1px solid #ccc;
+}
+
+
+/* app.css */
+/* --- BASE RESET & HELPERS --- */
+* { box-sizing: border-box; }
+
+.method-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  width: 45px;
+  text-align: center;
+  display: inline-block;
+}
+
+.method-badge.GET { background-color: #61affe; }
+.method-badge.POST { background-color: #49cc90; }
+.method-badge.PUT { background-color: #fca130; }
+.method-badge.DELETE { background-color: #f93e3e; }
+.method-badge.PATCH { background-color: #50e3c2; }
+
+/* --- SIDEBAR & LIST ITEMS --- */
+.request-item:hover { background-color: #2d2d2d; }
+
+/* --- TABS CONTAINER (TOPBAR) --- */
+.tabs-container {
+  display: flex;
+  background: #1f1f1f;
+  border-bottom: 1px solid #333;
+  height: 32px;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-item {
+  height: 100%;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #888;
+  border-right: 1px solid #333;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  max-width: 150px;
+  min-width: 100px;
+  justify-content: space-between;
+  background: #252526;
+}
+
+.tab-item.active {
+  background: #2d2d2d;
+  color: #eee;
+  border-top: 2px solid #ff7a59;
+}
+
+.close-tab {
+  margin-left: 8px;
+  font-size: 14px;
+  background: none;
+  border: none;
+  color: #666;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.tab-item:hover .close-tab, 
+.tab-item.active .close-tab { opacity: 1; }
+
+/* --- REQUEST BAR (INPUTS) --- */
+.request-bar {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  gap: 6px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #333;
+  flex-wrap: nowrap; /* Default: satu baris */
+}
+
+#method {
+  height: 28px;
+  padding: 0 4px; /* Perkecil padding kiri-kanan */
+  font-size: 10px; /* Perkecil font agar tidak makan tempat */
+  background: #2d2d2d;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 60px; /* Batasi lebar fix agar tidak menyamping jauh */
+  text-overflow: ellipsis; /* Jika teks kepanjangan, beri titik-titik */
+}
+
+#url {
+  flex-grow: 1;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  background: #121212;
+  border: 1px solid #444;
+  color: #eee;
+  border-radius: 3px;
+  min-width: 100px;
+}
+
+#send {
+  height: 28px;
+  padding: 0 16px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #ff7a59;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+#send:hover { background: #ff633d; }
+
+/* --- REQUEST TAB PANELS (PARAMS/BODY) --- */
+.req-tabs {
+  display: flex;
+  padding: 0 10px;
+  border-bottom: 1px solid #333;
+  margin-top: 5px;
+}
+
+.req-tab {
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #777;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.req-tab.active {
+  color: #ff7a59;
+  border-bottom: 2px solid #ff7a59;
+}
+
+/* --- RESPONSIVE LOGIC --- */
+@media (max-width: 600px) {
+  .request-bar {
+    flex-wrap: wrap; /* Input jadi menumpuk di mobile */
+    gap: 10px;
+  }
+  #method { width: 100%; }
+  #url { width: 100%; }
+  #send { width: 100%; }
+}
+
+
+.action-menu {
+  position: relative;
+  display: inline-block;
+}
+
+/* Tombol Utama (FAB) */
+/* Tombol Utama (FAB) - Diperkecil */
+.btn-fab {
+  background: #007acc;
+  color: white;
+  border: none;
+  border-radius: 4px; /* Sudut lebih tajam agar terlihat lebih profesional */
+  width: 32px;  /* Mengecil dari 40px ke 32px */
+  height: 32px; /* Mengecil dari 40px ke 32px */
+  font-size: 16px; /* Font juga sedikit diperkecil */
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  transition: all 0.2s;
+}
+
+.btn-fab:hover { 
+  background: #005f9e; 
+}
+
+/* Dropdown Menu - Disesuaikan agar pas dengan lebar tombol */
+.action-dropdown {
+  display: none;
+  position: absolute;
+  bottom: 40px; /* Jarak lebih pas dengan tombol 32px */
+  left: 0;
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  padding: 2px 0;
+  min-width: 130px; /* Sedikit lebih ramping */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  z-index: 1000;
+}
+
+.action-dropdown button {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #cccccc;
+  padding: 8px 12px; /* Padding lebih kecil */
+  text-align: left;
+  cursor: pointer;
+  font-size: 11px; /* Font lebih kecil agar compact */
+}
+
+.action-dropdown button:hover { 
+  background: #007acc; 
+  color: white; 
+}
+
+.modal {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 2000;
+}
+.modal.hidden { display: none; }
+.modal-content { background: #252526; padding: 20px; border-radius: 8px; width: 300px; color: white; }
+.picker-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #333; }
+.picker-item:hover { background: #3c3c3c; }
+
+
+.param-delete:hover {
+  color: #ff4d4f !important; /* Warna merah saat delete di-hover */
+}
+input:focus {
+  outline: none;
+
+}
+
+.request-item.draft-item {
+  background-color: #fdfdfd;
+  border-left: 3px solid #ffcc00; /* Warna kuning untuk status draft */
+}
+
+.tab-item.tab-draft {
+  border-bottom: 2px solid #ffcc00;
+}
+
+
+
+.modal-hidden { 
+  display: none !important; 
+}
+/* Modal overlay */
+#inviteModal { 
+  display: flex; /* Override hidden saat aktif */
+  position: fixed; 
+  top: 0; left: 0; 
+  width: 100%; height: 100%; 
+  background: rgba(0,0,0,0.5); 
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+/* Wrapper pembungkus agar posisi absolutnya terkunci di sini */
+/* Container pembungkus (tambahkan ini di HTML sebagai wrapper) */
+.search-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Pastikan #searchResult memiliki style ini */
+#searchResult {
+  position: absolute;
+  top: 100%; 
+  left: 0;
+  width: 100%;
+  
+  /* Force visibility */
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  
+  background: white;
+  border: 1px solid #ccc;
+  z-index: 9999 !important; /* Supaya paling atas */
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Memastikan item dalam list terlihat */
+.user-item {
+  padding: 10px;
+  color: #000; /* Pastikan teks hitam */
+  cursor: pointer;
+  background: white;
+}
+
+.user-item:hover {
+  background-color: #f0f0f0;
+}
+
+#collabLogoutBtn:hover { color: #ff5f5f; }
+#downloadAppBtn:hover {
+  color: #fff;
+  opacity: 1;
+}
+
+.minimal-select {
+  width: 100%;
+  margin-top: 5px;
+  background: #1e1e1e; /* Warna senada dengan background modal/sidebar */
+  border: 1px solid #333;
+  color: #eee;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+  /* Menghilangkan panah default browser agar terlihat bersih */
+  appearance: none; 
+  -webkit-appearance: none;
+  background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2210%22%20height%3D%226%22%3E%3Cpolyline%20points%3D%220%200%205%205%2010%200%22%20fill%3D%22none%22%20stroke%3D%22%23666%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E');
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.minimal-select:hover, .minimal-select:focus {
+  border-color: #555;
+}
+
+
+#actionDropdown {
+  display: none;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 5px 0;
+  margin-top: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+#actionDropdown button {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  padding: 8px 15px;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+#actionDropdown button:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
