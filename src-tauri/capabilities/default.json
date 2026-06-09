@@ -8,10 +8,13 @@
   "permissions": [
     "core:default",
     {
-      "identifier": "core:allow-invoke",
-      "allow": [
-        "http_request"
-      ]
+      "identifier": "allow-http-request",
+      "description": "Allow invoking the http_request command",
+      "commands": {
+        "allow": [
+          "http_request"
+        ]
+      }
     }
   ]
 }
