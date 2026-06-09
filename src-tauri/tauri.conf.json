@@ -32,16 +32,5 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
-  "permissions": [
-    "core:default",
-    {
-      "identifier": "allow-http-request",
-      "allow": [
-        {
-          "name": "http_request"
-        }
-      ]
-    }
-  ]
+  }
 }
