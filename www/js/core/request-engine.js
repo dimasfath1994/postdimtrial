@@ -78,7 +78,7 @@ export class RequestEngine {
     if (token) finalHeaders["Authorization"] = `Bearer ${token}`;
 
     // ================= TAURI ENGINE =================
-    if (window.__TAURI__) {
+    if (window.__TAURI_INTERNALS__ !== undefined) {
       const { invoke } = window.__TAURI__.core;
       
       let tauriBody = null;
