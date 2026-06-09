@@ -4,5 +4,5 @@ api tools development
 
 for tagging:
 
-git tag v0.3.7
-git push origin v0.3.7
+git tag v0.3.9
+git push origin v0.3.9
