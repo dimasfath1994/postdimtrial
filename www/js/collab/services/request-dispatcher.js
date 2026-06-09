@@ -49,7 +49,7 @@ export class RequestDispatcher {
                 window.__TAURI__?.core?.invoke || 
                 window.__TAURI_INTERNALS__?.invoke || 
                 window.__TAURI_INTERNALS__?.core?.invoke;
-                alert("MASUK TAURI");
+
                 // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
                 const headerArray = Object.entries(config.headers);
                 
@@ -71,7 +71,6 @@ export class RequestDispatcher {
                     size: res.size
                 };
             }
-            alert("GA MASUK TAURI");
             // --- 4. EKSEKUSI WEB (FETCH) ---
             const startTime = performance.now();
             const response = useProxy 
