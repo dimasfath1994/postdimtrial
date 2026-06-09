@@ -1,24 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use serde_json::json;
 use std::time::{Duration, Instant};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::multipart;
-
-#[derive(Deserialize)]
-struct BodyField {
-    key: String,
-    value: String,
-    r#type: String, // "text" atau "file"
-}
 
 #[tauri::command]
 pub async fn http_request(
     method: String,
     url: String,
     headers: Vec<(String, String)>,
-    body: Option<serde_json::Value> // Kita ubah ke Value untuk menangani JSON atau Multipart
+    body: Option<serde_json::Value>
 ) -> Result<serde_json::Value, String> {
     
     let client = reqwest::Client::builder()
@@ -44,26 +37,29 @@ pub async fn http_request(
 
     // LOGIKA BODY
     if let Some(b) = body {
-      if b.is_array() {
-          let mut form = multipart::Form::new();
-          for item in b.as_array().unwrap() {
-              let key = item["key"].as_str().unwrap_or("");
-              let val = item["value"].as_str().unwrap_or("");
-              let r#type = item["type"].as_str().unwrap_or("text");
+        if b.is_array() {
+            let mut form = multipart::Form::new();
+            if let Some(items) = b.as_array() {
+                for item in items {
+                    let key = item["key"].as_str().unwrap_or("");
+                    let val = item["value"].as_str().unwrap_or("");
+                    let r#type = item["type"].as_str().unwrap_or("text");
 
-              if r#type == "file" {
-                  // Gunakan std::fs untuk file, jangan langsung .await di sini
-                  let part = multipart::Part::file(val).map_err(|e| e.to_string())?;
-                  form = form.part(key.to_string(), part);
-              } else {
-                  form = form.text(key.to_string(), val.to_string());
-              }
-          }
-          request = request.multipart(form);
-      } else {
-          request = request.body(b.as_str().unwrap_or(&b.to_string()).to_string());
-      }
-  }
+                    if r#type == "file" {
+                        // Menggunakan stream untuk menghindari error Part::file
+                        let file_content = tokio::fs::read(val).await.map_err(|e| e.to_string())?;
+                        let part = multipart::Part::bytes(file_content).file_name(val.split(|c| c == '/' || c == '\\').last().unwrap_or("file").to_string());
+                        form = form.part(key.to_string(), part);
+                    } else {
+                        form = form.text(key.to_string(), val.to_string());
+                    }
+                }
+            }
+            request = request.multipart(form);
+        } else {
+            request = request.body(b.as_str().unwrap_or(&b.to_string()).to_string());
+        }
+    }
 
     let response = request.send().await.map_err(|e| e.to_string())?;
     let duration = start.elapsed().as_millis();
@@ -80,12 +76,6 @@ pub async fn http_request(
 
 fn main() {
     tauri::Builder::default()
-        .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())?;
-            }
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![http_request])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
