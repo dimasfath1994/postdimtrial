@@ -21,18 +21,16 @@ jobs:
         with:
           node-version: 20
           
-      - name: Rust Cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-          
+      # Hapus Rust Cache untuk memastikan tidak ada sisa file lama yang menyebabkan konflik
       - name: Build Portable Executable
         env:
           CARGO_NET_RETRY: "10"
           CARGO_NET_TIMEOUT: "300"
         run: |
           cd src-tauri
-          # Membangun binari murni tanpa installer
+          # Perintah ini menghapus semua artefak kompilasi lama
+          cargo clean
+          # Membangun ulang dari nol
           cargo build --release
         
       - name: Upload to GitHub Releases
