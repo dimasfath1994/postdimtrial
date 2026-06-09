@@ -3,6 +3,7 @@
  * Bertugas mengirim request ke server dan mengembalikan response mentah.
  */
 import { proxysendRequest } from "../../core/api/proxy-api.js";
+import { invoke } from "@tauri-apps/api/core";
 
 export class RequestDispatcher {
     
@@ -44,7 +45,7 @@ export class RequestDispatcher {
 
             // --- 3. EKSEKUSI ---
             if (window.__TAURI_INTERNALS__ !== undefined) {
-                const { invoke } = window.__TAURI_INTERNALS__.core;
+
                 alert("MASUK TAURI");
                 // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
                 const headerArray = Object.entries(config.headers);
