@@ -1,14 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
-  "windows": [
-    "main"
-  ],
+  "description": "Enables default permissions and custom http_request command",
+  "windows": ["main"],
   "permissions": [
     "core:default",
     {
-      "identifier": "allow-http-request",
       "allow": [
         {
           "name": "http_request"
