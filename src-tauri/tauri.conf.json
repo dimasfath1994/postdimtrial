@@ -1,5 +1,4 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "productName": "Postdim",
   "version": "0.1.0",
   "identifier": "io.postdim.desktop",
@@ -32,8 +31,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "identifier": "io.postdim.desktop"
+    ]
   },
   "permissions": [
     "core:default",
