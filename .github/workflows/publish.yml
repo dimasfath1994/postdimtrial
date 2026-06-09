@@ -20,12 +20,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-        
+          
+      # Caching untuk mempercepat build dan menghindari download ulang
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0"
         
       - name: Build Tauri
-        run: cargo tauri build
+        env:
+          CARGO_NET_RETRY: "10"
+          CARGO_NET_TIMEOUT: "300"
+        run: |
+          cd src-tauri
+          cargo tauri build
         
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
@@ -33,7 +44,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: |
-            src-tauri/target/release/app.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
 
   deploy-web:
     runs-on: ubuntu-latest
