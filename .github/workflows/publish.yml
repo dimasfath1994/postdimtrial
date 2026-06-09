@@ -33,7 +33,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: |
-            src-tauri/target/release/*.exe
+            src-tauri/target/release/app.exe
 
   deploy-web:
     runs-on: ubuntu-latest
