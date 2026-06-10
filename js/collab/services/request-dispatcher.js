@@ -56,14 +56,40 @@ export class RequestDispatcher {
                 let tauriBody = config.body;
 
                 if (body instanceof FormData) {
-                    // Ambil array mentah dari State karena FormData kosong saat menyeberang IPC JSON
                     const paramsList = window.bodyParamCtrl?.State?.bodyParams || [];
-                    tauriBody = paramsList.filter(p => p.enabled === true || p.enabled === 1).map(p => ({
-                        key: p.key,
-                        value: p.value || "",
-                        type: p.type || "text"
-                    }));
-                    // Paksa header content-type agar Rust tahu ini multipart
+                    
+                    // 1. Bungkus proses ke dalam Array of Promises agar berjalan PARALEL
+                    const promises = paramsList.map(async (p) => {
+                        if (p.enabled !== true && p.enabled !== 1) return null;
+                        
+                        let itemType = p.type || "text";
+                        let itemValue = p.value;
+                        let fileBytes = null;
+                        let fileName = "";
+                
+                        if (itemType === "file" && itemValue instanceof File) {
+                            // Membaca file secara asynchronous bersamaan dengan file lainnya
+                            const buffer = await itemValue.arrayBuffer();
+                            fileBytes = Array.from(new Uint8Array(buffer)); 
+                            fileName = itemValue.name;
+                            itemValue = ""; 
+                        } else if (itemType === "file" && typeof itemValue === "string") {
+                            fileName = itemValue.split(/[/\\]/).pop();
+                        } else {
+                            itemValue = String(itemValue || "");
+                        }
+                
+                        return {
+                            key: p.key,
+                            value: itemValue,
+                            type: itemType,
+                            file_bytes: fileBytes,
+                            file_name: fileName
+                        };
+                    });
+                
+                    // 2. Jalankan semua promise sekaligus dan saring item yang aktif (bukan null)
+                    tauriBody = (await Promise.all(promises)).filter(Boolean);
                     config.headers['Content-Type'] = 'multipart/form-data';
                 } else if (body instanceof URLSearchParams) {
                     // Konversi URLSearchParams menjadi string flat urlencoded biasa
