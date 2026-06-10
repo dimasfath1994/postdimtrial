@@ -28,13 +28,33 @@ export class RequestDispatcher {
 
             // --- 2. LOGIKA BODY DYNAMIC ---
             if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
+                const isTauri = window.__TAURI_INTERNALS__ !== undefined;
+            
                 if (body instanceof FormData) {
-                    config.body = body;
-                    delete config.headers['Content-Type']; 
+                    if (isTauri) {
+                        // TAURI: Konversi ke Array untuk Rust
+                        const multipartArray = [];
+                        for (const [key, value] of body.entries()) {
+                            multipartArray.push({
+                                key: key,
+                                // Jika object File, ambil path-nya. Jika text, string-kan.
+                                value: value instanceof File ? (value.path || value.name) : String(value),
+                                type: value instanceof File ? "file" : "text"
+                            });
+                        }
+                        config.body = multipartArray;
+                        delete config.headers['Content-Type'];
+                    } else {
+                        // WEB AS-IS: Biarkan FormData apa adanya
+                        config.body = body;
+                        delete config.headers['Content-Type'];
+                    }
                 } else if (body instanceof URLSearchParams) {
-                    config.body = body;
+                    // Tauri butuh string untuk URLSearchParams agar bisa dikirim via bridge
+                    config.body = isTauri ? body.toString() : body;
                     config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
                 } else {
+                    // Default JSON
                     if (!config.headers['Content-Type']) {
                         config.headers['Content-Type'] = 'application/json';
                     }
@@ -99,4 +119,12 @@ export class RequestDispatcher {
         }
     }
 
+    static async _readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result); // Mengembalikan base64
+            reader.onerror = reject;
+            reader.readAsDataURL(file); // Atau readAsArrayBuffer jika perlu
+        });
+    }
 }
