@@ -112,9 +112,14 @@ mod commands {
             .build()
             .map_err(|e| format!("Failed to build client: {}", e))?;
 
-        // 2. Setup Headers
+        // 2. Setup Headers & Deteksi Content-Type dari Frontend
         let mut header_map = reqwest::header::HeaderMap::new();
+        let mut content_type = String::new();
+        
         for (k, v) in headers {
+            if k.to_lowercase() == "content-type" {
+                content_type = v.to_lowercase();
+            }
             if let (Ok(key), Ok(val)) = (
                 reqwest::header::HeaderName::from_bytes(k.as_bytes()),
                 reqwest::header::HeaderValue::from_str(&v)
@@ -134,7 +139,7 @@ mod commands {
         let request = if body.is_null() {
             request_builder
         } else if body.is_array() {
-            // Multipart logic: Memproses list object dari Formatter
+            // Multipart logic: Memproses list object jika dikirim dalam bentuk array [{key, value, type}]
             let mut form = reqwest::multipart::Form::new();
             for item in body.as_array().unwrap() {
                 let key = item["key"].as_str().unwrap_or("");
@@ -142,7 +147,6 @@ mod commands {
                 let r#type = item["type"].as_str().unwrap_or("text");
 
                 if r#type == "file" {
-                    // Membaca file dari path disk secara asinkron (Tokio)
                     if let Ok(file_content) = tokio::fs::read(val).await {
                         let filename = val.split(|c| c == '/' || c == '\\').last().unwrap_or("file");
                         let part = reqwest::multipart::Part::bytes(file_content)
@@ -155,11 +159,19 @@ mod commands {
             }
             request_builder.multipart(form)
         } else if body.is_string() {
-            // URL Encoded logic
-            request_builder.body(body.as_str().unwrap().to_string())
-                .header("Content-Type", "application/x-www-form-urlencoded")
+            // Jika body sudah berbentuk string matang (seperti teks mentah atau hasil serialisasi lain)
+            let body_str = body.as_str().unwrap().to_string();
+            request_builder.body(body_str)
+        } else if body.is_object() {
+            // Jika body berupa JSON Object, sesuaikan berdasarkan nilai Content-Type header
+            if content_type.contains("application/x-www-form-urlencoded") {
+                // Menggunakan .form() bawaan reqwest untuk otomatis mengubah JSON Object menjadi key1=value1&key2=value2
+                request_builder.form(&body)
+            } else {
+                // Default fallback dikirim sebagai JSON aplikasi biasa
+                request_builder.json(&body)
+            }
         } else {
-            // JSON logic
             request_builder.json(&body)
         };
 
@@ -184,6 +196,8 @@ mod commands {
             "size": body_size
         }))
     }
+
+    
 }
 
 
