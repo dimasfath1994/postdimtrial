@@ -58,37 +58,41 @@ export class RequestDispatcher {
                 if (body instanceof FormData) {
                     const paramsList = window.bodyParamCtrl?.State?.bodyParams || [];
                     
-                    // 1. Bungkus proses ke dalam Array of Promises agar berjalan PARALEL
+                    // PROSES SECARA PARALEL (ANTI-WATERFALL)
                     const promises = paramsList.map(async (p) => {
                         if (p.enabled !== true && p.enabled !== 1) return null;
                         
                         let itemType = p.type || "text";
                         let itemValue = p.value;
-                        let fileBytes = null;
+                        let fileB64 = null;
                         let fileName = "";
-                
-                        if (itemType === "file" && itemValue instanceof File) {
-                            // Membaca file secara asynchronous bersamaan dengan file lainnya
-                            const buffer = await itemValue.arrayBuffer();
-                            fileBytes = Array.from(new Uint8Array(buffer)); 
-                            fileName = itemValue.name;
-                            itemValue = ""; 
-                        } else if (itemType === "file" && typeof itemValue === "string") {
-                            fileName = itemValue.split(/[/\\]/).pop();
+                        let isPath = false;
+
+                        if (itemType === "file") {
+                            if (itemValue instanceof File) {
+                                // Kasus A: User input lewat tag <input type="file"> biasa
+                                fileB64 = await fileToBase64(itemValue);
+                                fileName = itemValue.name;
+                                itemValue = "";
+                            } else if (typeof itemValue === "string" && itemValue.trim() !== "") {
+                                // Kasus B (Gaya Postman): Nilai berupa Absolute Path String dari Tauri Dialog
+                                fileName = itemValue.split(/[/\\]/).pop();
+                                isPath = true; 
+                            }
                         } else {
                             itemValue = String(itemValue || "");
                         }
-                
+
                         return {
                             key: p.key,
                             value: itemValue,
                             type: itemType,
-                            file_bytes: fileBytes,
-                            file_name: fileName
+                            file_b64: fileB64,
+                            file_name: fileName,
+                            is_path: isPath
                         };
                     });
-                
-                    // 2. Jalankan semua promise sekaligus dan saring item yang aktif (bukan null)
+
                     tauriBody = (await Promise.all(promises)).filter(Boolean);
                     config.headers['Content-Type'] = 'multipart/form-data';
                 } else if (body instanceof URLSearchParams) {
