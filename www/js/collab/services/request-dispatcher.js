@@ -28,16 +28,7 @@ export class RequestDispatcher {
 
             // --- 2. LOGIKA BODY DYNAMIC ---
             if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
-                const isTauriProcessed = Array.isArray(body) || typeof body === 'string';
-                const isTauri = window.__TAURI_INTERNALS__ !== undefined;
-
-                if (isTauri && isTauriProcessed) {
-                    // Jika sudah diproses, langsung masukkan ke config
-                    config.body = body;
-                    // Hapus content-type karena Rust yang akan menentukan multipart/urlencoded secara otomatis
-                    delete config.headers['Content-Type']; 
-                }
-                else if (body instanceof FormData) {
+                if (body instanceof FormData) {
                     config.body = body;
                     delete config.headers['Content-Type']; 
                 } else if (body instanceof URLSearchParams) {
@@ -64,37 +55,37 @@ export class RequestDispatcher {
 
 
                 // --- 2. LOGIKA BODY DYNAMIC ---
-                    // if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
-                    //     if (body instanceof FormData) {
-                    //         const multipartArray = [];
-                    //         for (const [key, value] of body.entries()) {
-                    //             if (value instanceof File) {
-                    //                 multipartArray.push({
-                    //                     key: key,
-                    //                     value: value.path || value.name, // Di Tauri, biasanya kirim Path file-nya
-                    //                     type: "file"
-                    //                 });
-                    //             } else {
-                    //                 multipartArray.push({
-                    //                     key: key,
-                    //                     value: String(value),
-                    //                     type: "text"
-                    //                 });
-                    //             }
-                    //         }
-                    //         config.body = multipartArray; // Sekarang berupa Array, sesuai dengan `b.is_array()` di Rust
-                    //         delete config.headers['Content-Type']; 
-                    //     } else if (body instanceof URLSearchParams) {
-                    //         // KUNCI PERBAIKAN: Pakai .toString() agar menjadi "key1=val1&key2=val2"
-                    //         config.body = body.toString(); 
-                    //         config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-                    //     } else {
-                    //         if (!config.headers['Content-Type']) {
-                    //             config.headers['Content-Type'] = 'application/json';
-                    //         }
-                    //         config.body = typeof body === 'object' ? JSON.stringify(body) : body;
-                    //     }
-                    // }
+                    if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
+                        if (body instanceof FormData) {
+                            const multipartArray = [];
+                            for (const [key, value] of body.entries()) {
+                                if (value instanceof File) {
+                                    multipartArray.push({
+                                        key: key,
+                                        value: value.path || value.name, // Di Tauri, biasanya kirim Path file-nya
+                                        type: "file"
+                                    });
+                                } else {
+                                    multipartArray.push({
+                                        key: key,
+                                        value: String(value),
+                                        type: "text"
+                                    });
+                                }
+                            }
+                            config.body = multipartArray; // Sekarang berupa Array, sesuai dengan `b.is_array()` di Rust
+                            delete config.headers['Content-Type']; 
+                        } else if (body instanceof URLSearchParams) {
+                            // KUNCI PERBAIKAN: Pakai .toString() agar menjadi "key1=val1&key2=val2"
+                            config.body = body.toString(); 
+                            config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                        } else {
+                            if (!config.headers['Content-Type']) {
+                                config.headers['Content-Type'] = 'application/json';
+                            }
+                            config.body = typeof body === 'object' ? JSON.stringify(body) : body;
+                        }
+                    }
 
                 
                 // Panggil Rust (Tauri)
