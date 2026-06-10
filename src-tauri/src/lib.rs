@@ -111,7 +111,7 @@ mod commands {
             .danger_accept_invalid_certs(true)
             .build()
             .map_err(|e| format!("Failed to build client: {}", e))?;
-
+    
         // 2. Deteksi Content-Type terlebih dahulu dari frontend
         let mut content_type = String::new();
         for (k, v) in &headers {
@@ -120,7 +120,7 @@ mod commands {
                 break;
             }
         }
-
+    
         // Setup Headers (Proteksi khusus untuk Multipart Boundary)
         let mut header_map = reqwest::header::HeaderMap::new();
         for (k, v) in headers {
@@ -136,20 +136,19 @@ mod commands {
                 header_map.insert(key, val);
             }
         }
-
+    
         // 3. Prepare Request Builder
         let start = std::time::Instant::now();
         let request_builder = client.request(
             reqwest::Method::from_bytes(method.to_uppercase().as_bytes()).map_err(|_| "Invalid Method")?,
             &url
         ).headers(header_map);
-
+    
         // 4. Handle Body (Smart & Bulletproof Processing berdasarkan Content-Type)
-        let request = if body.is_null() {
+        let request = if body.is_null() || body.as_object().map_or(false, |obj| obj.is_empty()) {
             request_builder
         } else if content_type.contains("application/x-www-form-urlencoded") {
             if body.is_array() {
-                // Jika frontend mengirim url-encoded dalam struktur tabel/array [{key, value}]
                 let mut params = Vec::new();
                 for item in body.as_array().unwrap() {
                     let key = item["key"].as_str().unwrap_or("");
@@ -163,15 +162,15 @@ mod commands {
                 let body_str = body.as_str().unwrap_or(&body.to_string()).to_string();
                 request_builder.body(body_str).header("Content-Type", "application/x-www-form-urlencoded")
             }
-        } else if content_type.contains("multipart/form-data") {
+        } else if content_type.contains("multipart/form-data") || body.is_array() {
             let mut form = reqwest::multipart::Form::new();
             if body.is_array() {
                 for item in body.as_array().unwrap() {
                     let key = item["key"].as_str().unwrap_or("");
                     let val = item["value"].as_str().unwrap_or("");
                     let r#type = item["type"].as_str().unwrap_or("text");
-
-                    if r#type == "file" {
+    
+                    if r#type == "file" && !val.is_empty() {
                         if let Ok(file_content) = tokio::fs::read(val).await {
                             let filename = val.split(|c| c == '/' || c == '\\').last().unwrap_or("file");
                             let part = reqwest::multipart::Part::bytes(file_content)
@@ -186,41 +185,20 @@ mod commands {
             request_builder.multipart(form)
         } else if content_type.contains("application/json") {
             if body.is_string() {
-                // Jika payload JSON dikirim berupa string mentah dari textarea text/raw
                 let body_str = body.as_str().unwrap().to_string();
                 request_builder.body(body_str).header("Content-Type", "application/json")
             } else {
                 request_builder.json(&body)
             }
         } else {
-            // FALLBACK: Jika Content-Type dari frontend kosong / tidak spesifik
-            if body.is_array() {
-                let mut form = reqwest::multipart::Form::new();
-                for item in body.as_array().unwrap() {
-                    let key = item["key"].as_str().unwrap_or("");
-                    let val = item["value"].as_str().unwrap_or("");
-                    let r#type = item["type"].as_str().unwrap_or("text");
-
-                    if r#type == "file" {
-                        if let Ok(file_content) = tokio::fs::read(val).await {
-                            let filename = val.split(|c| c == '/' || c == '\\').last().unwrap_or("file");
-                            let part = reqwest::multipart::Part::bytes(file_content)
-                                .file_name(filename.to_string());
-                            form = form.part(key.to_string(), part);
-                        }
-                    } else {
-                        form = form.text(key.to_string(), val.to_string());
-                    }
-                }
-                request_builder.multipart(form)
-            } else if body.is_string() {
+            if body.is_string() {
                 let body_str = body.as_str().unwrap().to_string();
-                request_builder.body(body_str).header("Content-Type", "application/x-www-form-urlencoded")
+                request_builder.body(body_str)
             } else {
                 request_builder.json(&body)
             }
         };
-
+    
         // 5. Send & Process Response
         let response = request.send().await.map_err(|e| e.to_string())?;
         
@@ -228,12 +206,12 @@ mod commands {
         for (name, value) in response.headers() {
             res_headers.push((name.to_string(), value.to_str().unwrap_or("").to_string()));
         }
-
+    
         let duration = start.elapsed().as_millis();
         let status = response.status().as_u16();
         let body_text = response.text().await.map_err(|e| e.to_string())?;
         let body_size = body_text.len(); 
-
+    
         Ok(json!({
             "status": status,
             "body": body_text,

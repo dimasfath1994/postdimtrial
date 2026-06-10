@@ -50,22 +50,42 @@ export class RequestDispatcher {
                 window.__TAURI_INTERNALS__?.invoke || 
                 window.__TAURI_INTERNALS__?.core?.invoke;
 
-                // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
+                // =============================================================
+                // INTERSEPTOR IPC TAURI: Konversi Objek Browser ke Raw Serializable
+                // =============================================================
+                let tauriBody = config.body;
+
+                if (body instanceof FormData) {
+                    // Ambil array mentah dari State karena FormData kosong saat menyeberang IPC JSON
+                    const paramsList = window.bodyParamCtrl?.State?.bodyParams || [];
+                    tauriBody = paramsList.filter(p => p.enabled === true || p.enabled === 1).map(p => ({
+                        key: p.key,
+                        value: p.value || "",
+                        type: p.type || "text"
+                    }));
+                    // Paksa header content-type agar Rust tahu ini multipart
+                    config.headers['Content-Type'] = 'multipart/form-data';
+                } else if (body instanceof URLSearchParams) {
+                    // Konversi URLSearchParams menjadi string flat urlencoded biasa
+                    tauriBody = body.toString();
+                    config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                }
+
+                // Susun ulang header array setelah kemungkinan modifikasi Content-Type di atas
                 const headerArray = Object.entries(config.headers);
 
-                
                 // Panggil Rust (Tauri)
                 const res = await invoke('http_request_collabs', { 
                     method, 
                     url: finalUrl, 
                     headers: headerArray, 
-                    body: config.body || null 
+                    body: tauriBody || null 
                 });
 
                 // Normalisasi response dari Rust agar sama dengan format 'fetch'
                 return {
                     status: res.status,
-                    statusText: "OK", // Rust mengirim status code, kita bisa mock statusText
+                    statusText: "OK", 
                     headers: Object.fromEntries(res.headers),
                     body: res.body,
                     time: res.time,
