@@ -26,41 +26,43 @@ export class RequestDispatcher {
                 headers: { ...headers }
             };
 
-            // --- 2. LOGIKA BODY DYNAMIC ---
-            if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
-                const isTauri = window.__TAURI_INTERNALS__ !== undefined;
-            
-                if (body instanceof FormData) {
-                    if (isTauri) {
-                        // TAURI: Konversi ke Array untuk Rust
-                        const multipartArray = [];
-                        for (const [key, value] of body.entries()) {
-                            multipartArray.push({
-                                key: key,
-                                // Jika object File, ambil path-nya. Jika text, string-kan.
-                                value: value instanceof File ? (value.path || value.name) : String(value),
-                                type: value instanceof File ? "file" : "text"
-                            });
-                        }
-                        config.body = multipartArray;
-                        delete config.headers['Content-Type'];
-                    } else {
-                        // WEB AS-IS: Biarkan FormData apa adanya
-                        config.body = body;
-                        delete config.headers['Content-Type'];
-                    }
-                } else if (body instanceof URLSearchParams) {
-                    // Tauri butuh string untuk URLSearchParams agar bisa dikirim via bridge
-                    config.body = isTauri ? body.toString() : body;
-                    config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-                } else {
-                    // Default JSON
-                    if (!config.headers['Content-Type']) {
-                        config.headers['Content-Type'] = 'application/json';
-                    }
-                    config.body = typeof body === 'object' ? JSON.stringify(body) : body;
-                }
-            }
+           // --- 2. LOGIKA BODY DYNAMIC ---
+if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
+    const isTauri = window.__TAURI_INTERNALS__ !== undefined;
+
+    // A. Handling FormData
+    if (body instanceof FormData) {
+        if (isTauri) {
+            // Optimasi: Gunakan map langsung dari entries jika memungkinkan
+            // Ini akan mengurangi overhead deklarasi variabel di dalam loop
+            config.body = Array.from(body.entries()).map(([key, value]) => ({
+                key,
+                value: value instanceof File ? (value.path || value.name) : String(value),
+                type: value instanceof File ? "file" : "text"
+            }));
+            delete config.headers['Content-Type'];
+        } else {
+            // WEB AS-IS: Sangat efisien karena browser native yang menangani multipart boundary
+            config.body = body;
+            delete config.headers['Content-Type'];
+        }
+    } 
+    // B. Handling URLSearchParams
+    else if (body instanceof URLSearchParams) {
+        config.body = isTauri ? body.toString() : body;
+        config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    } 
+    // C. Handling Default (JSON / Raw)
+    else {
+        if (!config.headers['Content-Type']) {
+            config.headers['Content-Type'] = 'application/json';
+        }
+        // Optimasi: cek tipe objek sekali saja sebelum stringify
+        config.body = (typeof body === 'object' && !(body instanceof String)) 
+            ? JSON.stringify(body) 
+            : body;
+    }
+}
 
             // --- 3. EKSEKUSI ---
             if (window.__TAURI_INTERNALS__ !== undefined) {
