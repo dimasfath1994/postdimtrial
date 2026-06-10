@@ -68,41 +68,59 @@ export class RequestFormatter {
     static async getFormData() {
         const params = window.bodyParamCtrl?.State?.bodyParams || [];
         
-        // DETEKSI TAURI: Jika di Tauri, kita ingin menyimpan info file path
+        // Deteksi apakah berjalan di environment Tauri
         const isTauri = window.__TAURI_INTERNALS__ !== undefined;
     
-        // Jika di Tauri, kita kembalikan array agar mudah di-serialize
-        // Jika di web, kita tetap kembalikan FormData agar kompatibel dengan fetch
+        // Jika Tauri, kita siapkan array untuk dikirim ke Rust. 
+        // Jika bukan, kita pakai FormData seperti biasa.
         const output = isTauri ? [] : new FormData();
-        
+    
         for (const p of params.filter(p => p.enabled === true || p.enabled === 1)) {
             if (!p.key) continue;
     
             if (p.type === 'file') {
                 if (isTauri) {
-                    // TAURI LOGIC: Simpan path atau nama file
+                    // TAURI LOGIC: Ambil path file dari p.file (yang di-set via dialog)
                     output.push({
                         key: p.key,
-                        // Di Tauri, kita butuh Path atau nama file yang bisa diakses Rust
-                        value: p.file?.path || p.value || "unknown_file",
+                        value: p.file?.path || p.value || "", 
                         type: "file"
                     });
                 } else {
-                    // WEB LOGIC: Tetap menggunakan FormData dan Blob
+                    // WEB LOGIC AS-IS:
+                    // 1. Prioritas: File object yang sudah ada di memory
                     if (p.file instanceof File) {
                         output.append(p.key, p.file);
-                    } else if (p.value) {
-                        // ... (logika download blob server yang sudah ada)
+                    } 
+                    // 2. Jika tidak ada, tapi ada value (path string), ambil blob dari server
+                    else if (p.value) {
                         try {
-                            const blob = await this._getBlobFromSource(p); // bungkus logika downloadmu
-                            if (blob) output.append(p.key, new File([blob], p.file_name || "file"));
-                        } catch (e) { console.error(e); }
+                            let blob;
+                            const isDraft = String(window.bodyParamCtrl.currentRequestId).startsWith('draft_');
+    
+                            if (isDraft) {
+                                blob = await DataBridge.getBlob(window.bodyParamCtrl.currentRequestId, 'bodyParams', p.id);
+                            } else {
+                                blob = await RequestBodyParamService.downloadFileAsBlob(p.value);
+                            }
+    
+                            if (blob) {
+                                const file = new File([blob], p.file_name || "downloaded_file");
+                                output.append(p.key, file);
+                            }
+                        } catch (e) {
+                            console.error(`[FormData] Gagal menyiapkan file: ${p.key}`, e);
+                        }
                     }
                 }
             } else {
-                // Penanganan teks biasa
+                // Penanganan text/key-value biasa
                 if (isTauri) {
-                    output.push({ key: p.key, value: p.value || "", type: "text" });
+                    output.push({
+                        key: p.key,
+                        value: p.value || "",
+                        type: "text"
+                    });
                 } else {
                     output.append(p.key, p.value || "");
                 }
