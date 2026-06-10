@@ -11,75 +11,92 @@ export class RequestDispatcher {
      */
     static async send(data) {
         try {
-            const { method, url, headers, params, body, useProxy } = data;
+            let { method, url, headers, params, body, useProxy } = data;
             
-            // 1. Persiapan URL & Headers
-            let finalUrl = url;
+            // --- 1. MENGGABUNGKAN PARAMS KE URL ---
             if (params && Object.keys(params).length > 0) {
-                finalUrl += (finalUrl.includes('?') ? '&' : '?') + new URLSearchParams(params).toString();
+                const searchParams = new URLSearchParams(params);
+                const separator = url.includes('?') ? '&' : '?';
+                url = `${url}${separator}${searchParams.toString()}`;
             }
             
-            const config = { method, headers: { ...headers } };
+            const finalUrl = url;
+            const config = {
+                method: method,
+                headers: { ...headers }
+            };
 
-            // 2. Pusat Logika Body (Hanya diproses sekali)
-            this._processBody(config, body, method);
-
-            // 3. Eksekusi Berdasarkan Environment
-            return await this._execute(finalUrl, config, method, useProxy);
-
-        } catch (err) {
-            console.error("[RequestDispatcher Error]", err);
-            return { error: true, message: err.message };
-        }
-    }
-
-    // Helper untuk memproses body secara transparan
-    static _processBody(config, body, method) {
-        if (['GET', 'HEAD'].includes(method.toUpperCase()) || body == null) return;
-
-        if (body instanceof FormData) {
-            // Untuk Tauri, kita butuh array format. Untuk Fetch, biarkan FormData
-            if (window.__TAURI_INTERNALS__) {
-                config.body = Array.from(body.entries()).map(([k, v]) => ({
-                    key: k,
-                    value: v instanceof File ? (v.path || v.name) : String(v),
-                    type: v instanceof File ? "file" : "text"
-                }));
-            } else {
-                config.body = body;
+            // --- 2. LOGIKA BODY DYNAMIC ---
+            if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
+                if (body instanceof FormData) {
+                    config.body = body;
+                    delete config.headers['Content-Type']; 
+                } else if (body instanceof URLSearchParams) {
+                    config.body = body;
+                    config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                } else {
+                    if (!config.headers['Content-Type']) {
+                        config.headers['Content-Type'] = 'application/json';
+                    }
+                    config.body = typeof body === 'object' ? JSON.stringify(body) : body;
+                }
             }
-            delete config.headers['Content-Type'];
-        } else if (body instanceof URLSearchParams) {
-            config.body = body.toString();
-            config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-        } else {
-            config.headers['Content-Type'] = config.headers['Content-Type'] || 'application/json';
-            config.body = typeof body === 'object' ? JSON.stringify(body) : body;
+
+            // --- 3. EKSEKUSI ---
+            if (window.__TAURI_INTERNALS__ !== undefined) {
+                // Coba deteksi berbagai variasi penempatan invoke
+                const invoke = window.__TAURI__?.invoke || 
+                window.__TAURI__?.core?.invoke || 
+                window.__TAURI_INTERNALS__?.invoke || 
+                window.__TAURI_INTERNALS__?.core?.invoke;
+
+                // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
+                const headerArray = Object.entries(config.headers);
+                
+                // Panggil Rust (Tauri)
+                const res = await invoke('http_request', { 
+                    method, 
+                    url: finalUrl, 
+                    headers: headerArray, 
+                    body: config.body || null 
+                });
+
+                // Normalisasi response dari Rust agar sama dengan format 'fetch'
+                return {
+                    status: res.status,
+                    statusText: "OK", // Rust mengirim status code, kita bisa mock statusText
+                    headers: Object.fromEntries(res.headers),
+                    body: res.body,
+                    time: res.time,
+                    size: res.size
+                };
+            }
+            // --- 4. EKSEKUSI WEB (FETCH) ---
+            const startTime = performance.now();
+            const response = useProxy 
+                ? await proxysendRequest(finalUrl, config, true)
+                : await fetch(finalUrl, config);
+            const endTime = performance.now();
+
+            const duration = Math.round(endTime - startTime);
+            const responseText = await response.text();
+            
+            return {
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries()),
+                body: responseText,
+                time: duration,
+                size: new Blob([responseText]).size
+            };
+
+        } catch (error) {
+            console.error("[RequestDispatcher Error]", error);
+            return {
+                error: true,
+                message: error.message
+            };
         }
     }
 
-    // Helper Eksekusi
-    static async _execute(url, config, method, useProxy) {
-        const tauriInvoke = window.__TAURI_INTERNALS__?.core?.invoke || window.__TAURI__?.invoke;
-
-        if (tauriInvoke) {
-            const res = await tauriInvoke('http_request', { 
-                method, url, headers: Object.entries(config.headers), body: config.body 
-            });
-            return { ...res, statusText: "OK", headers: Object.fromEntries(res.headers) };
-        }
-
-        // Fetch Web
-        const start = performance.now();
-        const res = useProxy ? await proxysendRequest(url, config, true) : await fetch(url, config);
-        const body = await res.text();
-        return {
-            status: res.status,
-            statusText: res.statusText,
-            headers: Object.fromEntries(res.headers.entries()),
-            body,
-            time: Math.round(performance.now() - start),
-            size: new Blob([body]).size
-        };
-    }
 }

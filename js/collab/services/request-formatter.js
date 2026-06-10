@@ -67,52 +67,63 @@ export class RequestFormatter {
      */
     static async getFormData() {
         const params = window.bodyParamCtrl?.State?.bodyParams || [];
-        const formData = new FormData();
+        
+        // DETEKSI TAURI: Jika di Tauri, kita ingin menyimpan info file path
+        const isTauri = window.__TAURI_INTERNALS__ !== undefined;
+    
+        // Jika di Tauri, kita kembalikan array agar mudah di-serialize
+        // Jika di web, kita tetap kembalikan FormData agar kompatibel dengan fetch
+        const output = isTauri ? [] : new FormData();
         
         for (const p of params.filter(p => p.enabled === true || p.enabled === 1)) {
             if (!p.key) continue;
-
+    
             if (p.type === 'file') {
-                // 1. Prioritas: File object yang sudah ada di memory (hasil input user)
-                if (p.file instanceof File) {
-                    formData.append(p.key, p.file);
-                } 
-                // 2. Jika tidak ada, tapi ada value (path string), ambil blob dari server
-               // Analisis di tempat kamu memproses FormData:
-                else if (p.value) {
-                    try {
-                        let blob;
-                        const isDraft = String(window.bodyParamCtrl.currentRequestId).startsWith('draft_');
-
-                        if (isDraft) {
-                            // Panggil helper yang baru kita buat
-                            blob = await DataBridge.getBlob(window.bodyParamCtrl.currentRequestId, 'bodyParams', p.id);
-                        } else {
-                            // Tetap pakai logika lama untuk request server
-                            blob = await RequestBodyParamService.downloadFileAsBlob(p.value);
-                        }
-
-                        if (blob) {
-                            const file = new File([blob], p.file_name || "downloaded_file");
-                            formData.append(p.key, file);
-                        }
-                    } catch (e) {
-                        console.error(`[FormData] Gagal menyiapkan file: ${p.key}`, e);
+                if (isTauri) {
+                    // TAURI LOGIC: Simpan path atau nama file
+                    output.push({
+                        key: p.key,
+                        // Di Tauri, kita butuh Path atau nama file yang bisa diakses Rust
+                        value: p.file?.path || p.value || "unknown_file",
+                        type: "file"
+                    });
+                } else {
+                    // WEB LOGIC: Tetap menggunakan FormData dan Blob
+                    if (p.file instanceof File) {
+                        output.append(p.key, p.file);
+                    } else if (p.value) {
+                        // ... (logika download blob server yang sudah ada)
+                        try {
+                            const blob = await this._getBlobFromSource(p); // bungkus logika downloadmu
+                            if (blob) output.append(p.key, new File([blob], p.file_name || "file"));
+                        } catch (e) { console.error(e); }
                     }
                 }
             } else {
-                formData.append(p.key, p.value || "");
+                // Penanganan teks biasa
+                if (isTauri) {
+                    output.push({ key: p.key, value: p.value || "", type: "text" });
+                } else {
+                    output.append(p.key, p.value || "");
+                }
             }
         }
-        return formData;
+        return output;
     }
 
     static getUrlEncoded() {
         const params = window.bodyParamCtrl?.State?.bodyParams || [];
         const searchParams = new URLSearchParams();
+        
         params.filter(p => p.enabled === true || p.enabled === 1).forEach(p => {
             if (p.key) searchParams.append(p.key, p.value || "");
         });
+    
+        // Jika di Tauri, kirim string-nya saja
+        if (window.__TAURI_INTERNALS__ !== undefined) {
+            return searchParams.toString(); 
+        }
+        
         return searchParams; 
     }
 }
