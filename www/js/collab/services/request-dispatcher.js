@@ -28,7 +28,16 @@ export class RequestDispatcher {
 
             // --- 2. LOGIKA BODY DYNAMIC ---
             if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
-                if (body instanceof FormData) {
+                const isTauriProcessed = Array.isArray(body) || typeof body === 'string';
+                const isTauri = window.__TAURI_INTERNALS__ !== undefined;
+
+                if (isTauri && isTauriProcessed) {
+                    // Jika sudah diproses, langsung masukkan ke config
+                    config.body = body;
+                    // Hapus content-type karena Rust yang akan menentukan multipart/urlencoded secara otomatis
+                    delete config.headers['Content-Type']; 
+                }
+                else if (body instanceof FormData) {
                     config.body = body;
                     delete config.headers['Content-Type']; 
                 } else if (body instanceof URLSearchParams) {

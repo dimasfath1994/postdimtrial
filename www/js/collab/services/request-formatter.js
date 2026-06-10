@@ -159,13 +159,11 @@ static async getFormDataTauri() {
     }
 
     static getUrlEncoded() {
-        var isTauri = window.__TAURI_INTERNALS__ !== undefined;
         const params = window.bodyParamCtrl?.State?.bodyParams || [];
         const searchParams = new URLSearchParams();
         params.filter(p => p.enabled === true || p.enabled === 1).forEach(p => {
             if (p.key) searchParams.append(p.key, p.value || "");
         });
-        if (isTauri) { return searchParams.toString(); }
         return searchParams; 
     }
 }
