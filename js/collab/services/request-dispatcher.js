@@ -26,43 +26,21 @@ export class RequestDispatcher {
                 headers: { ...headers }
             };
 
-           // --- 2. LOGIKA BODY DYNAMIC ---
-if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
-    const isTauri = window.__TAURI_INTERNALS__ !== undefined;
-
-    // A. Handling FormData
-    if (body instanceof FormData) {
-        if (isTauri) {
-            // Optimasi: Gunakan map langsung dari entries jika memungkinkan
-            // Ini akan mengurangi overhead deklarasi variabel di dalam loop
-            config.body = Array.from(body.entries()).map(([key, value]) => ({
-                key,
-                value: value instanceof File ? (value.path || value.name) : String(value),
-                type: value instanceof File ? "file" : "text"
-            }));
-            delete config.headers['Content-Type'];
-        } else {
-            // WEB AS-IS: Sangat efisien karena browser native yang menangani multipart boundary
-            config.body = body;
-            delete config.headers['Content-Type'];
-        }
-    } 
-    // B. Handling URLSearchParams
-    else if (body instanceof URLSearchParams) {
-        config.body = isTauri ? body.toString() : body;
-        config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    } 
-    // C. Handling Default (JSON / Raw)
-    else {
-        if (!config.headers['Content-Type']) {
-            config.headers['Content-Type'] = 'application/json';
-        }
-        // Optimasi: cek tipe objek sekali saja sebelum stringify
-        config.body = (typeof body === 'object' && !(body instanceof String)) 
-            ? JSON.stringify(body) 
-            : body;
-    }
-}
+            // --- 2. LOGIKA BODY DYNAMIC ---
+            if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
+                if (body instanceof FormData) {
+                    config.body = body;
+                    delete config.headers['Content-Type']; 
+                } else if (body instanceof URLSearchParams) {
+                    config.body = body;
+                    config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                } else {
+                    if (!config.headers['Content-Type']) {
+                        config.headers['Content-Type'] = 'application/json';
+                    }
+                    config.body = typeof body === 'object' ? JSON.stringify(body) : body;
+                }
+            }
 
             // --- 3. EKSEKUSI ---
             if (window.__TAURI_INTERNALS__ !== undefined) {
@@ -74,6 +52,41 @@ if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined
 
                 // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
                 const headerArray = Object.entries(config.headers);
+
+
+                // --- 2. LOGIKA BODY DYNAMIC ---
+                    if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
+                        if (body instanceof FormData) {
+                            const multipartArray = [];
+                            for (const [key, value] of body.entries()) {
+                                if (value instanceof File) {
+                                    multipartArray.push({
+                                        key: key,
+                                        value: value.path || value.name, // Di Tauri, biasanya kirim Path file-nya
+                                        type: "file"
+                                    });
+                                } else {
+                                    multipartArray.push({
+                                        key: key,
+                                        value: String(value),
+                                        type: "text"
+                                    });
+                                }
+                            }
+                            config.body = multipartArray; // Sekarang berupa Array, sesuai dengan `b.is_array()` di Rust
+                            delete config.headers['Content-Type']; 
+                        } else if (body instanceof URLSearchParams) {
+                            // KUNCI PERBAIKAN: Pakai .toString() agar menjadi "key1=val1&key2=val2"
+                            config.body = body.toString(); 
+                            config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                        } else {
+                            if (!config.headers['Content-Type']) {
+                                config.headers['Content-Type'] = 'application/json';
+                            }
+                            config.body = typeof body === 'object' ? JSON.stringify(body) : body;
+                        }
+                    }
+
                 
                 // Panggil Rust (Tauri)
                 const res = await invoke('http_request', { 
