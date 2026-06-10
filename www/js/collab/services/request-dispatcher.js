@@ -64,35 +64,29 @@ export class RequestDispatcher {
                 let tauriBody = config.body;
 
                 if (body instanceof FormData) {
-                    const paramsList = window.bodyParamCtrl?.State?.bodyParams || [];
+                    // 1. Ekstrak semua entri [key, value] langsung dari objek FormData yang sudah matang
+                    const entries = Array.from(body.entries());
                     
-                    // PROSES SECARA PARALEL (ANTI-WATERFALL)
-                    const promises = paramsList.map(async (p) => {
-                        if (p.enabled !== true && p.enabled !== 1) return null;
-                        
-                        let itemType = p.type || "text";
-                        let itemValue = p.value;
+                    // 2. Proses semua entri secara paralel (Anti-Waterfall)
+                    const promises = entries.map(async ([key, value]) => {
+                        let itemType = "text";
+                        let itemValue = value;
                         let fileB64 = null;
                         let fileName = "";
                         let isPath = false;
-
-                        if (itemType === "file") {
-                            if (itemValue instanceof File) {
-                                // Kasus A: User input lewat tag <input type="file"> biasa
-                                fileB64 = await fileToBase64(itemValue);
-                                fileName = itemValue.name;
-                                itemValue = "";
-                            } else if (typeof itemValue === "string" && itemValue.trim() !== "") {
-                                // Kasus B (Gaya Postman): Nilai berupa Absolute Path String dari Tauri Dialog
-                                fileName = itemValue.split(/[/\\]/).pop();
-                                isPath = true; 
-                            }
+                
+                        // Jika value adalah instance dari File (berhasil dideteksi otomatis oleh browser)
+                        if (value instanceof File) {
+                            itemType = "file";
+                            fileB64 = await fileToBase64(value); // Konversi ke Base64
+                            fileName = value.name;
+                            itemValue = ""; // Kosongkan string karena data biner pindah ke file_b64
                         } else {
-                            itemValue = String(itemValue || "");
+                            itemValue = String(value || "");
                         }
-
+                
                         return {
-                            key: p.key,
+                            key: key,
                             value: itemValue,
                             type: itemType,
                             file_b64: fileB64,
@@ -100,8 +94,9 @@ export class RequestDispatcher {
                             is_path: isPath
                         };
                     });
-
-                    tauriBody = (await Promise.all(promises)).filter(Boolean);
+                
+                    // 3. Tunggu hingga semua file selesai dikonversi, lalu masukkan ke tauriBody
+                    tauriBody = await Promise.all(promises);
                     config.headers['Content-Type'] = 'multipart/form-data';
                 } else if (body instanceof URLSearchParams) {
                     // Konversi URLSearchParams menjadi string flat urlencoded biasa
