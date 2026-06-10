@@ -50,17 +50,68 @@ export class RequestFormatter {
 
     static async getBody() {
         const mode = document.getElementById('bodyModeSelect').value;
+        const isTauri = window.__TAURI_INTERNALS__ !== undefined;
+    
         switch (mode) {
             case 'raw':
                 return document.getElementById('body').value;
             case 'form-data':
-                return await this.getFormData(); // Sekarang async
+                // Panggil fungsi yang sesuai dengan environment
+                return isTauri ? await this.getFormDataTauri() : await this.getFormData();
             case 'urlencoded':
                 return this.getUrlEncoded();
             default:
                 return null;
         }
     }
+
+    /**
+ * Versi optimasi khusus untuk Tauri: Mengembalikan Array untuk diproses Rust
+ * Menggunakan parallel processing dengan Promise.all
+ */
+static async getFormDataTauri() {
+    const params = window.bodyParamCtrl?.State?.bodyParams || [];
+    const requestId = window.bodyParamCtrl.currentRequestId;
+    const isDraft = String(requestId).startsWith('draft_');
+
+    // Gunakan filter dan map secara sinkron untuk menyiapkan list task
+    const activeParams = params.filter(p => p.enabled === true || p.enabled === 1);
+
+    // Jalankan semua proses pengambilan data file secara paralel (tidak nunggu satu-satu)
+    const results = await Promise.all(activeParams.map(async (p) => {
+        if (!p.key) return null;
+
+        if (p.type === 'file') {
+            // 1. Prioritas: File object dari memory
+            if (p.file instanceof File) {
+                return { key: p.key, value: p.file.path || p.file.name, type: "file" };
+            } 
+            // 2. Jika tidak ada, ambil dari sumber (Draft atau Server)
+            else if (p.value) {
+                try {
+                    // Logic ini sekarang berjalan paralel untuk semua file
+                    const blob = isDraft 
+                        ? await DataBridge.getBlob(requestId, 'bodyParams', p.id)
+                        : await RequestBodyParamService.downloadFileAsBlob(p.value);
+                    
+                    // Di Tauri, kita tidak perlu File object, kita butuh "Path"
+                    // Catatan: Jika ini blob dari server, sistem butuh mekanisme simpan ke temp path
+                    // Jika path sudah ada di p.value, kita gunakan p.value
+                    return { key: p.key, value: p.value, type: "file" };
+                } catch (e) {
+                    console.error(`[FormDataTauri] Gagal fetch file: ${p.key}`, e);
+                    return null;
+                }
+            }
+        }
+
+        // Default: Text field
+        return { key: p.key, value: String(p.value || ""), type: "text" };
+    }));
+
+    // Filter null values dan kembalikan array untuk lib.rs
+    return results.filter(Boolean);
+}
 
     /**
      * Mengambil data dari State controller, memproses file biner jika perlu.
@@ -108,11 +159,13 @@ export class RequestFormatter {
     }
 
     static getUrlEncoded() {
+        var isTauri = window.__TAURI_INTERNALS__ !== undefined;
         const params = window.bodyParamCtrl?.State?.bodyParams || [];
         const searchParams = new URLSearchParams();
         params.filter(p => p.enabled === true || p.enabled === 1).forEach(p => {
             if (p.key) searchParams.append(p.key, p.value || "");
         });
+        if (isTauri) { return searchParams.toString(); }
         return searchParams; 
     }
 }
