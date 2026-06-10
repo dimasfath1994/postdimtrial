@@ -52,6 +52,41 @@ export class RequestDispatcher {
 
                 // Konversi headers ke format array untuk Rust: [["Key", "Value"], ...]
                 const headerArray = Object.entries(config.headers);
+
+
+                // --- 2. LOGIKA BODY DYNAMIC ---
+                    if (method !== 'GET' && method !== 'HEAD' && body !== null && body !== undefined) {
+                        if (body instanceof FormData) {
+                            const multipartArray = [];
+                            for (const [key, value] of body.entries()) {
+                                if (value instanceof File) {
+                                    multipartArray.push({
+                                        key: key,
+                                        value: value.path || value.name, // Di Tauri, biasanya kirim Path file-nya
+                                        type: "file"
+                                    });
+                                } else {
+                                    multipartArray.push({
+                                        key: key,
+                                        value: String(value),
+                                        type: "text"
+                                    });
+                                }
+                            }
+                            config.body = multipartArray; // Sekarang berupa Array, sesuai dengan `b.is_array()` di Rust
+                            delete config.headers['Content-Type']; 
+                        } else if (body instanceof URLSearchParams) {
+                            // KUNCI PERBAIKAN: Pakai .toString() agar menjadi "key1=val1&key2=val2"
+                            config.body = body.toString(); 
+                            config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                        } else {
+                            if (!config.headers['Content-Type']) {
+                                config.headers['Content-Type'] = 'application/json';
+                            }
+                            config.body = typeof body === 'object' ? JSON.stringify(body) : body;
+                        }
+                    }
+
                 
                 // Panggil Rust (Tauri)
                 const res = await invoke('http_request', { 
