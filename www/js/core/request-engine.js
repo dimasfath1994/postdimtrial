@@ -110,7 +110,6 @@ export class RequestEngine {
       if (isJson && responseData) {
         try {
           const parsedJson = JSON.parse(responseData);
-          responseData = JSON.stringify(parsedJson, null, 2); // Angka 2 artinya indentasi 2 spasi (Postman style)
         } catch (e) {
           // Jika corrupt atau gagal di-parse, biarkan teksnya apa adanya (fallback)
           console.warn("[Beautifier] Response diklaim JSON tapi gagal di-parse:", e);
