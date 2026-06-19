@@ -109,7 +109,7 @@ export class RequestEngine {
       // 2. Jika iya, parse string mentah lalu rapikan kembali dengan indentasi 2 atau 4 spasi
       if (isJson && responseData) {
         try {
-          const parsedJson = JSON.parse(responseData);
+          responseData = JSON.parse(responseData);
         } catch (e) {
           // Jika corrupt atau gagal di-parse, biarkan teksnya apa adanya (fallback)
           console.warn("[Beautifier] Response diklaim JSON tapi gagal di-parse:", e);
