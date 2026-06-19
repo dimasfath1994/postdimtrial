@@ -90,19 +90,36 @@ export class RequestEngine {
       } else {
         tauriBody = typeof finalBody === 'object' ? JSON.stringify(finalBody) : finalBody;
       }
-      
+
       const res = await invoke('http_request', {
         method,
         url,
         headers: Object.entries(finalHeaders),
         body: tauriBody
       });
-      let typse = res.headers.get("content-type") || "";
-      let formattedText = typse.includes("application/json") ? await res.json() : await res.text();
+
+      const headersMap = Object.fromEntries(res.headers);
+      let responseData = res.body;
+
+      // 1. Cek secara case-insensitive apakah Content-Type mengandung "application/json"
+      const isJson = Object.entries(headersMap).some(
+        ([key, val]) => key.toLowerCase() === 'content-type' && val.toLowerCase().includes('application/json')
+      );
+
+      // 2. Jika iya, parse string mentah lalu rapikan kembali dengan indentasi 2 atau 4 spasi
+      if (isJson && responseData) {
+        try {
+          const parsedJson = JSON.parse(responseData);
+          responseData = JSON.stringify(parsedJson, null, 2); // Angka 2 artinya indentasi 2 spasi (Postman style)
+        } catch (e) {
+          // Jika corrupt atau gagal di-parse, biarkan teksnya apa adanya (fallback)
+          console.warn("[Beautifier] Response diklaim JSON tapi gagal di-parse:", e);
+        }
+      }
 
       return {
         status: res.status,
-        data: formattedText,
+        data: responseData,
         headers: Object.fromEntries(res.headers),
         cookies: []
       };
