@@ -90,7 +90,7 @@ export class RequestEngine {
       } else {
         tauriBody = typeof finalBody === 'object' ? JSON.stringify(finalBody) : finalBody;
       }
-
+      
       const res = await invoke('http_request', {
         method,
         url,
@@ -98,9 +98,17 @@ export class RequestEngine {
         body: tauriBody
       });
 
+      let formattedText = res.body;
+      try {
+          const parsed = JSON.parse(res.body);
+          formattedText = JSON.stringify(parsed, null, 4);
+      } catch (e) {
+          formattedText = res.body; // Fallback jika bukan JSON
+      }
+
       return {
         status: res.status,
-        data: res.body,
+        data: formattedText,
         headers: Object.fromEntries(res.headers),
         cookies: []
       };
