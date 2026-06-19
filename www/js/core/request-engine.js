@@ -97,14 +97,8 @@ export class RequestEngine {
         headers: Object.entries(finalHeaders),
         body: tauriBody
       });
-
-      let formattedText = res.body;
-      try {
-          const parsed = JSON.parse(res.body);
-          formattedText = JSON.stringify(parsed, null, 4);
-      } catch (e) {
-          formattedText = res.body; // Fallback jika bukan JSON
-      }
+      let typse = res.headers.get("content-type") || "";
+      let formattedText = typse.includes("application/json") ? await res.json() : await res.text();
 
       return {
         status: res.status,
