@@ -69,6 +69,22 @@ export class TabController {
         
     }
 
+    updateSendButtonUI() {
+        // Cek ID tab yang sedang DILIHAT user saat ini
+        const activeRequestId = State.currentRequestId || window.bodyParamCtrl?.currentRequestId;
+        
+        // Ambil status sending dari tab aktif tersebut
+        const isCurrentTabSending = State.requestStates?.[activeRequestId]?.isSending || false;
+    
+        if (isCurrentTabSending) {
+            ui.sendRequest.disabled = true;
+            ui.sendRequest.textContent = "Sending...";
+        } else {
+            ui.sendRequest.disabled = false;
+            ui.sendRequest.textContent = "Send Request";
+        }
+    }
+
     forceCloseTab(id) {
         //console.log("[TabController] Force closing tab:", id);
         
