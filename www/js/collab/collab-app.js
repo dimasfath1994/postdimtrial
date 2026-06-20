@@ -98,7 +98,8 @@ const State = {
     headers: [],
     bodyParams: [],
     environments: [],
-    globals: []
+    globals: [],
+    requestStates: {}
  };
  window.COLLAB_STATE = State;
 
@@ -334,22 +335,63 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 });
 
+// window.addEventListener('request-tab-switched', async (e) => {
+//     const requestId = e.detail.requestId;
+//     console.log(`[SYNC] Menyiapkan data untuk request: ${requestId}`);
+
+//     const isDraft = String(requestId).startsWith('draft_');
+
+//     // JIKA DRAFT, KITA SKIP SYNC DARI SERVER/CONTROLLER PUSAT
+//     // Karena Draft harusnya hanya bergantung pada data lokal (DataBridge)
+//     if (isDraft) {
+//         console.log(`[SYNC] Request ${requestId} adalah Draft, melewati sync server.`);
+//         // let tes = DataBridge.getAll(requestId);
+//         // console.log(`[SYNC] Request draft`, tes);
+//         return; // Keluar agar tidak mengganggu UI yang sudah di-load oleh TabController
+//     }
+
+//     // Jika bukan draft, silakan lanjut sinkronisasi seperti biasa
+//     await Promise.all([
+//         bodyParamCtrl ? bodyParamCtrl.syncWithRequest(requestId) : Promise.resolve(),
+//         headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox'), isDraft) : Promise.resolve(),
+//         paramCtrl ? paramCtrl.init(requestId, document.getElementById('paramsBox'), isDraft) : Promise.resolve()
+//     ]);
+    
+//     console.log(`[SYNC] Semua data untuk ${requestId} berhasil dimuat ke State.`);
+// });
+
 window.addEventListener('request-tab-switched', async (e) => {
     const requestId = e.detail.requestId;
     console.log(`[SYNC] Menyiapkan data untuk request: ${requestId}`);
 
+    // ================= PEMULIHAN / ISOLASI RESPONSE API (ALUR POSTMAN) =================
+    // Ambil data dari RAM lokal, jika belum ada buatkan struktur default kosongnya
+    const runtimeState = State.requestStates?.[requestId] || { isSending: false, response: null };
+
+    // 1. Pulihkan kondisi tombol send untuk tab yang baru dibuka ini
+    tabCtrl.updateSendButtonUI();
+
+    // 2. Pulihkan data panel response milik tab ini atau bersihkan jika kosong
+    if (runtimeState.response) {
+        // Set window.latestResponse ke data tab ini agar sub-tab Body/Headers membaca data yang benar
+        window.latestResponse = runtimeState.response; 
+        ResponseHandler.render(runtimeState.response);
+    } else {
+        // Jika tab ini belum pernah menembak API, bersihkan layar response total agar tidak bocor dari tab sebelumnya
+        window.latestResponse = null;
+        ResponseHandler.clear();
+    }
+    // ==================================================================================
+
     const isDraft = String(requestId).startsWith('draft_');
 
     // JIKA DRAFT, KITA SKIP SYNC DARI SERVER/CONTROLLER PUSAT
-    // Karena Draft harusnya hanya bergantung pada data lokal (DataBridge)
     if (isDraft) {
         console.log(`[SYNC] Request ${requestId} adalah Draft, melewati sync server.`);
-        // let tes = DataBridge.getAll(requestId);
-        // console.log(`[SYNC] Request draft`, tes);
-        return; // Keluar agar tidak mengganggu UI yang sudah di-load oleh TabController
+        return; 
     }
 
-    // Jika bukan draft, silakan lanjut sinkronisasi seperti biasa
+    // Jika bukan draft, silakan lanjut sinkronisasi parameter DB seperti biasa
     await Promise.all([
         bodyParamCtrl ? bodyParamCtrl.syncWithRequest(requestId) : Promise.resolve(),
         headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox'), isDraft) : Promise.resolve(),
@@ -358,6 +400,9 @@ window.addEventListener('request-tab-switched', async (e) => {
     
     console.log(`[SYNC] Semua data untuk ${requestId} berhasil dimuat ke State.`);
 });
+
+
+
 
 // Listener dari Workspace Controller
 window.addEventListener("workspace:changed", (event) => {
@@ -393,33 +438,95 @@ closeEnvPanel.addEventListener('click', () => {
 EnvUI.setupAddHandler({ envCtrl, globalCtrl }, State);
 
 
+// document.getElementById('send').addEventListener('click', async () => {
+//     try{
+//         ui.sendRequest.disabled = true;
+//         ui.sendRequest.textContent = "Sending...";
+//         // 1. Kumpulkan data
+//         const rawData = await RequestFormatter.collectFromUI(State);
+//         const scripts = monacoCtrl.getValues(); 
+        
+//         // Gabungkan script
+//         const finalData = {
+//             ...rawData,
+//             pre_script: scripts.pre_script,
+//             post_script: scripts.post_script
+//         };
+
+//         // 2. Resolve variabel
+//         const resolvedData = VariableResolver.resolveRequest(finalData, State);
+        
+//         // 3. Kirim Request
+//         const response = await RequestDispatcher.send(resolvedData);
+//         ResponseHandler.render(response);
+
+//         // 4. EKSKUSI SCRIPT (Hanya jika ada isi)
+//         // Trim() memastikan jika user cuma isi spasi/enter, tetap dianggap kosong
+//         if (resolvedData.post_script && resolvedData.post_script.trim().length > 0) {
+//             console.log("[PMSandbox] Ditemukan script, menjalankan...");
+            
+//             await PMSandbox.execute(
+//                 resolvedData.post_script, 
+//                 response, 
+//                 State, 
+//                 envCtrl
+//             );
+//         } else {
+//             console.log("[PMSandbox] Tidak ada post-script, dilewati.");
+//         }
+
+//     }
+//     catch(err){
+//         console.error(err);
+//     }
+//     finally {
+//         ui.sendRequest.disabled = false;
+//         ui.sendRequest.textContent = "Send Request";
+//     }
+// });
+
 document.getElementById('send').addEventListener('click', async () => {
-    try{
-        ui.sendRequest.disabled = true;
-        ui.sendRequest.textContent = "Sending...";
-        // 1. Kumpulkan data
+    // Ambil ID tab yang sedang aktif saat tombol diklik
+    const activeId = tabCtrl.activeTabId; 
+    if (!activeId) return;
+
+    // Inisialisasi object RAM untuk tab ini jika belum ada
+    State.requestStates[activeId] = State.requestStates[activeId] || { isSending: false, response: null };
+
+    try {
+        // 1. Set status sending ke true khusus untuk tab ini, lalu update UI tombol
+        State.requestStates[activeId].isSending = true;
+        tabCtrl.updateSendButtonUI(); 
+
+        // 2. Kumpulkan data dari UI
         const rawData = await RequestFormatter.collectFromUI(State);
         const scripts = monacoCtrl.getValues(); 
         
-        // Gabungkan script
         const finalData = {
             ...rawData,
             pre_script: scripts.pre_script,
             post_script: scripts.post_script
         };
 
-        // 2. Resolve variabel
+        // 3. Resolve variabel environment/global
         const resolvedData = VariableResolver.resolveRequest(finalData, State);
         
-        // 3. Kirim Request
+        // 4. Kirim Request ke Server API Target
         const response = await RequestDispatcher.send(resolvedData);
-        ResponseHandler.render(response);
+        
+        // 5. Simpan hasil response ke RAM milik tab ini
+        State.requestStates[activeId].response = response;
 
-        // 4. EKSKUSI SCRIPT (Hanya jika ada isi)
-        // Trim() memastikan jika user cuma isi spasi/enter, tetap dianggap kosong
+        // GUARD: Hanya render ke layar jika user MASIH melihat tab ini
+        // (Mencegah response tab A menimpa layar jika user pindah ke tab B saat loading)
+        if (tabCtrl.activeTabId === activeId) {
+            window.latestResponse = response; // Sinkronkan ke window global untuk sub-tab response
+            ResponseHandler.render(response);
+        }
+
+        // 6. Eksekusi Post-Script (Jika ada)
         if (resolvedData.post_script && resolvedData.post_script.trim().length > 0) {
             console.log("[PMSandbox] Ditemukan script, menjalankan...");
-            
             await PMSandbox.execute(
                 resolvedData.post_script, 
                 response, 
@@ -431,12 +538,25 @@ document.getElementById('send').addEventListener('click', async () => {
         }
 
     }
-    catch(err){
+    catch(err) {
         console.error(err);
+        // Jika request gagal total (misal network error), simpan status error ke RAM tab ini
+        const errorResponse = { error: true, message: err.message || "Request Failed" };
+        State.requestStates[activeId].response = errorResponse;
+        
+        if (tabCtrl.activeTabId === activeId) {
+            window.latestResponse = errorResponse;
+            ResponseHandler.render(errorResponse);
+        }
     }
     finally {
-        ui.sendRequest.disabled = false;
-        ui.sendRequest.textContent = "Send Request";
+        // 7. Kembalikan status sending ke false untuk tab ini
+        State.requestStates[activeId].isSending = false;
+        
+        // Jika user masih di tab ini, pulihkan tombol Send
+        if (tabCtrl.activeTabId === activeId) {
+            tabCtrl.updateSendButtonUI();
+        }
     }
 });
 
