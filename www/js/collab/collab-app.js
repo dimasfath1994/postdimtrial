@@ -77,7 +77,8 @@ const ui = {
     workspaceSwitcher: document.getElementById("workspaceSwitcher"),
     workspaceTitle: document.getElementById("workspaceTitle"),
     activeWorkspaceName: document.getElementById("activeWorkspaceName"),
-    collectionList: document.getElementById("collectionList")
+    collectionList: document.getElementById("collectionList"),
+    sendRequest: document.getElementById("send")
 };
 
 // --- Element Selectors ---
@@ -393,38 +394,49 @@ EnvUI.setupAddHandler({ envCtrl, globalCtrl }, State);
 
 
 document.getElementById('send').addEventListener('click', async () => {
-
-    // 1. Kumpulkan data
-    const rawData = await RequestFormatter.collectFromUI(State);
-    const scripts = monacoCtrl.getValues(); 
-    
-    // Gabungkan script
-    const finalData = {
-        ...rawData,
-        pre_script: scripts.pre_script,
-        post_script: scripts.post_script
-    };
-
-    // 2. Resolve variabel
-    const resolvedData = VariableResolver.resolveRequest(finalData, State);
-    
-    // 3. Kirim Request
-    const response = await RequestDispatcher.send(resolvedData);
-    ResponseHandler.render(response);
-
-    // 4. EKSKUSI SCRIPT (Hanya jika ada isi)
-    // Trim() memastikan jika user cuma isi spasi/enter, tetap dianggap kosong
-    if (resolvedData.post_script && resolvedData.post_script.trim().length > 0) {
-        console.log("[PMSandbox] Ditemukan script, menjalankan...");
+    try{
+        ui.sendRequest.disabled = true;
+        ui.sendRequest.textContent = "Sending...";
+        // 1. Kumpulkan data
+        const rawData = await RequestFormatter.collectFromUI(State);
+        const scripts = monacoCtrl.getValues(); 
         
-        await PMSandbox.execute(
-            resolvedData.post_script, 
-            response, 
-            State, 
-            envCtrl
-        );
-    } else {
-        console.log("[PMSandbox] Tidak ada post-script, dilewati.");
+        // Gabungkan script
+        const finalData = {
+            ...rawData,
+            pre_script: scripts.pre_script,
+            post_script: scripts.post_script
+        };
+
+        // 2. Resolve variabel
+        const resolvedData = VariableResolver.resolveRequest(finalData, State);
+        
+        // 3. Kirim Request
+        const response = await RequestDispatcher.send(resolvedData);
+        ResponseHandler.render(response);
+
+        // 4. EKSKUSI SCRIPT (Hanya jika ada isi)
+        // Trim() memastikan jika user cuma isi spasi/enter, tetap dianggap kosong
+        if (resolvedData.post_script && resolvedData.post_script.trim().length > 0) {
+            console.log("[PMSandbox] Ditemukan script, menjalankan...");
+            
+            await PMSandbox.execute(
+                resolvedData.post_script, 
+                response, 
+                State, 
+                envCtrl
+            );
+        } else {
+            console.log("[PMSandbox] Tidak ada post-script, dilewati.");
+        }
+
+    }
+    catch(err){
+        console.error(err);
+    }
+    finally {
+        ui.sendRequest.disabled = false;
+        ui.sendRequest.textContent = "Send Request";
     }
 });
 

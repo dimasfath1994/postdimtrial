@@ -71,6 +71,25 @@ const APP_STATE = {
 const collections = new CollectionManager();
 const tabs = new Tabs(ui, collections);
 
+
+// Menyimpan state sementara (loading & response) tiap tab di memori RAM
+const tabRuntimeStates = {}; 
+
+// Intercept fungsi close dan delete bawaan agar otomatis menghapus response dari RAM
+const originalClose = tabs.close.bind(tabs);
+tabs.close = (id) => {
+  delete tabRuntimeStates[id]; // Hapus dari memori RAM saat tab di-close
+  originalClose(id);
+};
+
+const originalDelete = tabs.delete.bind(tabs);
+tabs.delete = (id) => {
+  delete tabRuntimeStates[id]; // Hapus dari memori RAM saat tab dihapus total
+  originalDelete(id);
+};
+
+
+
 tabs.onUpdate = () => {
     renderCollections(); 
 };
@@ -884,10 +903,142 @@ ui.viewToggle?.addEventListener("click", (e) => {
 });
 
 // ================= SEND =================
+// ui.send.onclick = async () => {
+//   try {
+//     const tab = tabs.getActive();
+//     if (!tab) return;
+
+//     // ================= SYNC FIRST (WAJIB DI ATAS) =================
+//     syncScriptToTab();
+//     tabs.syncTab();
+//     tabs.save();
+
+//     const runtimeVariables = createVariables();
+
+//     // ================= PREPARE CONTEXT =================
+//     const preCtx = createContext(tab, null, runtimeVariables);
+//     runScript(tab.scripts?.pre, preCtx);
+
+//     ui.send.disabled = true;
+//     ui.send.textContent = "Sending...";
+
+//     // ================= RESOLVE VARS =================
+//     const tabParams = getParams();
+
+//     const rawUrl = buildUrlWithParams(
+//       ui.url.value.split("?")[0],
+//       Object.fromEntries(
+//         Object.entries(tabParams)
+//           .filter(([_, v]) => v.enabled && v.value)
+//           .map(([k, v]) => [k, resolveVars(v.value)])
+//       )
+//     );
+
+//     const finalUrl = resolveVars(rawUrl);
+
+//     let body = null;
+
+//     const tabBody = tabs.getActive().body;
+
+//     if (tabBody?.mode === "raw") {
+//       body = tabBody.raw ? JSON.parse(tabBody.raw) : null;
+//     }
+
+// if (tabBody?.mode === "form-data") {
+//   body = Object.fromEntries(
+//     (tabBody.formData || [])
+//       .filter(x => x.key != null && x.key !== "") //  TARUH DI SINI
+//       .map(x => [
+//         x.key,
+//         {
+//           value:
+//             x.enabled === false
+//               ? null
+//               : x.value === undefined
+//                 ? ""
+//                 : x.value, //  empty string tetap terkirim
+//           type: x.type || "text",
+//           file: x.file || null,
+//           enabled: x.enabled !== false
+//         }
+//       ])
+//   );
+// }
+// if (tabBody?.mode === "urlencoded") {
+//   body = Object.fromEntries(
+//     (tabBody.urlencoded || [])
+//       .filter(x => x.key != null && x.key !== "") //  TARUH DI SINI
+//       .map(x => [
+//         x.key,
+//         {
+//           value:
+//             x.enabled === false
+//               ? null
+//               : x.value === undefined
+//                 ? ""
+//                 : x.value, // string kosong tetap ""
+//           enabled: x.enabled !== false
+//         }
+//       ])
+//   );
+// }
+
+//     // try {
+//     //   const rawBody = resolveVars(tab.body);
+//     //   body = rawBody ? JSON.parse(rawBody) : null;
+//     // } catch {
+//     //   ui.response.textContent = "Invalid JSON";
+//     //   return;
+//     // }
+
+//     const start = performance.now();
+
+// console.log("BODY MODE", tabBody?.mode);
+// console.log("BODY RAW", tabBody?.raw);
+// console.log("FINAL BODY", body);
+
+//     const res = await RequestEngine.send({
+//       method: ui.method.value,
+//       url: finalUrl,
+//       body,
+//       headers: {
+//         ...buildFinalHeaders(),
+//         ...buildAuthHeaders()
+//       },
+//        bodyType: tab.body?.mode || "json"
+//     });
+
+//     const time = Math.round(performance.now() - start);
+
+//     renderStatus(res, time);
+//     renderResponse(res, time);
+
+//     // ================= POST SCRIPT =================
+//     const postCtx = createContext(tab, res, runtimeVariables);
+//     runScript(tab.scripts?.post, postCtx);
+
+//   } catch (err) {
+//     console.error(err);
+//     ui.response.textContent = err.message;
+//   } finally {
+//     ui.send.disabled = false;
+//     ui.send.textContent = "Send Request";
+//   }
+// };
+
+// ================= SEND =================
 ui.send.onclick = async () => {
+  // Ambil ID tab yang memicu request saat tombol diklik (Closure)
+  let executingTabId = null;
+  
   try {
     const tab = tabs.getActive();
     if (!tab) return;
+    
+    executingTabId = tab.id;
+
+    // Inisialisasi runtime state untuk tab ini
+    tabRuntimeStates[executingTabId] = { isSending: true, res: null, time: 0 };
 
     // ================= SYNC FIRST (WAJIB DI ATAS) =================
     syncScriptToTab();
@@ -900,8 +1051,11 @@ ui.send.onclick = async () => {
     const preCtx = createContext(tab, null, runtimeVariables);
     runScript(tab.scripts?.pre, preCtx);
 
-    ui.send.disabled = true;
-    ui.send.textContent = "Sending...";
+    // Hanya ubah teks tombol jika user masih melihat tab yang mengeksekusi request
+    if (tabs.activeId === executingTabId) {
+      ui.send.disabled = true;
+      ui.send.textContent = "Sending...";
+    }
 
     // ================= RESOLVE VARS =================
     const tabParams = getParams();
@@ -916,67 +1070,47 @@ ui.send.onclick = async () => {
     );
 
     const finalUrl = resolveVars(rawUrl);
-
     let body = null;
-
     const tabBody = tabs.getActive().body;
 
     if (tabBody?.mode === "raw") {
       body = tabBody.raw ? JSON.parse(tabBody.raw) : null;
     }
 
-if (tabBody?.mode === "form-data") {
-  body = Object.fromEntries(
-    (tabBody.formData || [])
-      .filter(x => x.key != null && x.key !== "") //  TARUH DI SINI
-      .map(x => [
-        x.key,
-        {
-          value:
-            x.enabled === false
-              ? null
-              : x.value === undefined
-                ? ""
-                : x.value, //  empty string tetap terkirim
-          type: x.type || "text",
-          file: x.file || null,
-          enabled: x.enabled !== false
-        }
-      ])
-  );
-}
-if (tabBody?.mode === "urlencoded") {
-  body = Object.fromEntries(
-    (tabBody.urlencoded || [])
-      .filter(x => x.key != null && x.key !== "") //  TARUH DI SINI
-      .map(x => [
-        x.key,
-        {
-          value:
-            x.enabled === false
-              ? null
-              : x.value === undefined
-                ? ""
-                : x.value, // string kosong tetap ""
-          enabled: x.enabled !== false
-        }
-      ])
-  );
-}
-
-    // try {
-    //   const rawBody = resolveVars(tab.body);
-    //   body = rawBody ? JSON.parse(rawBody) : null;
-    // } catch {
-    //   ui.response.textContent = "Invalid JSON";
-    //   return;
-    // }
+    if (tabBody?.mode === "form-data") {
+      body = Object.fromEntries(
+        (tabBody.formData || [])
+          .filter(x => x.key != null && x.key !== "")
+          .map(x => [
+            x.key,
+            {
+              value: x.enabled === false ? null : x.value === undefined ? "" : x.value,
+              type: x.type || "text",
+              file: x.file || null,
+              enabled: x.enabled !== false
+            }
+          ])
+      );
+    }
+    if (tabBody?.mode === "urlencoded") {
+      body = Object.fromEntries(
+        (tabBody.urlencoded || [])
+          .filter(x => x.key != null && x.key !== "")
+          .map(x => [
+            x.key,
+            {
+              value: x.enabled === false ? null : x.value === undefined ? "" : x.value,
+              enabled: x.enabled !== false
+            }
+          ])
+      );
+    }
 
     const start = performance.now();
 
-console.log("BODY MODE", tabBody?.mode);
-console.log("BODY RAW", tabBody?.raw);
-console.log("FINAL BODY", body);
+    console.log("BODY MODE", tabBody?.mode);
+    console.log("BODY RAW", tabBody?.raw);
+    console.log("FINAL BODY", body);
 
     const res = await RequestEngine.send({
       method: ui.method.value,
@@ -991,8 +1125,18 @@ console.log("FINAL BODY", body);
 
     const time = Math.round(performance.now() - start);
 
-    renderStatus(res, time);
-    renderResponse(res, time);
+    // Simpan hasil response ke dalam memori runtime tab yang mengeksekusi
+    if (tabRuntimeStates[executingTabId]) {
+      tabRuntimeStates[executingTabId].isSending = false;
+      tabRuntimeStates[executingTabId].res = res;
+      tabRuntimeStates[executingTabId].time = time;
+    }
+
+    // HANYA RENDER KE SCREEN JIKA USER SEDANG MEMBUKA TAB INI
+    if (tabs.activeId === executingTabId) {
+      renderStatus(res, time);
+      renderResponse(res, time);
+    }
 
     // ================= POST SCRIPT =================
     const postCtx = createContext(tab, res, runtimeVariables);
@@ -1000,10 +1144,20 @@ console.log("FINAL BODY", body);
 
   } catch (err) {
     console.error(err);
-    ui.response.textContent = err.message;
+    if (executingTabId && tabs.activeId === executingTabId) {
+      ui.response.textContent = err.message;
+    }
   } finally {
-    ui.send.disabled = false;
-    ui.send.textContent = "Send Request";
+    // Kembalikan status loading tab terkait ke false
+    if (executingTabId && tabRuntimeStates[executingTabId]) {
+      tabRuntimeStates[executingTabId].isSending = false;
+    }
+
+    // Kembalikan tombol send ke normal HANYA jika tab aktif saat ini adalah tab tersebut
+    if (executingTabId && tabs.activeId === executingTabId) {
+      ui.send.disabled = false;
+      ui.send.textContent = "Send Request";
+    }
   }
 };
 
@@ -1623,8 +1777,75 @@ function getParams() {
 
 const originalSetActive = tabs.setActive.bind(tabs);
 
-tabs.setActive = (id) => {
+// tabs.setActive = (id) => {
 
+//   // save current collection dulu
+//   saveActiveCollectionState();
+
+//   // cari owner collection
+//   const owner = collections
+//     .getCollections()
+//     .find(c =>
+//       c.tabs?.some(t => t.id === id)
+//     );
+
+//   // kalau pindah collection → restore workspace collection tsb
+//   if (
+//     owner &&
+//     owner.id !== activeCollectionId
+//   ) {
+//     loadCollectionState(owner.id);
+//   }
+
+//   originalSetActive(id);
+
+//   renderParams();
+//   renderHeaders();
+
+//   const tab = tabs.getActive();
+
+//   if (tab) {
+
+//     // normalize body
+//     tab.body ||= {
+//       mode: "none",
+//       raw: "",
+//       formData: [],
+//       urlencoded: []
+//     };
+
+//     tab.body.formData ||= [];
+//     tab.body.urlencoded ||= [];
+
+//     // restore raw editor
+//     ui.body.value =
+//       tab.body.raw || "";
+
+//     // restore body mode
+//     document
+//       .querySelectorAll(".body-tab")
+//       .forEach(x =>
+//         x.classList.remove("active")
+//       );
+
+//     document
+//       .querySelector(
+//         `.body-tab[data-mode="${
+//           tab.body.mode || "none"
+//         }"]`
+//       )
+//       ?.classList.add("active");
+
+//     renderBodyUI(tab.body);
+//   }
+
+//   syncScriptToTab();
+//   renderScripts();
+
+//   saveActiveCollectionState();
+// };
+
+tabs.setActive = (id) => {
   // save current collection dulu
   saveActiveCollectionState();
 
@@ -1651,7 +1872,6 @@ tabs.setActive = (id) => {
   const tab = tabs.getActive();
 
   if (tab) {
-
     // normalize body
     tab.body ||= {
       mode: "none",
@@ -1664,22 +1884,15 @@ tabs.setActive = (id) => {
     tab.body.urlencoded ||= [];
 
     // restore raw editor
-    ui.body.value =
-      tab.body.raw || "";
+    ui.body.value = tab.body.raw || "";
 
     // restore body mode
     document
       .querySelectorAll(".body-tab")
-      .forEach(x =>
-        x.classList.remove("active")
-      );
+      .forEach(x => x.classList.remove("active"));
 
     document
-      .querySelector(
-        `.body-tab[data-mode="${
-          tab.body.mode || "none"
-        }"]`
-      )
+      .querySelector(`.body-tab[data-mode="${tab.body.mode || "none"}"]`)
       ?.classList.add("active");
 
     renderBodyUI(tab.body);
@@ -1688,8 +1901,39 @@ tabs.setActive = (id) => {
   syncScriptToTab();
   renderScripts();
 
+  // --- TAMBAHKAN PEMULIHAN STATE UI DI SINI ---
+  const runtimeState = tabRuntimeStates[id] || { isSending: false, res: null, time: 0 };
+
+  // 1. Pulihkan kondisi tombol send untuk tab ini
+  if (runtimeState.isSending) {
+    ui.send.disabled = true;
+    ui.send.textContent = "Sending...";
+  } else {
+    ui.send.disabled = false;
+    ui.send.textContent = "Send Request";
+  }
+
+  // 2. Pulihkan data panel response milik tab ini atau bersihkan jika kosong
+  if (runtimeState.res) {
+    renderStatus(runtimeState.res, runtimeState.time);
+    renderResponse(runtimeState.res, runtimeState.time);
+  } else {
+    // Jika tidak ada data response di RAM, bersihkan elemen DOM response agar tidak bocor dari tab lain
+    const bodyBox = document.getElementById("responseBody");
+    const headerBox = document.getElementById("responseHeaders");
+    const cookieBox = document.getElementById("responseCookies");
+    if (bodyBox) bodyBox.innerHTML = "";
+    if (headerBox) headerBox.innerHTML = "";
+    if (cookieBox) cookieBox.innerHTML = "";
+    if (ui.statusBar) ui.statusBar.innerHTML = "";
+  }
+  // --------------------------------------------
+
   saveActiveCollectionState();
 };
+
+
+
 
 function buildFinalHeaders() {
   const raw = getHeaders();
