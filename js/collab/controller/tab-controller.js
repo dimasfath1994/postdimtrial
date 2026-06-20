@@ -70,23 +70,31 @@ export class TabController {
     }
 
     updateSendButtonUI() {
-        // Cek ID tab yang sedang DILIHAT user saat ini
-        const activeRequestId = State.currentRequestId || window.bodyParamCtrl?.currentRequestId;
+        // Ambil ID tab yang sedang aktif saat ini secara akurat dari properti instance
+        const activeRequestId = this.activeTabId;
+        if (!activeRequestId) return;
         
-        // Ambil status sending dari tab aktif tersebut
-        const isCurrentTabSending = State.requestStates?.[activeRequestId]?.isSending || false;
+        // Ambil status sending dari penampung RAM global
+        const isCurrentTabSending = this.State.requestStates?.[activeRequestId]?.isSending || false;
     
-        if (isCurrentTabSending) {
-            ui.sendRequest.disabled = true;
-            ui.sendRequest.textContent = "Sending...";
-        } else {
-            ui.sendRequest.disabled = false;
-            ui.sendRequest.textContent = "Send Request";
+        // Target langsung elemen tombol send berdasarkan ID di HTML kamu
+        const sendBtn = document.getElementById("send");
+        if (sendBtn) {
+            if (isCurrentTabSending) {
+                sendBtn.disabled = true;
+                sendBtn.textContent = "Sending...";
+            } else {
+                sendBtn.disabled = false;
+                sendBtn.textContent = "Send Request";
+            }
         }
     }
 
     forceCloseTab(id) {
         //console.log("[TabController] Force closing tab:", id);
+        if (this.State.requestStates && this.State.requestStates[id]) {
+            delete this.State.requestStates[id];
+        }
         
         const closedTabIndex = this.tabs.findIndex(t => t.id === id);
         
@@ -132,6 +140,9 @@ export class TabController {
             
             // Jika user tidak mau save, kita hapus draft-nya secara lokal
             DataBridge.cleanup(id);
+        }
+        if (this.State.requestStates && this.State.requestStates[id]) {
+            delete this.State.requestStates[id];
         }
         const closedTabIndex = this.tabs.findIndex(t => t.id === id);
         
