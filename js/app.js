@@ -509,7 +509,7 @@ if (expanded) {
         const req = document.createElement("div");
 
         req.className = "collection-request";
-
+        console.log("TAB METHOD", tab.method);
         req.textContent =
           `${tab.method || "GET"} ${tab.name}`;
 
@@ -702,6 +702,7 @@ function renderFolderTree(folder, container, colId, depth = 1) {
     
     // 2. RENDER REQUESTS DI DALAM FOLDER
 folder.requests?.forEach(req => {
+  console.log("LOG BADGE", req);
   const reqDiv = document.createElement("div");
   reqDiv.className = "collection-request";
   reqDiv.style.marginLeft = `${(depth + 1) * 15}px`;
@@ -833,7 +834,7 @@ function renderHeaders() {
       renderHeaders();
     };
 
-    // ✅ value update
+    //  value update
     row.querySelector(".v").oninput = (e) => {
       item.value = e.target.value;
       tabs.save();
@@ -1222,6 +1223,48 @@ function saveActiveCollectionState() {
   active.activeTabId = tabs.activeId;
   active.environment = structuredClone(Environment.getAll());
 
+  // ================= FIX BUG SIDEBAR UNTUK REQUEST DI DALAM FOLDER =================
+  const activeTab = tabs.getActive();
+  if (activeTab) {
+    const updatedFields = {
+      method: activeTab.method,
+      name: activeTab.name
+    };
+
+    // 1. Sinkronkan jika request berada di root collection
+    if (active.requests && Array.isArray(active.requests)) {
+      const rootReq = active.requests.find(r => r.id === activeTab.id);
+      if (rootReq) {
+        Object.assign(rootReq, updatedFields);
+      }
+    }
+
+    // 2. Sinkronkan secara rekursif jika request berada di dalam folder/sub-folder
+    const updateRequestInTree = (folders) => {
+      if (!folders || !Array.isArray(folders)) return false;
+      for (const folder of folders) {
+        // Cek request di dalam folder ini
+        if (folder.requests && Array.isArray(folder.requests)) {
+          const folderReq = folder.requests.find(r => r.id === activeTab.id);
+          if (folderReq) {
+            Object.assign(folderReq, updatedFields);
+            return true; // Ketemu dan sukses di-update
+          }
+        }
+        // Rekursi ke sub-folder di dalamnya jika ada
+        if (folder.folders && updateRequestInTree(folder.folders)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (active.folders) {
+      updateRequestInTree(active.folders);
+    }
+  }
+  // ==================================================================================
+
   collections.save?.();
 }
 
@@ -1336,6 +1379,7 @@ function scheduleSync() {
 
     tabs.commit();
     saveActiveCollectionState();
+    renderCollections();
   }, 300);
 }
 
@@ -1986,7 +2030,7 @@ function createContext(tab, res = null, runtimeVars) {
       request: {
         method: tab?.method,
         url: tab?.url,
-        headers: buildFinalHeaders?.() || {}, // 🔥 penting: resolved headers
+        headers: buildFinalHeaders?.() || {}, // penting: resolved headers
         body: tab?.body
       },
 
