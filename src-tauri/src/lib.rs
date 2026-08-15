@@ -578,9 +578,20 @@ mod commands {
                 }
             }
 
-            let mut methods: Vec<prost_reflect::MethodDescriptor> = Vec::new();
+            // Diperbaiki: Ubah dari MethodDescriptor ke Vec<String> agar bisa di-serialize ke JSON
+            let mut methods: Vec<String> = Vec::new();
             if reflection_success {
-               let mut pool = prost_reflect::DescriptorPool::new();
+                let mut pool = prost_reflect::DescriptorPool::new();
+                let mut pool_bytes = Vec::new();
+                if prost::Message::encode(&fd_set, &mut pool_bytes).is_ok() {
+                    if pool.decode_file_descriptor_set(pool_bytes.as_slice()).is_ok() {
+                        if let Some(service_desc) = pool.get_service_by_name(&svc_name) {
+                            for method in service_desc.methods() {
+                                methods.push(method.name().to_string());
+                            }
+                        }
+                    }
+                }
             }
 
             services_with_methods.push(json!({
