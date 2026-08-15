@@ -23,12 +23,12 @@ tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
 base64 = "0.22"
 
-# --- TAMBAHAN WAJIB UNTUK API CLIENT ---
-# reqwest: core library untuk request
-# rustls-tls: untuk koneksi HTTPS yang aman (standar industri)
-# cookies: agar bisa simpan session antar request
-# multipart: agar bisa upload file
+# --- API CLIENT & HTTP ---
 reqwest = { version = "0.12", features = ["json", "multipart", "cookies", "rustls-tls"] }
+http = "1.0"
+tokio-stream = "0.1"
+
+# --- gRPC & PROST ---
 tonic = "0.12"
 tonic-reflection = "0.12"
 prost = "0.13"

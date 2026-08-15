@@ -6,6 +6,8 @@ use tokio;
 use base64::{Engine as _, engine::general_purpose};
 use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
 use tonic_reflection::pb::v1::ServerReflectionRequest;
+use http;
+use tokio_stream;
 
 mod commands {
     use super::*;
@@ -266,13 +268,13 @@ mod commands {
 
         let mut client = tonic::client::Grpc::new(channel);
 
-        let request_str = payload.to_string();
-        let req = tonic::Request::new(request_str);
+        let body_bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let req = tonic::Request::new(body_bytes);
         
         let path = http::uri::PathAndQuery::from_maybe_shared(service_method)
             .map_err(|_| "Invalid Service/Method path format")?;
 
-        let codec = tonic::codec::JsonCodec::default();
+        let codec = tonic::codec::ProstCodec::<Vec<u8>, Vec<u8>>::default();
         
         let response = client
             .unary(req, path, codec)
@@ -280,21 +282,19 @@ mod commands {
             .map_err(|status| format!("gRPC Error [Code {}]: {}", status.code(), status.message()))?;
 
         let duration = start.elapsed().as_millis();
-        let res_body = response.into_inner();
-        let res_size = res_body.len();
+        let res_body_bytes = response.into_inner();
+        let res_size = res_body_bytes.len();
+        let res_body_str = String::from_utf8_lossy(&res_body_bytes).to_string();
 
         Ok(json!({
             "status": 200,
-            "body": res_body,
+            "body": res_body_str,
             "time": duration,
             "headers": [["content-type", "application/grpc"]],
             "size": res_size
         }))
     }
 
-    // ==========================================
-    // BARU: AUTO DISCOVER SERVICE/METHOD VIA REFLECTION
-    // ==========================================
     #[tauri::command]
     pub async fn discover_grpc_services(
         endpoint: String
@@ -361,7 +361,7 @@ pub fn run() {
         commands::http_request, 
         commands::http_request_collabs,
         commands::grpc_request,
-        commands::discover_grpc_services // <-- Didaftarkan di sini
+        commands::discover_grpc_services
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
