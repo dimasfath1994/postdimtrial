@@ -1,7 +1,5 @@
 use serde_json::json;
 use std::time::Instant;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use reqwest::multipart;
 use tokio;
 use base64::{Engine as _, engine::general_purpose};
 use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
@@ -330,7 +328,7 @@ mod commands {
 
         let mut services_list = Vec::new();
 
-        if let Some(Ok(response)) = stream.message().await {
+        if let Ok(Some(response)) = stream.message().await {
             if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ListServicesResponse(list)) = response.message_response {
                 for svc in list.service {
                     if !svc.name.starts_with("grpc.reflection") {
@@ -342,7 +340,7 @@ mod commands {
 
         Ok(json!({ "services": services_list }))
     }
-}
+} // <--- PENUTUP MOD COMMANDS SUDAH DITAMBAHKAN DI SINI
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
