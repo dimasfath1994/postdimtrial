@@ -50,12 +50,28 @@ export class GrpcHandler {
         if (services.length === 0) {
           if (statusBtn) statusBtn.textContent = "⚠️ No Services Found";
         } else {
-          services.forEach((svc) => {
-            const opt = document.createElement("option");
-            opt.value = svc;
-            datalist.appendChild(opt);
+          let totalMethodsCount = 0;
+          
+          services.forEach((item) => {
+            // Jika backend mengirim object dengan format { service: "...", methods: [...] }
+            if (typeof item === "object" && item !== null && item.service && Array.isArray(item.methods)) {
+              item.methods.forEach((method) => {
+                const opt = document.createElement("option");
+                // Format wajib gRPC: ServiceName/MethodName
+                opt.value = `${item.service}/${method}`;
+                datalist.appendChild(opt);
+                totalMethodsCount++;
+              });
+            } else {
+              // Fallback jika backend hanya mengirim string service biasa
+              const opt = document.createElement("option");
+              opt.value = typeof item === "string" ? item : JSON.stringify(item);
+              datalist.appendChild(opt);
+              totalMethodsCount++;
+            }
           });
-          if (statusBtn) statusBtn.textContent = `✅ ${services.length} Services Loaded`;
+
+          if (statusBtn) statusBtn.textContent = `✅ Loaded (${totalMethodsCount} endpoints)`;
         }
       }
     } catch (err) {
@@ -120,7 +136,7 @@ export class GrpcHandler {
       scheduleSync();
     };
 
-    // Auto-trigger reflection saat URL / Method gRPC dipilih (menggunakan case-insensitive check untuk menangkap "gRPC" atau "GRPC")
+    // Auto-trigger reflection saat URL / Method gRPC dipilih
     const urlInput = document.getElementById("url");
     const methodSelect = document.getElementById("method");
     const btnReflection = document.getElementById("btnFetchReflection");
@@ -208,7 +224,7 @@ export class GrpcHandler {
     const body = tab?.body;
     if (!body || body.mode !== "grpc") return;
 
-    this.isSyncingFromState = true; // Aktifkan flag pengunci
+    this.isSyncingFromState = true;
 
     const bodyVal = body.grpc?.body || "";
     const methodVal = body.grpc?.serviceMethod || "";
@@ -228,7 +244,7 @@ export class GrpcHandler {
     const protoFileNameEl = document.getElementById("protoFileName");
     if (protoFileNameEl) protoFileNameEl.textContent = protoName || "No .proto loaded";
 
-    this.isSyncingFromState = false; // Matikan pengunci
+    this.isSyncingFromState = false;
   }
 
   /**
