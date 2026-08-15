@@ -7,6 +7,45 @@ use tonic_reflection::pb::v1::ServerReflectionRequest;
 use http;
 use tokio_stream;
 
+// --- KODEK KUSTOM UNTUK MENGIRIM BINER PROTOBUF DENGAN AMAN VIA TONIC ---
+use prost::bytes::{Buf, BufMut};
+
+#[derive(Clone, Default, Debug)]
+struct RawBytesCodec;
+
+impl tonic::codec::Codec for RawBytesCodec {
+    type Encode = Vec<u8>;
+    type Decode = Vec<u8>;
+    type Encoder = Self;
+    type Decoder = Self;
+    fn encoder(&mut self) -> Self::Encoder { self.clone() }
+    fn decoder(&mut self) -> Self::Decoder { self.clone() }
+}
+
+impl tonic::codec::Encoder for RawBytesCodec {
+    type Item = Vec<u8>;
+    type Error = tonic::Status;
+    fn encode(&mut self, item: Self::Item, dst: &mut tonic::codec::EncodeBuf<'_>) -> Result<(), Self::Error> {
+        dst.put_slice(&item);
+        Ok(())
+    }
+}
+
+impl tonic::codec::Decoder for RawBytesCodec {
+    type Item = Vec<u8>;
+    type Error = tonic::Status;
+    fn decode(&mut self, src: &mut tonic::codec::DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
+        if !src.has_remaining() {
+            return Ok(None);
+        }
+        let len = src.remaining();
+        let mut vec = vec![0; len];
+        src.copy_to_slice(&mut vec);
+        Ok(Some(vec))
+    }
+}
+// -------------------------------------------------------------------------
+
 mod commands {
     use super::*;
 
@@ -245,7 +284,7 @@ mod commands {
     }
 
     // ==========================================
-    // PERBAIKAN: GRPC REQUEST (JSON <-> PROTOBUF)
+    // MATURE & FINAL: GRPC REQUEST (POSTMAN STYLE)
     // ==========================================
     #[tauri::command]
     pub async fn grpc_request(
@@ -261,14 +300,15 @@ mod commands {
             endpoint
         };
 
-        // 1. Parse Service dan Method (Support format "Service/Method" atau "Package.Service.Method")
-        let clean_path = service_method.trim_start_matches('/');
+        // 1. NORMALISASI SERVICE & METHOD (Mendukung format Postman "Service / Method", spasi, & multi-titik package)
+        let sanitized = service_method.trim();
+        let normalized = sanitized.replace(" / ", "/").replace(" /", "/").replace("/ ", "/");
+        let clean_path = normalized.trim_start_matches('/');
+
         let (service_name, method_name) = if let Some(idx) = clean_path.rfind('/') {
-            (clean_path[..idx].to_string(), clean_path[idx+1..].to_string())
-        } else if let Some(idx) = clean_path.rfind('.') {
-            (clean_path[..idx].to_string(), clean_path[idx+1..].to_string())
+            (clean_path[..idx].trim().to_string(), clean_path[idx+1..].trim().to_string())
         } else {
-            return Err("Format service_method salah. Gunakan format 'Package.Service/Method'".to_string());
+            return Err("Format service_method salah. Gunakan format 'Service/Method' atau 'Service / Method'".to_string());
         };
 
         let channel = tonic::transport::Channel::from_shared(formatted_endpoint)
@@ -277,7 +317,7 @@ mod commands {
             .await
             .map_err(|e| format!("Gagal terkoneksi ke gRPC server: {}", e))?;
 
-        // 2. MENDAPATKAN DESKRIPTOR ON-THE-FLY VIA REFLECTION
+        // 2. MENDAPATKAN DESKRIPTOR ON-THE-FLY VIA REFLECTION (V1 & V1Alpha Fallback)
         let mut fd_set = prost_types::FileDescriptorSet::default();
         let mut reflection_success = false;
 
@@ -295,7 +335,7 @@ mod commands {
             if let Ok(Some(msg)) = stream.message().await {
                 if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
                     for fd_bytes in fd_res.file_descriptor_proto {
-                        if let Ok(fd) = prost::Message::decode(fd_bytes.as_slice()) {
+                        if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
                             fd_set.file.push(fd);
                         }
                     }
@@ -319,7 +359,7 @@ mod commands {
                 if let Ok(Some(msg)) = stream.message().await {
                     if let Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
                         for fd_bytes in fd_res.file_descriptor_proto {
-                            if let Ok(fd) = prost::Message::decode(fd_bytes.as_slice()) {
+                            if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
                                 fd_set.file.push(fd);
                             }
                         }
@@ -342,11 +382,11 @@ mod commands {
             .map_err(|e| format!("Gagal memuat Protobuf descriptor pool: {}", e))?;
 
         let service_desc = pool.get_service_by_name(&service_name)
-            .ok_or_else(|| format!("Service '{}' tidak ditemukan", service_name))?;
+            .ok_or_else(|| format!("Service '{}' tidak ditemukan di pool descriptor", service_name))?;
         
         let method_desc = service_desc.methods()
             .find(|m| m.name() == method_name)
-            .ok_or_else(|| format!("Method '{}' tidak ditemukan", method_name))?;
+            .ok_or_else(|| format!("Method '{}' tidak ditemukan di dalam service '{}'", method_name, service_name))?;
 
         let input_desc = method_desc.input();
         let output_desc = method_desc.output();
@@ -362,7 +402,7 @@ mod commands {
         prost::Message::encode(&request_msg, &mut req_bytes)
             .map_err(|e| format!("Gagal mem-parsing/encode Protobuf: {}", e))?;
 
-        // 5. KIRIM DATA KE SERVER VIA TONIC
+        // 5. KIRIM DATA KE SERVER VIA TONIC DENGAN RAW BYTES CODEC YANG AMAN
         let mut client = tonic::client::Grpc::new(channel);
         let req = tonic::Request::new(req_bytes);
         
@@ -370,14 +410,14 @@ mod commands {
         let path = http::uri::PathAndQuery::from_maybe_shared(path_uri.clone())
             .map_err(|_| format!("Invalid Route Path: {}", path_uri))?;
 
-        let codec = tonic::codec::ProstCodec::<Vec<u8>, Vec<u8>>::default();
+        let codec = super::RawBytesCodec::default();
         
         let response = client
             .unary(req, path, codec)
             .await
             .map_err(|status| format!("gRPC Error [Code {}]: {}", status.code(), status.message()))?;
 
-        // 6. KONVERSI RESPON BINER (PROTOBUF) -> JSON UNTUK FRONTEND
+        // 6. KONVERSI RESPON BINER (PROTOBUF) -> JSON UNTUK FRONTEND (GAYA POSTMAN)
         let duration = start.elapsed().as_millis();
         let res_body_bytes = response.into_inner();
         let res_size = res_body_bytes.len();
@@ -390,7 +430,7 @@ mod commands {
 
         Ok(json!({
             "status": 200,
-            "body": res_json.to_string(), // Teks JSON yang siap di parse frontend
+            "body": res_json.to_string(), // JSON string bersih yang siap diparse di frontend
             "time": duration,
             "headers": [["content-type", "application/grpc"]],
             "size": res_size
