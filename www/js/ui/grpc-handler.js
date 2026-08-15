@@ -104,7 +104,6 @@ export class GrpcHandler {
       ? this.editors.body.getValue()
       : (inputBody ? inputBody.value : (tab.body.grpc.body || ""));
 
-    // FIX: Menggunakan pengecekan eksplisit agar user bisa mengosongkan input
     const currentMethod = inputMethod ? inputMethod.value : (tab.body.grpc.serviceMethod || "");
 
     tab.body.grpc.body = currentBody;
@@ -121,15 +120,15 @@ export class GrpcHandler {
       scheduleSync();
     };
 
-    // Auto-trigger reflection saat URL / Method gRPC dipilih
+    // Auto-trigger reflection saat URL / Method gRPC dipilih (menggunakan case-insensitive check untuk menangkap "gRPC" atau "GRPC")
     const urlInput = document.getElementById("url");
     const methodSelect = document.getElementById("method");
     const btnReflection = document.getElementById("btnFetchReflection");
 
     const triggerReflection = () => {
-      const currentMethod = methodSelect?.value;
+      const currentMethod = (methodSelect?.value || "").toUpperCase();
       const currentUrl = urlInput?.value;
-      if (currentMethod === "GRPC" && currentUrl) {
+      if (currentMethod.includes("GRPC") && currentUrl) {
         this.loadReflectionServices(currentUrl);
       }
     };
@@ -227,7 +226,7 @@ export class GrpcHandler {
     if (inputMethod) inputMethod.value = methodVal;
 
     const protoFileNameEl = document.getElementById("protoFileName");
-    if (protoFileNameEl) protoFileNameEl.textContent = protoName || "Pilih file .proto";
+    if (protoFileNameEl) protoFileNameEl.textContent = protoName || "No .proto loaded";
 
     this.isSyncingFromState = false; // Matikan pengunci
   }
