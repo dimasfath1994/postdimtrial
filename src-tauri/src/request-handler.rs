@@ -16,7 +16,7 @@ pub async fn http_request(
     method: String,
     url: String,
     headers: Vec<(String, String)>,
-    body: Option<serde_json::Value> // Kita ubah ke Value untuk menangani JSON atau Multipart
+    body: Option<serde_json::Value>
 ) -> Result<serde_json::Value, String> {
     
     let client = reqwest::Client::builder()
@@ -34,16 +34,23 @@ pub async fn http_request(
         }
     }
 
-    let start = Instant::now();
-    let mut request = client.request(
-        reqwest::Method::from_bytes(method.to_uppercase().as_bytes()).map_err(|_| "Invalid Method")?,
-        &url
-    ).headers(header_map);
+    // 1. PENYESUAIAN METHOD: gRPC menggunakan HTTP POST
+    let actual_method = if method.to_uppercase() == "GRPC" {
+        "POST"
+    } else {
+        method.as_str()
+    };
 
-    // LOGIKA BODY
+    let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
+        .map_err(|_| "Invalid Method")?;
+
+    let start = Instant::now();
+    let mut request = client.request(req_method, &url).headers(header_map);
+
+    // 2. LOGIKA BODY (Support Multipart, JSON Object GraphQL/gRPC, & Raw String)
     if let Some(b) = body {
-        // Cek apakah ini multipart (Array dari field)
         if b.is_array() {
+            // Multipart Form Data (Tetap Aman)
             let mut form = multipart::Form::new();
             for item in b.as_array().unwrap() {
                 let key = item["key"].as_str().unwrap_or("");
@@ -51,8 +58,6 @@ pub async fn http_request(
                 let r#type = item["type"].as_str().unwrap_or("text");
 
                 if r#type == "file" {
-                    // Di sini Rust bisa membaca file dari path jika val adalah path
-                    // Untuk sekarang kita asumsikan val adalah path file lokal
                     if let Ok(part) = multipart::Part::file(val).await {
                         form = form.part(key.to_string(), part);
                     }
@@ -61,9 +66,14 @@ pub async fn http_request(
                 }
             }
             request = request.multipart(form);
+        } else if b.is_object() {
+            // JSON Payload (GraphQL & gRPC): Kirim sebagai JSON & auto-set Content-Type Header
+            request = request.json(&b);
+        } else if let Some(raw_str) = b.as_str() {
+            // Plain String / Raw Body
+            request = request.body(raw_str.to_string());
         } else {
-            // Raw/JSON body biasa
-            request = request.body(b.as_str().unwrap_or(&b.to_string()).to_string());
+            request = request.body(b.to_string());
         }
     }
 

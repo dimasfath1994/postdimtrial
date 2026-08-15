@@ -36,16 +36,23 @@ mod commands {
             }
         }
     
-        // 3. Prepare Request
+        // 3. Prepare Request (Penyesuaian: Ubah "GRPC" ke HTTP "POST")
+        let actual_method = if method.to_uppercase() == "GRPC" {
+            "POST"
+        } else {
+            method.as_str()
+        };
+
+        let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
+            .map_err(|_| "Invalid Method")?;
+
         let start = std::time::Instant::now();
-        let mut request = client.request(
-            reqwest::Method::from_bytes(method.to_uppercase().as_bytes()).map_err(|_| "Invalid Method")?,
-            &url
-        ).headers(header_map);
+        let mut request = client.request(req_method, &url).headers(header_map);
     
         // 4. Handle Body
         if let Some(b) = body {
             if b.is_array() {
+                // Multipart Form Data (EKSISTING - TIDAK DIUBAH)
                 let mut form = reqwest::multipart::Form::new();
                 if let Some(items) = b.as_array() {
                     for item in items {
@@ -64,7 +71,11 @@ mod commands {
                     }
                 }
                 request = request.multipart(form);
+            } else if b.is_object() {
+                // Khusus JSON Object (gRPC Proxy / GraphQL Payload)
+                request = request.json(&b);
             } else {
+                // Raw String / Text (EKSISTING - TIDAK DIUBAH)
                 request = request.body(b.as_str().unwrap_or(&b.to_string()).to_string());
             }
         }
@@ -91,7 +102,7 @@ mod commands {
             "body": body_text,
             "time": duration,
             "headers": res_headers,
-            "size": body_size  // <-- INI YANG DITAMBAHKAN
+            "size": body_size
         }))
     }
 
@@ -134,13 +145,20 @@ mod commands {
             }
         }
 
-        let start = std::time::Instant::now();
-        let request_builder = client.request(
-            reqwest::Method::from_bytes(method.to_uppercase().as_bytes()).map_err(|_| "Invalid Method")?,
-            &url
-        ).headers(header_map);
+        // Penyesuaian: Ubah "GRPC" ke HTTP "POST"
+        let actual_method = if method.to_uppercase() == "GRPC" {
+            "POST"
+        } else {
+            method.as_str()
+        };
 
-        // 2. Pemrosesan Body secara Pintar
+        let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
+            .map_err(|_| "Invalid Method")?;
+
+        let start = std::time::Instant::now();
+        let request_builder = client.request(req_method, &url).headers(header_map);
+
+        // 2. Pemrosesan Body secara Pintar (EKSISTING - TIDAK DIUBAH)
         let request = if body.is_null() || body.as_object().map_or(false, |obj| obj.is_empty()) {
             request_builder
         } else if content_type.contains("application/x-www-form-urlencoded") {
@@ -171,13 +189,11 @@ mod commands {
                         let mut success = false;
 
                         if is_path {
-                            // KONDISI UTAMA (GAYA POSTMAN): Baca file langsung dari disk lewat Rust, UI bersih dari beban!
                             if let Ok(content) = tokio::fs::read(val).await {
                                 file_bytes = content;
                                 success = true;
                             }
                         } else if let Some(b64_val) = item["file_b64"].as_str() {
-                            // KONDISI CADANGAN: Decode data Base64 ramah memori yang dikirim oleh JS Blob
                             if let Ok(decoded) = general_purpose::STANDARD.decode(b64_val) {
                                 file_bytes = decoded;
                                 success = true;
@@ -203,7 +219,7 @@ mod commands {
             }
         };
 
-        // 3. Eksekusi Request & Ambil Hasil
+        // 3. Eksekusi Request & Ambil Hasil (EKSISTING - TIDAK DIUBAH)
         let response = request.send().await.map_err(|e| e.to_string())?;
         let mut res_headers = Vec::new();
         for (name, value) in response.headers() {
