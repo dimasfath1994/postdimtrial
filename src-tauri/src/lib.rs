@@ -578,7 +578,7 @@ mod commands {
                 }
             }
 
-            let mut methods = Vec::new();
+            let mut methods: Vec<prost_reflect::MethodDescriptor> = Vec::new();
             if reflection_success {
                let mut pool = prost_reflect::DescriptorPool::new();
             }
