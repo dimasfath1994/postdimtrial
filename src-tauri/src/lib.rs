@@ -438,6 +438,9 @@ mod commands {
         }))
     }
 
+    // ==========================================
+    // UPDATED: DISCOVER SERVICES & METHODS (POSTMAN STYLE)
+    // ==========================================
     #[tauri::command]
     pub async fn discover_grpc_services(
         endpoint: String
@@ -455,9 +458,9 @@ mod commands {
             .await
             .map_err(|e| format!("Gagal terhubung ke gRPC Server: {}", e))?;
 
-        let mut services_list = Vec::new();
+        let mut raw_service_names = Vec::new();
 
-        // 1. Coba Reflection v1 terlebih dahulu
+        // 1. Coba Reflection v1 terlebih dahulu untuk mendapatkan list service names
         let mut client_v1 = ServerReflectionClient::new(channel.clone());
         let req_v1 = ServerReflectionRequest {
             host: "".to_string(),
@@ -478,18 +481,18 @@ mod commands {
                 if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ListServicesResponse(list)) = response.message_response {
                     for svc in list.service {
                         if !svc.name.starts_with("grpc.reflection") {
-                            services_list.push(svc.name);
+                            raw_service_names.push(svc.name);
                         }
                     }
                 }
             }
             Ok::<(), tonic::Status>(())
-        }.await.is_ok() && !services_list.is_empty();
+        }.await.is_ok() && !raw_service_names.is_empty();
 
-        // 2. Jika v1 gagal atau kosong, fallback ke v1alpha (seperti yang digunakan grpcb.in)
+        // 2. Jika v1 gagal atau kosong, fallback ke v1alpha
         if !v1_success {
-            services_list.clear();
-            let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel);
+            raw_service_names.clear();
+            let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
             let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
                 host: "".to_string(),
                 message_request: Some(
@@ -509,18 +512,95 @@ mod commands {
                 if let Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ListServicesResponse(list)) = response.message_response {
                     for svc in list.service {
                         if !svc.name.starts_with("grpc.reflection") {
-                            services_list.push(svc.name);
+                            raw_service_names.push(svc.name);
                         }
                     }
                 }
             }
         }
 
-        if services_list.is_empty() {
+        if raw_service_names.is_empty() {
             return Err("Reflection gagal: Server tidak mengembalikan service atau tidak mendukung reflection.".to_string());
         }
 
-        Ok(json!({ "services": services_list }))
+        // 3. Ambil File Descriptor Set per service untuk mengekstrak daftar Method-nya
+        let mut services_with_methods = Vec::new();
+
+        for svc_name in raw_service_names {
+            let mut fd_set = prost_types::FileDescriptorSet::default();
+            let mut reflection_success = false;
+
+            // Coba V1 Descriptors
+            let mut client_v1_desc = ServerReflectionClient::new(channel.clone());
+            let req_desc_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
+                host: "".to_string(),
+                message_request: Some(
+                    tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(svc_name.clone())
+                ),
+            };
+
+            if let Ok(response) = client_v1_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1))).await {
+                let mut stream = response.into_inner();
+                if let Ok(Some(msg)) = stream.message().await {
+                    if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
+                        for fd_bytes in fd_res.file_descriptor_proto {
+                            if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
+                                fd_set.file.push(fd);
+                            }
+                        }
+                        reflection_success = !fd_set.file.is_empty();
+                    }
+                }
+            }
+
+            // Coba V1Alpha Descriptors jika V1 Gagal
+            if !reflection_success {
+                let mut client_v1alpha_desc = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
+                let req_desc_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
+                    host: "".to_string(),
+                    message_request: Some(
+                        tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(svc_name.clone())
+                    ),
+                };
+
+                if let Ok(response) = client_v1alpha_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1alpha))).await {
+                    let mut stream = response.into_inner();
+                    if let Ok(Some(msg)) = stream.message().await {
+                        if let Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
+                            for fd_bytes in fd_res.file_descriptor_proto {
+                                if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
+                                    fd_set.file.push(fd);
+                                }
+                            }
+                            reflection_success = !fd_set.file.is_empty();
+                        }
+                    }
+                }
+            }
+
+            let mut methods = Vec::new();
+            if reflection_success {
+                if let Ok(mut pool) = prost_reflect::DescriptorPool::new() {
+                    let mut pool_bytes = Vec::new();
+                    if prost::Message::encode(&fd_set, &mut pool_bytes).is_ok() {
+                        if pool.decode_file_descriptor_set(pool_bytes.as_slice()).is_ok() {
+                            if let Some(service_desc) = pool.get_service_by_name(&svc_name) {
+                                for m in service_desc.methods() {
+                                    methods.push(m.name().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            services_with_methods.push(json!({
+                "service": svc_name,
+                "methods": methods
+            }));
+        }
+
+        Ok(json!({ "services": services_with_methods }))
     }
 }
 

@@ -81,17 +81,26 @@ export class RequestEngine {
                        window.__TAURI_INTERNALS__?.invoke || 
                        window.__TAURI_INTERNALS__?.core?.invoke;
 
+        // DIUPDATE: Menggunakan signature { endpoint, service_method, payload } agar sinkron dengan Rust
         const res = await invoke("grpc_request", {
-          url,
-          service,
-          method: grpcMethod,
-          metadata: Object.entries(finalHeaders),
-          data: typeof grpcData === "string" ? JSON.parse(grpcData || "{}") : (grpcData || {})
+          endpoint: url,
+          service_method: `${service}/${grpcMethod}`,
+          payload: typeof grpcData === "string" ? JSON.parse(grpcData || "{}") : (grpcData || {})
         });
+
+        // Parse response body dari backend
+        let responseData = res.body;
+        try {
+          if (typeof responseData === "string") {
+            responseData = JSON.parse(responseData);
+          }
+        } catch (e) {
+          // Tetap string jika gagal parse
+        }
 
         return {
           status: res.status || 200,
-          data: res.data,
+          data: responseData,
           headers: res.headers || {},
           cookies: []
         };
