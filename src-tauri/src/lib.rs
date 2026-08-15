@@ -48,6 +48,7 @@ impl tonic::codec::Decoder for RawBytesCodec {
 
 mod commands {
     use super::*;
+    use prost::Message;
 
     // ==========================================
     // EKSISTING (TIDAK DISENGGOL SAMA SEKALI)
