@@ -304,16 +304,17 @@ mod commands {
 
         let uri_endpoint = format!("http://{}", clean_endpoint);
 
-        // ERROR FIXED: Removed .http2_only(true)
         let channel = tonic::transport::Channel::from_shared(uri_endpoint)
             .map_err(|e| format!("Invalid URL: {}", e))?
             .connect()
             .await
             .map_err(|e| format!("Gagal terhubung ke gRPC Server: {}", e))?;
 
-        let mut client = ServerReflectionClient::new(channel);
+        let mut services_list = Vec::new();
 
-        let req = ServerReflectionRequest {
+        // 1. Coba Reflection v1 terlebih dahulu
+        let mut client_v1 = ServerReflectionClient::new(channel.clone());
+        let req_v1 = ServerReflectionRequest {
             host: "".to_string(),
             message_request: Some(
                 tonic_reflection::pb::v1::server_reflection_request::MessageRequest::ListServices(
@@ -322,22 +323,56 @@ mod commands {
             ),
         };
 
-        let mut stream = client
-            .server_reflection_info(tonic::Request::new(tokio_stream::once(req)))
-            .await
-            .map_err(|e| format!("Reflection gagal: {}", e))?
-            .into_inner();
+        let v1_success = async {
+            let mut stream = client_v1
+                .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1)))
+                .await?
+                .into_inner();
 
-        let mut services_list = Vec::new();
-
-        if let Ok(Some(response)) = stream.message().await {
-            if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ListServicesResponse(list)) = response.message_response {
-                for svc in list.service {
-                    if !svc.name.starts_with("grpc.reflection") {
-                        services_list.push(svc.name);
+            while let Some(response) = stream.message().await? {
+                if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ListServicesResponse(list)) = response.message_response {
+                    for svc in list.service {
+                        if !svc.name.starts_with("grpc.reflection") {
+                            services_list.push(svc.name);
+                        }
                     }
                 }
             }
+            Ok::<(), tonic::Status>(())
+        }.await.is_ok() && !services_list.is_empty();
+
+        // 2. Jika v1 gagal atau kosong, fallback ke v1alpha (seperti yang digunakan grpcb.in)
+        if !v1_success {
+            services_list.clear();
+            let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel);
+            let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
+                host: "".to_string(),
+                message_request: Some(
+                    tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::ListServices(
+                        "".to_string(),
+                    ),
+                ),
+            };
+
+            let mut stream_alpha = client_v1alpha
+                .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha)))
+                .await
+                .map_err(|e| format!("Reflection gagal (v1 & v1alpha): {}", e))?
+                .into_inner();
+
+            while let Some(response) = stream_alpha.message().await.map_err(|e| format!("Stream error v1alpha: {}", e))? {
+                if let Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ListServicesResponse(list)) = response.message_response {
+                    for svc in list.service {
+                        if !svc.name.starts_with("grpc.reflection") {
+                            services_list.push(svc.name);
+                        }
+                    }
+                }
+            }
+        }
+
+        if services_list.is_empty() {
+            return Err("Reflection gagal: Server tidak mengembalikan service atau tidak mendukung reflection.".to_string());
         }
 
         Ok(json!({ "services": services_list }))
