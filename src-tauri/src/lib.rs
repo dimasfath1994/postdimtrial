@@ -293,17 +293,19 @@ mod commands {
         }))
     }
 
-    #[tauri::command]
+   #[tauri::command]
     pub async fn discover_grpc_services(
         endpoint: String
     ) -> Result<serde_json::Value, String> {
-        let formatted_endpoint = if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
-            format!("http://{}", endpoint)
-        } else {
-            endpoint
-        };
+        // Bersihkan endpoint dari http:// atau https:// karena gpcb.in biasanya butuh koneksi murni atau penanganan cleartext
+        let clean_endpoint = endpoint
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .to_string();
 
-        let channel = tonic::transport::Channel::from_shared(formatted_endpoint)
+        let uri_endpoint = format!("http://{}", clean_endpoint);
+
+        let channel = tonic::transport::Channel::from_shared(uri_endpoint)
             .map_err(|e| format!("Invalid URL: {}", e))?
             .connect()
             .await
