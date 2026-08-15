@@ -10,6 +10,8 @@ import { SyncService } from "./core/sync/sync-service.js";
 import { exportPostmanCollection } from "./core/exporters/postman-exporter.js";
 import { importPostmanCollection } from "./core/importers/postman-importer.js";
 
+import { GraphqlHandler } from './ui/graphql-handler.js';
+import { GrpcHandler } from './ui/grpc-handler.js';
 
 const isTauri = window.__TAURI_INTERNALS__ !== undefined;
 
@@ -59,7 +61,14 @@ const ui = {
   bodyType: document.getElementById("bodyType"),
   exportBtn: document.getElementById("exportBtn"),
   useProxy: document.getElementById("use-proxy"),
-  importFile: document.getElementById("importFile")
+  importFile: document.getElementById("importFile"),
+
+
+  graphqlQuery: document.getElementById("graphqlQuery"),
+  graphqlVariables: document.getElementById("graphqlVariables"),
+  grpcServiceMethod: document.getElementById("grpcServiceMethod"),
+  grpcBody: document.getElementById("grpcBody"),
+  protoFileName: document.getElementById("protoFileName")
 };
 const bodyMode = document.getElementById("bodyMode");
 
@@ -173,6 +182,8 @@ tabs.syncForm();
 
 initMonaco();
 
+GraphqlHandler.setupUI(ui, tabs, scheduleSync);
+GrpcHandler.setupUI(ui, tabs, scheduleSync);
 // tunggu monaco ready baru sync
 
 
@@ -1042,6 +1053,8 @@ ui.send.onclick = async () => {
     tabRuntimeStates[executingTabId] = { isSending: true, res: null, time: 0 };
 
     // ================= SYNC FIRST (WAJIB DI ATAS) =================
+    GraphqlHandler.syncToState(tab, ui);
+    GrpcHandler.syncToState(tab, ui);
     syncScriptToTab();
     tabs.syncTab();
     tabs.save();
@@ -1076,6 +1089,14 @@ ui.send.onclick = async () => {
 
     if (tabBody?.mode === "raw") {
       body = tabBody.raw ? JSON.parse(tabBody.raw) : null;
+    }
+
+
+
+    if (tabBody?.mode === "graphql") {
+      body = GraphqlHandler.prepareRequestBody(tab, resolveVars);
+    } if (tabBody?.mode === "grpc") {
+      body = GrpcHandler.prepareRequestBody(tab, resolveVars);
     }
 
     if (tabBody?.mode === "form-data") {
@@ -1145,6 +1166,7 @@ ui.send.onclick = async () => {
 
   } catch (err) {
     console.error(err);
+    
     if (executingTabId && tabs.activeId === executingTabId) {
       ui.response.textContent = err.message;
     }
@@ -2634,8 +2656,12 @@ function renderBodyUI(body) {
   raw.classList.add("hidden");
   form.classList.add("hidden");
   urlenc.classList.add("hidden");
+  
 
   if (!body || body.mode === "none") return;
+
+  GraphqlHandler.renderUI(body);
+  GrpcHandler.renderUI(body);
 
   if (body.mode === "raw") {
     raw.classList.remove("hidden");

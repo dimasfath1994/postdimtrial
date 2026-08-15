@@ -20,18 +20,169 @@ export class RequestEngine {
     }
   }
 
-  static async send({ method, url, body, headers = {}, bodyType = "json" }) {
+  static async send({ method = "POST", url, body, headers = {}, bodyType = "json", grpcOptions = {} }) {
     url = EnvResolver.resolve(url);
     let finalBody;
     let finalHeaders = { ...headers };
 
-    // ================= BODY HANDLING =================
-    if (bodyType === "raw" || bodyType === "json") {
+    // ================= 1. gRPC HANDLING (KHUSUS PROTOBUF/HTTP2) =================
+    if (bodyType === "grpc") {
+      const token = AuthStore?.getToken?.();
+      if (token) finalHeaders["Authorization"] = `Bearer ${token}`;
+
+      // Resolusi Service & Method dari grpcOptions, body, atau DOM (#grpcServiceMethod)
+      let service = grpcOptions.service || body?.service || "";
+      let grpcMethod = grpcOptions.method || body?.method || "";
+
+      if (!service || !grpcMethod) {
+        const smInput = document.getElementById("grpcServiceMethod")?.value || "";
+        if (smInput) {
+          if (smInput.includes("/")) {
+            const parts = smInput.split("/");
+            service = service || parts[0].trim();
+            grpcMethod = grpcMethod || parts[1].trim();
+          } else if (smInput.includes(".")) {
+            const lastDot = smInput.lastIndexOf(".");
+            service = service || smInput.slice(0, lastDot).trim();
+            grpcMethod = grpcMethod || smInput.slice(lastDot + 1).trim();
+          } else {
+            service = service || smInput.trim();
+          }
+        }
+      }
+
+      // Resolusi Data Payload dari body atau DOM (#grpcBody)
+      let grpcData = {};
+      if (body && typeof body === "object" && body.data !== undefined) {
+        grpcData = body.data;
+      } else if (body && typeof body === "object" && !body.service && !body.method) {
+        grpcData = body;
+      } else if (typeof body === "string" && body.trim()) {
+        try {
+          grpcData = JSON.parse(body);
+        } catch (e) {
+          grpcData = body;
+        }
+      } else {
+        const domGrpcBody = document.getElementById("grpcBody")?.value || "";
+        if (domGrpcBody.trim()) {
+          try {
+            grpcData = JSON.parse(domGrpcBody);
+          } catch (e) {
+            grpcData = domGrpcBody;
+          }
+        }
+      }
+
+      // A. Jika di lingkungan TAURI (Desktop Native gRPC)
+      if (window.__TAURI_INTERNALS__ !== undefined) {
+        const invoke = window.__TAURI__?.invoke || 
+                       window.__TAURI__?.core?.invoke || 
+                       window.__TAURI_INTERNALS__?.invoke || 
+                       window.__TAURI_INTERNALS__?.core?.invoke;
+
+        const res = await invoke("grpc_request", {
+          url,
+          service,
+          method: grpcMethod,
+          metadata: Object.entries(finalHeaders),
+          data: typeof grpcData === "string" ? JSON.parse(grpcData || "{}") : (grpcData || {})
+        });
+
+        return {
+          status: res.status || 200,
+          data: res.data,
+          headers: res.headers || {},
+          cookies: []
+        };
+      }
+
+      // B. Jika di BROWSER (Dialihkan ke Backend Proxy/gRPC-Web Proxy)
+      const options = {
+        method: "POST",
+        headers: { ...finalHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: url,
+          service,
+          method: grpcMethod,
+          data: typeof grpcData === "string" ? JSON.parse(grpcData || "{}") : (grpcData || {})
+        })
+      };
+
+      const useProxy = document.getElementById("use-proxy")?.checked;
+      const proxyUrl = url.endsWith("/grpc-proxy") ? url : `${url.replace(/\/+$/, "")}/grpc-proxy`;
+
+      const res = useProxy ? await proxysendRequest(proxyUrl, options, true) : await fetch(proxyUrl, options);
+      
+      let data;
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        try {
+          data = await res.json();
+        } catch (e) {
+          data = await res.text();
+        }
+      } else {
+        data = await res.text();
+      }
+
+      return { 
+        status: res.status, 
+        data, 
+        headers: Object.fromEntries(res.headers.entries()), 
+        cookies: [] 
+      };
+    }
+
+    // ================= 2. GRAPHQL HANDLING =================
+    if (bodyType === "graphql") {
+      finalHeaders["Content-Type"] = finalHeaders["Content-Type"] || "application/json";
+
+      let query = "";
+      let variables = {};
+
+      if (typeof body === "string") {
+        query = body;
+      } else if (body && typeof body === "object") {
+        query = body.query || "";
+        variables = body.variables || {};
+      }
+
+      // Fallback ke DOM jika query / variables tidak terisi dari argumen `body`
+      if (!query) {
+        query = document.getElementById("graphqlQuery")?.value || "";
+      }
+
+      if (typeof variables === "string") {
+        try {
+          variables = JSON.parse(variables || "{}");
+        } catch (e) {
+          variables = {};
+        }
+      } else if (Object.keys(variables).length === 0) {
+        const domVars = document.getElementById("graphqlVariables")?.value || "";
+        if (domVars.trim()) {
+          try {
+            variables = JSON.parse(domVars);
+          } catch (e) {
+            variables = domVars;
+          }
+        }
+      }
+
+      const payload = {
+        query,
+        variables
+      };
+
+      finalBody = JSON.stringify(payload);
+    } 
+    // ================= 3. HTTP standard HANDLING (FLOW LAMA UTUH) =================
+    else if (bodyType === "raw" || bodyType === "json") {
       finalHeaders["Content-Type"] = finalHeaders["Content-Type"] || "application/json";
       finalBody = typeof body === "string" ? body : body ? JSON.stringify(body) : undefined;
     } 
     else if (bodyType === "form-data") {
-      // Siapkan data untuk Web (FormData) dan Tauri (Array of objects)
       const formData = new FormData();
       const multipartForTauri = [];
 
@@ -40,11 +191,8 @@ export class RequestEngine {
           if (!key) return;
           if (item && typeof item === "object" && "value" in item) {
             if (item.enabled === false) return;
-            
             const val = item.file || item.value || "";
-            // Web: append ke FormData
             formData.append(key, val);
-            // Tauri: simpan ke array untuk dikirim sebagai JSON
             multipartForTauri.push({ key, value: String(val), type: item.type || "text" });
           } else {
             formData.append(key, item ?? "");
@@ -80,13 +228,13 @@ export class RequestEngine {
     // ================= TAURI ENGINE =================
     if (window.__TAURI_INTERNALS__ !== undefined) {
       const invoke = window.__TAURI__?.invoke || 
-      window.__TAURI__?.core?.invoke || 
-      window.__TAURI_INTERNALS__?.invoke || 
-      window.__TAURI_INTERNALS__?.core?.invoke;
+                     window.__TAURI__?.core?.invoke || 
+                     window.__TAURI_INTERNALS__?.invoke || 
+                     window.__TAURI_INTERNALS__?.core?.invoke;
       
       let tauriBody = null;
       if (bodyType === "form-data") {
-        tauriBody = finalBody.multipartForTauri; // Kirim array untuk diproses Rust
+        tauriBody = finalBody.multipartForTauri;
       } else {
         tauriBody = typeof finalBody === 'object' ? JSON.stringify(finalBody) : finalBody;
       }
@@ -101,17 +249,14 @@ export class RequestEngine {
       const headersMap = Object.fromEntries(res.headers);
       let responseData = res.body;
 
-      // 1. Cek secara case-insensitive apakah Content-Type mengandung "application/json"
       const isJson = Object.entries(headersMap).some(
         ([key, val]) => key.toLowerCase() === 'content-type' && val.toLowerCase().includes('application/json')
       );
 
-      // 2. Jika iya, parse string mentah lalu rapikan kembali dengan indentasi 2 atau 4 spasi
       if (isJson && responseData) {
         try {
           responseData = JSON.parse(responseData);
         } catch (e) {
-          // Jika corrupt atau gagal di-parse, biarkan teksnya apa adanya (fallback)
           console.warn("[Beautifier] Response diklaim JSON tapi gagal di-parse:", e);
         }
       }

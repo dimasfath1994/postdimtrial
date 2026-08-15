@@ -1,6 +1,5 @@
 import { Storage } from "../core/storage.js";
 
-
 export class Tabs {
 
   constructor(ui, collections) {
@@ -10,104 +9,82 @@ export class Tabs {
 
     this.onUpdate = null;
 
-    //  prevent UI ↔ storage ↔ sync loop
+    // prevent UI ↔ storage ↔ sync loop
     this._syncing = false;
     this.collections = collections;
     this.load();
   }
 
   // ================= CREATE =================
-//   create() {
-//     const tab = this._createDefaultTab();
+  create(collectionId = null, folderId = null) {
+    const tab = this._createDefaultTab();
 
-//     this.tabs.push(tab);
-//     this.commit();
-//     this.setActive(tab.id);
-//   }
+    const newTab = {
+      ...tab, 
+      collectionId: collectionId,
+      folderId: folderId
+    };
 
-//   // Di dalam class TabsManager
-// createTabForFolder(collectionId, folderId) {
-//   const newTab = {
-//       id: Date.now(),
-//       name: "New Request",
-//       method: "GET",
-//       url: "",
-//       collectionId: collectionId, // Langsung pasang ID-nya di sini
-//       folderId: folderId          // Langsung pasang ID-nya di sini
-//   };
-  
-//   this.tabs.push(newTab);
-//   this.save();
-//   return newTab; // Mengembalikan objek agar bisa diproses di UI
-// }
-create(collectionId = null, folderId = null) {
-  const tab = this._createDefaultTab();
+    this.tabs.push(newTab);
+    
+    // Kirim objek newTab langsung ke addRequest
+    if (collectionId) {
+      this.collections.addRequest(collectionId, newTab, folderId);
+    }
 
-  const newTab = {
-    ...tab, 
-    collectionId: collectionId,
-    folderId: folderId
-  };
-
-  this.tabs.push(newTab);
-  
-  // Kirim objek newTab langsung ke addRequest
-  if (collectionId) {
-    this.collections.addRequest(collectionId, newTab, folderId);
+    this.commit();
+    this.setActive(newTab.id);
+    
+    if (this.onUpdate) this.onUpdate();
+    
+    return newTab;
   }
 
-  this.commit();
-  this.setActive(newTab.id);
-  
-  if (this.onUpdate) this.onUpdate();
-  
-  return newTab;
-}
+  openRequest(request) {
+    // 1. Cek apakah tab dengan ID request ini ada di daftar tab
+    let existingTab = this.tabs.find(t => t.id === request.id);
 
-// Di dalam class TabsManager
-openRequest(request) {
-  // 1. Cek apakah tab dengan ID request ini ada di daftar tab
-  let existingTab = this.tabs.find(t => t.id === request.id);
+    if (existingTab) {
+        existingTab.opened = true; 
+        this.setActive(existingTab.id);
+    } else {
+        // Jika belum ada sama sekali, buat tab baru
+        const newTab = {
+            id: request.id,
+            name: request.name,
+            method: request.method || "GET",
+            url: request.url || "",
+            body: typeof request.body === "object" ? request.body : {
+              mode: "none",
+              raw: request.body || "",
+              formData: [],
+              urlencoded: [],
+              graphql: { query: "", variables: "" },
+              grpc: { protoFileName: "", serviceMethod: "", body: "" }
+            },
+            collectionId: request.collectionId || null,
+            folderId: request.folderId || null,
+            opened: true
+        };
+        this.tabs.push(newTab);
+        this.save();
+        this.setActive(newTab.id);
+    }
 
-  if (existingTab) {
-      // PERBAIKAN: Jika tab ditemukan (walaupun sedang closed), 
-      // aktifkan kembali dengan set opened = true
-      existingTab.opened = true; 
-      this.setActive(existingTab.id);
-  } else {
-      // Jika belum ada sama sekali, buat tab baru
-      const newTab = {
-          id: request.id,
-          name: request.name,
-          method: request.method,
-          url: request.url,
-          collectionId: request.collectionId || null,
-          folderId: request.folderId || null,
-          opened: true // Pastikan tab baru terbuka
-      };
-      this.tabs.push(newTab);
-      this.save();
-      this.setActive(newTab.id);
+    this.render();
   }
-
-  // Update UI (ini akan merender ulang daftar tab yang opened !== false)
-  this.render();
-}
-
-
 
   delete(tabId) {
+    this.tabs = this.tabs.filter(t => t.id !== tabId);
 
-  this.tabs = this.tabs.filter(t => t.id !== tabId);
+    if (this.activeId === tabId) {
+      this.activeId = this.tabs[0]?.id || null;
+    }
 
-  if (this.activeId === tabId) {
-    this.activeId = this.tabs[0]?.id || null;
+    this.save();
+    this.render();
+    this.syncForm();
   }
-
-  this.save();
-  this.render();
-  this.syncForm();
-}
 
   _createDefaultTab() {
     return {
@@ -115,7 +92,22 @@ openRequest(request) {
       name: `Request ${this.tabs.length + 1}`,
       method: "GET",
       url: "",
-      body: "",
+      body: {
+        mode: "none",
+        raw: "",
+        formData: [],
+        urlencoded: [],
+        // ADDED: GraphQL & gRPC data structure
+        graphql: {
+          query: "",
+          variables: ""
+        },
+        grpc: {
+          protoFileName: "",
+          serviceMethod: "",
+          body: ""
+        }
+      },
       history: [],
       pinned: false,
       opened: true,
@@ -167,28 +159,24 @@ openRequest(request) {
     this.commit();
   }
 
-close(id) {
-  const tab = this.tabs.find(t => t.id === id);
-  if (!tab) return;
+  close(id) {
+    const tab = this.tabs.find(t => t.id === id);
+    if (!tab) return;
 
-  tab.opened = false;
+    tab.opened = false;
 
-  if (this.activeId === id) {
+    if (this.activeId === id) {
+      const next = this.tabs.find(t => t.opened !== false);
+      this.activeId = next?.id || null;
+    }
 
-    const next =
-      this.tabs.find(
-        t => t.opened !== false
-      );
+    this.commit(); // save + sync
 
-    this.activeId = next?.id || null;
+    window.saveActiveCollectionState?.();
+
+    this.render();
   }
 
-  this.commit(); // save + sync
-
-  window.saveActiveCollectionState?.();
-
-  this.render();
-}
   // ================= RENAME =================
   rename(tab, name) {
     console.log("Tab ditemukan:", tab);
@@ -217,9 +205,8 @@ close(id) {
     this.commit();
     this.render();
     this.syncForm();
-    // KIRIM SINYAL GLOBAL (Aman, tidak merusak fungsi yang ada)
     window.dispatchEvent(new CustomEvent('request-renamed'));
-}
+  }
 
   renameById(id, name, collectionId, folderId = null) {
     const tab = this.tabs.find(t => t.id === id);
@@ -228,7 +215,6 @@ close(id) {
 
     tab.name = name?.trim() || "Untitled";
     
-    // Sinkronisasi ke CollectionManager jika request milik folder atau root
     const col = this.collections.getCollection(collectionId);
     if (col) {
         const updateInFolder = (folders) => {
@@ -254,9 +240,8 @@ close(id) {
     this.commit();
     this.render();
     this.syncForm();
-     // KIRIM SINYAL GLOBAL (Aman, tidak merusak fungsi yang ada)
-     window.dispatchEvent(new CustomEvent('request-renamed'));
-}
+    window.dispatchEvent(new CustomEvent('request-renamed'));
+  }
 
   // ================= DUPLICATE =================
   duplicate(tab) {
@@ -264,22 +249,19 @@ close(id) {
         ...tab,
         id: Date.now(),
         name: `${tab.name} copy`,
-        // ... (data lainnya sama)
     };
 
     this.tabs.push(copy);
 
-    // Sinkronisasi ke CollectionManager
     const col = this.collections.getCollection(tab.collectionId);
     if (col) {
-        // Kita gunakan fungsi addRequest yang sudah ada agar otomatis masuk ke tempat yang benar
         this.collections.addRequest(tab.collectionId, copy, tab.folderId);
     }
 
     this.commit();
     this.render();
     this.syncForm();
-}
+  }
 
   // ================= PIN =================
   togglePin(tab) {
@@ -326,34 +308,42 @@ close(id) {
     });
   }
 
-  // ================= SYNC FORM =================
+  // ================= SYNC FORM (Tab -> UI) =================
   syncForm() {
     this._syncing = true;
 
     const tab = this.getActive();
     if (!tab) return;
 
-    this.ui.method.value = tab.method || "GET";
-    this.ui.url.value = tab.url || "";
+    if (this.ui.method) this.ui.method.value = tab.method || "GET";
+    if (this.ui.url) this.ui.url.value = tab.url || "";
 
-      if (typeof tab.body === "object") {
-    this.ui.body.value = tab.body.raw || "";
-  } else {
-    this.ui.body.value = tab.body || "";
-  }
+    if (typeof tab.body === "object") {
+      if (this.ui.body) this.ui.body.value = tab.body.raw || "";
+    } else {
+      if (this.ui.body) this.ui.body.value = tab.body || "";
+    }
 
-    if (this.ui.authType)
-      this.ui.authType.value = tab.auth?.type || "";
+    if (this.ui.authType) this.ui.authType.value = tab.auth?.type || "";
+    if (this.ui.authValue) this.ui.authValue.value = tab.auth?.value || "";
 
-    if (this.ui.authValue)
-      this.ui.authValue.value = tab.auth?.value || "";
+    // ADDED: Sync GraphQL fields ke UI
+    if (this.ui.graphqlQuery) this.ui.graphqlQuery.value = tab.body?.graphql?.query || "";
+    if (this.ui.graphqlVariables) this.ui.graphqlVariables.value = tab.body?.graphql?.variables || "";
+
+    // ADDED: Sync gRPC fields ke UI
+    if (this.ui.grpcServiceMethod) this.ui.grpcServiceMethod.value = tab.body?.grpc?.serviceMethod || "";
+    if (this.ui.grpcBody) this.ui.grpcBody.value = tab.body?.grpc?.body || "";
+    if (this.ui.protoFileName) {
+      this.ui.protoFileName.innerText = tab.body?.grpc?.protoFileName || "No .proto loaded";
+    }
 
     window.__syncMonacoFromTab?.();
 
     this._syncing = false;
   }
 
-  // ================= SYNC TAB =================
+  // ================= SYNC TAB (UI -> Tab) =================
   syncTab() {
     if (this._syncing) return;
 
@@ -362,22 +352,36 @@ close(id) {
 
     tab.method = this.ui.method?.value || "GET";
     tab.url = this.ui.url?.value || "";
+
     tab.body ||= {
-    mode: "none",
-    raw: "",
-    formData: [],
-    urlencoded: []
-  };
+      mode: "none",
+      raw: "",
+      formData: [],
+      urlencoded: [],
+      graphql: { query: "", variables: "" },
+      grpc: { protoFileName: "", serviceMethod: "", body: "" }
+    };
 
-   // HANYA RAW YANG DISYNC DARI TEXTAREA
-  if (tab.body.mode === "raw") {
-    tab.body.raw =
-      this.ui.body?.value || "";
-  }
+    // HANYA RAW YANG DISYNC DARI TEXTAREA
+    if (tab.body.mode === "raw") {
+      tab.body.raw = this.ui.body?.value || "";
+    }
 
-  // form-data & urlencoded BIAR TETAP
-  tab.formData ||= [];
-  tab.urlencoded ||= [];
+    // ADDED: Sync dari UI ke Tab Object jika mode GraphQL/gRPC
+    tab.body.graphql ||= { query: "", variables: "" };
+    if (tab.body.mode === "graphql") {
+      tab.body.graphql.query = this.ui.graphqlQuery?.value || "";
+      tab.body.graphql.variables = this.ui.graphqlVariables?.value || "";
+    }
+
+    tab.body.grpc ||= { protoFileName: "", serviceMethod: "", body: "" };
+    if (tab.body.mode === "grpc" || tab.method === "GRPC") {
+      tab.body.grpc.serviceMethod = this.ui.grpcServiceMethod?.value || "";
+      tab.body.grpc.body = this.ui.grpcBody?.value || "";
+    }
+
+    tab.formData ||= [];
+    tab.urlencoded ||= [];
 
     tab.auth = {
       type: this.ui.authType?.value || "",
@@ -400,8 +404,6 @@ close(id) {
   // ================= COMMIT (IMPORTANT) =================
   commit() {
     this.save();
-
-    // hook for sync-service
     window.__pushSync?.();
   }
 
@@ -410,30 +412,32 @@ close(id) {
     const data = Storage.load();
 
     if (data?.tabs?.length) {
-
       this.tabs = data.tabs.map(tab => ({
         id: tab.id,
         name: tab.name || "Untitled",
         method: tab.method || "GET",
         url: tab.url || "",
-        body:
-  typeof tab.body === "object"
-    ? tab.body
-    : {
-        mode:"raw",
-        raw: tab.body || "",
-        formData:
-   tab.body?.formData || [],
-        urlencoded:[]
-      },
+        body: typeof tab.body === "object"
+          ? {
+              mode: tab.body.mode || "raw",
+              raw: tab.body.raw || "",
+              formData: tab.body.formData || [],
+              urlencoded: tab.body.urlencoded || [],
+              // ADDED: Safe fallback untuk tab lama
+              graphql: tab.body.graphql || { query: "", variables: "" },
+              grpc: tab.body.grpc || { protoFileName: "", serviceMethod: "", body: "" }
+            }
+          : {
+              mode: "raw",
+              raw: tab.body || "",
+              formData: [],
+              urlencoded: [],
+              graphql: { query: "", variables: "" },
+              grpc: { protoFileName: "", serviceMethod: "", body: "" }
+            },
         history: Array.isArray(tab.history) ? tab.history : [],
         pinned: !!tab.pinned,
-
-
-         opened:
-    tab.opened === undefined
-      ? true
-      : tab.opened,
+        opened: tab.opened === undefined ? true : tab.opened,
 
         params: tab.params || {},
         headers: tab.headers || {},

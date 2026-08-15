@@ -26,25 +26,24 @@
     <button id="exportBtn">Export</button>
     <input type="file" id="importFile">
   </div>
-<button id="collabModeBtn" style="margin-top:20px;">
-  Collaboration Mode
-</button>
-
-
-<div id="collabUserBar" style="display:none; margin-top:10px;">
-  <span id="collabUserEmail"></span>
-  <button id="collabLogoutBtn" style="margin-top:20px; display:none;">
-  Logout
-</button>
-</div>
-
-
-
-<div style="margin-top: auto; padding: 10px; text-align: center;">
-  <button id="downloadAppBtn" style="background: none; border: none; color: #888; font-size: 11px; cursor: pointer; text-decoration: underline; opacity: 0.8;">
-    💻 Get Desktop App
+  <button id="collabModeBtn" style="margin-top:20px;">
+    Collaboration Mode
   </button>
-</div>
+
+
+  <div id="collabUserBar" style="display:none; margin-top:10px;">
+    <span id="collabUserEmail"></span>
+    <button id="collabLogoutBtn" style="margin-top:20px; display:none;">
+      Logout
+    </button>
+  </div>
+
+
+  <div style="margin-top: auto; padding: 10px; text-align: center;">
+    <button id="downloadAppBtn" style="background: none; border: none; color: #888; font-size: 11px; cursor: pointer; text-decoration: underline; opacity: 0.8;">
+      💻 Get Desktop App
+    </button>
+  </div>
 
 </aside>
 
@@ -67,8 +66,10 @@
       <option>PUT</option>
       <option value="PATCH">PATCH</option>
       <option>DELETE</option>
-      <option value="HEAD">HEAD</option>
-      <option value="OPTIONS">OPTIONS</option>
+      <option>HEAD</option>
+      <option>OPTIONS</option>
+      <!-- ADDED: gRPC Option -->
+      <option value="GRPC">gRPC</option>
     </select>
 
     <input id="url" placeholder="https://api.example.com" />
@@ -96,7 +97,7 @@
       <button id="addParam">+ Param</button>
     </div>
 
-     <!-- BODY -->
+    <!-- BODY -->
     <div class="tab-panel hidden" data-panel="body">
 
       <!-- BODY MODE TABS (POSTMAN STYLE) -->
@@ -106,6 +107,9 @@
         <button class="body-tab" data-mode="raw">raw</button>
         <button class="body-tab" data-mode="form-data">form-data</button>
         <button class="body-tab" data-mode="urlencoded">x-www-form-urlencoded</button>
+        <!-- ADDED: GraphQL & gRPC Body Tabs -->
+        <button class="body-tab" data-mode="graphql">GraphQL</button>
+        <button class="body-tab" data-mode="grpc">gRPC</button>
 
       </div>
 
@@ -129,6 +133,53 @@
         <button id="addUrlEncoded">+ Add Field</button>
       </div>
 
+      <!-- ADDED: GRAPHQL BOX -->
+      <div id="graphqlBox" class="hidden" style="margin-top: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Query / Mutation</div>
+            <div id="graphqlQueryEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
+            <textarea id="graphqlQuery" class="hidden" placeholder="query { ... }"></textarea>
+          </div>
+          <div>
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Variables (JSON)</div>
+            <div id="graphqlVariablesEditor" class="monaco-editor" style="height: 100px; border: 1px solid #333;"></div>
+            <textarea id="graphqlVariables" class="hidden" placeholder="{ &quot;id&quot;: 1 }"></textarea>
+          </div>
+        </div>
+      </div>
+
+<!-- ADDED: gRPC BOX -->
+<div id="grpcBox" class="hidden" style="margin-top: 10px;">
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    
+    <!-- Dynamic Reflection Status & Upload Proto -->
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <button id="chooseProtoBtn" type="button">+ Upload .proto</button>
+      <input type="file" id="grpcProtoFile" accept=".proto" class="hidden">
+      <span id="protoFileName" style="font-size: 12px; color: #aaa;">No .proto loaded</span>
+      
+      <!-- Status Badge Reflection -->
+      <button id="btnFetchReflection" type="button" style="margin-left: auto; font-size: 11px; padding: 3px 8px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 4px;">
+        🔄 Refresh Reflection
+      </button>
+    </div>
+
+    <!-- Service / Method Input dengan Autocomplete Datalist -->
+    <div>
+      <input id="grpcServiceMethod" list="grpcServicesList" placeholder="Service/Method (e.g. /helloworld.Greeter/SayHello)" style="width: 100%; padding: 6px;" />
+      <!-- Datalist Tempat Hasil Discovery Reflection Dimuat -->
+      <datalist id="grpcServicesList"></datalist>
+    </div>
+
+    <div>
+      <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">JSON Message Body</div>
+      <div id="grpcMessageEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
+      <textarea id="grpcBody" class="hidden" placeholder='{ "name": "World" }'></textarea>
+    </div>
+  </div>
+</div>
+
     </div>
 
 
@@ -149,24 +200,24 @@
       <input id="authValue" placeholder="token / key">
     </div>
 
-<!-- SCRIPTS (MONACO VERSION) -->
-<div class="tab-panel hidden" data-panel="scripts">
+    <!-- SCRIPTS (MONACO VERSION) -->
+    <div class="tab-panel hidden" data-panel="scripts">
 
-  <div class="script-section">
+      <div class="script-section">
 
-    <div class="script-header">Pre Script</div>
-    <div id="preEditor" class="monaco-editor"></div>
+        <div class="script-header">Pre Script</div>
+        <div id="preEditor" class="monaco-editor"></div>
 
-  </div>
+      </div>
 
-  <div class="script-section">
+      <div class="script-section">
 
-    <div class="script-header">Post Script</div>
-    <div id="postEditor" class="monaco-editor"></div>
+        <div class="script-header">Post Script</div>
+        <div id="postEditor" class="monaco-editor"></div>
 
-  </div>
+      </div>
 
-</div>
+    </div>
 
   </div>
 
@@ -176,24 +227,19 @@
 
   <div id="responseTabs" class="response-tabs">
 
-  <span class="response-tab active"
-        data-tab="body">
-    Body
-  </span>
+    <span class="response-tab active" data-tab="body">
+      Body
+    </span>
 
-    <span class="response-tab"
-        data-tab="cookies">
-    Cookies
-  </span>
+    <span class="response-tab" data-tab="cookies">
+      Cookies
+    </span>
 
-  <span class="response-tab"
-        data-tab="headers">
-    Headers
-  </span>
+    <span class="response-tab" data-tab="headers">
+      Headers
+    </span>
 
-
-
-</div>
+  </div>
 
   <!-- VIEW TOGGLE -->
   <div id="viewToggle" class="toggle">
@@ -204,47 +250,15 @@
   <!-- RESPONSE -->
   <div id="responsePanels">
 
-  <div
-    id="responseBody"
-    class="response-panel">
+    <div id="responseBody" class="response-panel"></div>
+
+    <div id="responseHeaders" class="response-panel hidden"></div>
+
+    <div id="responseCookies" class="response-panel hidden"></div>
 
   </div>
-
-  <div
-    id="responseHeaders"
-    class="response-panel hidden">
-
-  </div>
-
-  <div
-    id="responseCookies"
-    class="response-panel hidden">
-
-  </div>
-
-</div>
 
 </main>
-
-<!-- ================= ENV MODAL (NEW) ================= -->
-<!-- <div id="envModal" class="modal hidden">
-  <div class="modal-content">
-
-    <h3>Environment Variables</h3>
-
-    <div id="envList"></div>
-
-    <div class="env-form">
-      <input id="envKey" placeholder="key">
-      <input id="envValue" placeholder="value">
-      <button id="addEnv">Add</button>
-    </div>
-
-    <button id="closeEnvModal">Close</button>
-
-  </div>
-</div> -->
-
 
 <!-- ================= ENV SIDE PANEL ================= -->
 <div id="envPanel" class="env-panel hidden">
@@ -263,6 +277,7 @@
   </div>
 
 </div>
+
 <script>
   window.MonacoEnvironment = {
     getWorkerUrl: function () {
