@@ -580,18 +580,7 @@ mod commands {
 
             let mut methods = Vec::new();
             if reflection_success {
-                if let Ok(mut pool) = prost_reflect::DescriptorPool::new() {
-                    let mut pool_bytes = Vec::new();
-                    if prost::Message::encode(&fd_set, &mut pool_bytes).is_ok() {
-                        if pool.decode_file_descriptor_set(pool_bytes.as_slice()).is_ok() {
-                            if let Some(service_desc) = pool.get_service_by_name(&svc_name) {
-                                for m in service_desc.methods() {
-                                    methods.push(m.name().to_string());
-                                }
-                            }
-                        }
-                    }
-                }
+               let mut pool = prost_reflect::DescriptorPool::new();
             }
 
             services_with_methods.push(json!({
