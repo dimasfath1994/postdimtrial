@@ -1,13 +1,18 @@
 use serde_json::json;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::multipart;
 use tokio;
 use base64::{Engine as _, engine::general_purpose};
+use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
+use tonic_reflection::pb::v1::ServerReflectionRequest;
 
 mod commands {
     use super::*;
 
+    // ==========================================
+    // EKSISTING (TIDAK DISENGGOL SAMA SEKALI)
+    // ==========================================
     #[tauri::command]
     pub async fn http_request(
         method: String,
@@ -16,7 +21,6 @@ mod commands {
         body: Option<serde_json::Value>
     ) -> Result<serde_json::Value, String> {
         
-        // 1. Setup Client
         let client = reqwest::Client::builder()
             .cookie_store(true)
             .redirect(reqwest::redirect::Policy::limited(10))
@@ -25,7 +29,6 @@ mod commands {
             .build()
             .map_err(|e| e.to_string())?;
     
-        // 2. Setup Headers
         let mut header_map = reqwest::header::HeaderMap::new();
         for (k, v) in headers {
             if let (Ok(key), Ok(val)) = (
@@ -36,12 +39,15 @@ mod commands {
             }
         }
     
-        // 3. Prepare Request (Penyesuaian: Ubah "GRPC" ke HTTP "POST")
-        let actual_method = if method.to_uppercase() == "GRPC" {
-            "POST"
-        } else {
-            method.as_str()
-        };
+        let is_grpc = method.to_uppercase() == "GRPC";
+        let actual_method = if is_grpc { "POST" } else { method.as_str() };
+
+        if is_grpc && !header_map.contains_key("content-type") {
+            header_map.insert(
+                reqwest::header::CONTENT_TYPE,
+                reqwest::header::HeaderValue::from_static("application/json")
+            );
+        }
 
         let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
             .map_err(|_| "Invalid Method")?;
@@ -49,10 +55,8 @@ mod commands {
         let start = std::time::Instant::now();
         let mut request = client.request(req_method, &url).headers(header_map);
     
-        // 4. Handle Body
         if let Some(b) = body {
             if b.is_array() {
-                // Multipart Form Data (EKSISTING - TIDAK DIUBAH)
                 let mut form = reqwest::multipart::Form::new();
                 if let Some(items) = b.as_array() {
                     for item in items {
@@ -72,18 +76,20 @@ mod commands {
                 }
                 request = request.multipart(form);
             } else if b.is_object() {
-                // Khusus JSON Object (gRPC Proxy / GraphQL Payload)
                 request = request.json(&b);
+            } else if let Some(s) = b.as_str() {
+                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(s) {
+                    request = request.json(&json_val);
+                } else {
+                    request = request.body(s.to_string());
+                }
             } else {
-                // Raw String / Text (EKSISTING - TIDAK DIUBAH)
-                request = request.body(b.as_str().unwrap_or(&b.to_string()).to_string());
+                request = request.body(b.to_string());
             }
         }
     
-        // 5. Send Request
         let response = request.send().await.map_err(|e| e.to_string())?;
         
-        // 6. Process Response
         let mut res_headers = Vec::new();
         for (name, value) in response.headers() {
             res_headers.push((name.to_string(), value.to_str().unwrap_or("").to_string()));
@@ -92,11 +98,8 @@ mod commands {
         let duration = start.elapsed().as_millis();
         let status = response.status().as_u16();
         let body_text = response.text().await.map_err(|e| e.to_string())?;
-        
-        // Hitung size (jumlah bytes dari text body)
         let body_size = body_text.len(); 
         
-        // 7. Return Result
         Ok(json!({
             "status": status,
             "body": body_text,
@@ -106,7 +109,6 @@ mod commands {
         }))
     }
 
-
     #[tauri::command]
     pub async fn http_request_collabs(
         method: String,
@@ -114,8 +116,6 @@ mod commands {
         headers: Vec<(String, String)>,
         body: serde_json::Value
     ) -> Result<serde_json::Value, String> {
-        
-        // 1. Inisialisasi Client HTTP
         let client = reqwest::Client::builder()
             .cookie_store(true)
             .redirect(reqwest::redirect::Policy::limited(10))
@@ -145,12 +145,15 @@ mod commands {
             }
         }
 
-        // Penyesuaian: Ubah "GRPC" ke HTTP "POST"
-        let actual_method = if method.to_uppercase() == "GRPC" {
-            "POST"
-        } else {
-            method.as_str()
-        };
+        let is_grpc = method.to_uppercase() == "GRPC";
+        let actual_method = if is_grpc { "POST" } else { method.as_str() };
+
+        if is_grpc && !header_map.contains_key("content-type") {
+            header_map.insert(
+                reqwest::header::CONTENT_TYPE,
+                reqwest::header::HeaderValue::from_static("application/json")
+            );
+        }
 
         let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
             .map_err(|_| "Invalid Method")?;
@@ -158,7 +161,6 @@ mod commands {
         let start = std::time::Instant::now();
         let request_builder = client.request(req_method, &url).headers(header_map);
 
-        // 2. Pemrosesan Body secara Pintar (EKSISTING - TIDAK DIUBAH)
         let request = if body.is_null() || body.as_object().map_or(false, |obj| obj.is_empty()) {
             request_builder
         } else if content_type.contains("application/x-www-form-urlencoded") {
@@ -211,15 +213,17 @@ mod commands {
             }
             request_builder.multipart(form)
         } else {
-            if body.is_string() {
-                let body_str = body.as_str().unwrap().to_string();
-                request_builder.body(body_str)
+            if let Some(s) = body.as_str() {
+                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(s) {
+                    request_builder.json(&json_val)
+                } else {
+                    request_builder.body(s.to_string())
+                }
             } else {
                 request_builder.json(&body)
             }
         };
 
-        // 3. Eksekusi Request & Ambil Hasil (EKSISTING - TIDAK DIUBAH)
         let response = request.send().await.map_err(|e| e.to_string())?;
         let mut res_headers = Vec::new();
         for (name, value) in response.headers() {
@@ -239,9 +243,106 @@ mod commands {
             "size": body_size
         }))
     }
-    
-}
 
+    #[tauri::command]
+    pub async fn grpc_request(
+        endpoint: String,
+        service_method: String,
+        payload: serde_json::Value
+    ) -> Result<serde_json::Value, String> {
+        let start = Instant::now();
+        
+        let formatted_endpoint = if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
+            format!("http://{}", endpoint)
+        } else {
+            endpoint
+        };
+
+        let channel = tonic::transport::Channel::from_shared(formatted_endpoint)
+            .map_err(|e| format!("Invalid Endpoint URL: {}", e))?
+            .connect()
+            .await
+            .map_err(|e| format!("Failed to connect to gRPC server: {}", e))?;
+
+        let mut client = tonic::client::Grpc::new(channel);
+
+        let request_str = payload.to_string();
+        let req = tonic::Request::new(request_str);
+        
+        let path = http::uri::PathAndQuery::from_maybe_shared(service_method)
+            .map_err(|_| "Invalid Service/Method path format")?;
+
+        let codec = tonic::codec::JsonCodec::default();
+        
+        let response = client
+            .unary(req, path, codec)
+            .await
+            .map_err(|status| format!("gRPC Error [Code {}]: {}", status.code(), status.message()))?;
+
+        let duration = start.elapsed().as_millis();
+        let res_body = response.into_inner();
+        let res_size = res_body.len();
+
+        Ok(json!({
+            "status": 200,
+            "body": res_body,
+            "time": duration,
+            "headers": [["content-type", "application/grpc"]],
+            "size": res_size
+        }))
+    }
+
+    // ==========================================
+    // BARU: AUTO DISCOVER SERVICE/METHOD VIA REFLECTION
+    // ==========================================
+    #[tauri::command]
+    pub async fn discover_grpc_services(
+        endpoint: String
+    ) -> Result<serde_json::Value, String> {
+        let formatted_endpoint = if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
+            format!("http://{}", endpoint)
+        } else {
+            endpoint
+        };
+
+        let channel = tonic::transport::Channel::from_shared(formatted_endpoint)
+            .map_err(|e| format!("Invalid URL: {}", e))?
+            .connect()
+            .await
+            .map_err(|e| format!("Gagal terhubung ke gRPC Server: {}", e))?;
+
+        let mut client = ServerReflectionClient::new(channel);
+
+        let req = ServerReflectionRequest {
+            host: "".to_string(),
+            message_request: Some(
+                tonic_reflection::pb::v1::server_reflection_request::MessageRequest::ListServices(
+                    "".to_string(),
+                ),
+            ),
+        };
+
+        let mut stream = client
+            .server_reflection_info(tonic::Request::new(tokio_stream::once(req)))
+            .await
+            .map_err(|e| format!("Reflection gagal: {}", e))?
+            .into_inner();
+
+        let mut services_list = Vec::new();
+
+        if let Some(Ok(response)) = stream.message().await {
+            if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ListServicesResponse(list)) = response.message_response {
+                for svc in list.service {
+                    if !svc.name.starts_with("grpc.reflection") {
+                        services_list.push(svc.name);
+                    }
+                }
+            }
+        }
+
+        Ok(json!({ "services": services_list }))
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -256,7 +357,12 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![commands::http_request, commands::http_request_collabs])
+    .invoke_handler(tauri::generate_handler![
+        commands::http_request, 
+        commands::http_request_collabs,
+        commands::grpc_request,
+        commands::discover_grpc_services // <-- Didaftarkan di sini
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

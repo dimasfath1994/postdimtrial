@@ -149,24 +149,36 @@
         </div>
       </div>
 
-      <!-- ADDED: gRPC BOX -->
-      <div id="grpcBox" class="hidden" style="margin-top: 10px;">
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div style="display: flex; gap: 10px; align-items: center;">
-            <input type="file" id="grpcProtoFile" accept=".proto" class="hidden">
-            <button id="chooseProtoBtn" type="button">+ Upload .proto</button>
-            <span id="protoFileName" style="font-size: 12px; color: #aaa;">No .proto loaded</span>
-          </div>
-          <div>
-            <input id="grpcServiceMethod" placeholder="Service/Method (e.g. UserService/GetUser)" style="width: 100%; padding: 6px;" />
-          </div>
-          <div>
-            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">JSON Message Body</div>
-            <div id="grpcMessageEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
-            <textarea id="grpcBody" class="hidden" placeholder='{ "id": 1 }'></textarea>
-          </div>
-        </div>
-      </div>
+<!-- ADDED: gRPC BOX -->
+<div id="grpcBox" class="hidden" style="margin-top: 10px;">
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    
+    <!-- Dynamic Reflection Status & Upload Proto -->
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <button id="chooseProtoBtn" type="button">+ Upload .proto</button>
+      <input type="file" id="grpcProtoFile" accept=".proto" class="hidden">
+      <span id="protoFileName" style="font-size: 12px; color: #aaa;">No .proto loaded</span>
+      
+      <!-- Status Badge Reflection -->
+      <button id="btnFetchReflection" type="button" style="margin-left: auto; font-size: 11px; padding: 3px 8px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 4px;">
+        🔄 Refresh Reflection
+      </button>
+    </div>
+
+    <!-- Service / Method Input dengan Autocomplete Datalist -->
+    <div>
+      <input id="grpcServiceMethod" list="grpcServicesList" placeholder="Service/Method (e.g. /helloworld.Greeter/SayHello)" style="width: 100%; padding: 6px;" />
+      <!-- Datalist Tempat Hasil Discovery Reflection Dimuat -->
+      <datalist id="grpcServicesList"></datalist>
+    </div>
+
+    <div>
+      <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">JSON Message Body</div>
+      <div id="grpcMessageEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
+      <textarea id="grpcBody" class="hidden" placeholder='{ "name": "World" }'></textarea>
+    </div>
+  </div>
+</div>
 
     </div>
 
