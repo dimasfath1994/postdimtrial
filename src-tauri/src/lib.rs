@@ -304,10 +304,9 @@ mod commands {
 
         let uri_endpoint = format!("http://{}", clean_endpoint);
 
-        // Tambahkan .http2_only(true) agar kompatibel dengan gRPC cleartext (h2c)
+        // ERROR FIXED: Removed .http2_only(true)
         let channel = tonic::transport::Channel::from_shared(uri_endpoint)
             .map_err(|e| format!("Invalid URL: {}", e))?
-            .http2_only(true)
             .connect()
             .await
             .map_err(|e| format!("Gagal terhubung ke gRPC Server: {}", e))?;
@@ -343,7 +342,7 @@ mod commands {
 
         Ok(json!({ "services": services_list }))
     }
-} // <--- PENUTUP MOD COMMANDS SUDAH DITAMBAHKAN DI SINI
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
