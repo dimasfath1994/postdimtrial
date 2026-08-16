@@ -2239,6 +2239,7 @@ function initMonaco() {
         setupPMIntellisense();
         bindMonacoAutoSave(); // 🔥 TAMBAH INI
 
+        GraphqlHandler.initMonacoEditors(ui, tabs, scheduleSync);
         GrpcHandler.initMonacoEditors(ui, tabs, scheduleSync);
 
         // ✅ INI PENTING (FIX UTAMA)
