@@ -308,8 +308,7 @@ mod commands {
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             async {
-                let endpoint_uri = tonic::transport::Endpoint::from_shared(formatted_endpoint)
-                    .map_err(|e| format!("Invalid Endpoint URL: {}", e))?;
+                let endpoint_uri = tonic::transport::Endpoint::from_shared(formatted_endpoint)?;
                 
                 // Paksa koneksi menggunakan HTTP/2 cleartext (h2c) agar tidak macet/timeout pada server plaintext
                 endpoint_uri
@@ -477,8 +476,7 @@ mod commands {
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             async {
-                let endpoint_uri = tonic::transport::Endpoint::from_shared(uri_endpoint)
-                    .map_err(|e| format!("Invalid URL: {}", e))?;
+                let endpoint_uri = tonic::transport::Endpoint::from_shared(uri_endpoint)?;
                 
                 endpoint_uri
                     .connect()
