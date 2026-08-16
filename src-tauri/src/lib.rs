@@ -482,8 +482,12 @@ mod commands {
         prost::Message::encode(&request_msg, &mut req_bytes)
             .map_err(|e| format!("Gagal mem-parsing/encode Protobuf: {}", e))?;
 
+        // PERBAIKAN UTAMA: Gunakan Channel langsung dengan Tonic Request yang menyertakan header lengkap
         let mut client = tonic::client::Grpc::new(channel);
-        let req = tonic::Request::new(req_bytes);
+        
+        let mut req = tonic::Request::new(req_bytes);
+        // Tambahkan metadata eksplisit agar setara dengan Postman dan mencegah deadlock HTTP/2 stream
+        req.metadata_mut().insert("content-type", "application/grpc".parse().unwrap());
         
         let path_uri = format!("/{}/{}", service_name, method_name);
         let path = http::uri::PathAndQuery::from_maybe_shared(path_uri.clone())
@@ -491,7 +495,7 @@ mod commands {
 
         let codec = RawBytesCodec::default();
         
-        // TANPA TIMEOUT: Menunggu respons server sampai selesai layaknya Postman
+        // Eksekusi pemanggilan dengan aman
         let response = client.unary(req, path, codec).await
             .map_err(|status| format!("gRPC Error [Code {}]: {}", status.code(), status.message()))?;
 
