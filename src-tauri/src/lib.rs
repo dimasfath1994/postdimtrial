@@ -188,13 +188,6 @@ mod commands {
         let is_grpc = method.to_uppercase() == "GRPC";
         let actual_method = if is_grpc { "POST" } else { method.as_str() };
 
-        if is_grpc && !header_map.contains_key("content-type") {
-            header_map.insert(
-                reqwest::header::CONTENT_TYPE,
-                reqwest::header::HeaderValue::from_static("application/json")
-            );
-        }
-
         let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
             .map_err(|_| "Invalid Method")?;
 
@@ -311,10 +304,12 @@ mod commands {
             return Err("Format service_method salah. Gunakan format 'Service/Method' atau 'Service / Method'".to_string());
         };
 
+        // DIPERBAIKI: Menggunakan .http2_only() agar tidak hang pada server gRPC plaintext (h2c)
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             tonic::transport::Channel::from_shared(formatted_endpoint)
                 .map_err(|e| format!("Invalid Endpoint URL: {}", e))?
+                .http2_only()
                 .connect()
         ).await {
             Ok(Ok(ch)) => ch,
@@ -333,9 +328,8 @@ mod commands {
             ),
         };
 
-        // DIPERBAIKI: Timeout reflection v1 dipangkas ke 2 detik agar tidak boros waktu
         let reflection_v1_result = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
+            std::time::Duration::from_secs(3),
             async {
                 let response = client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await?;
                 let mut stream = response.into_inner();
@@ -367,9 +361,8 @@ mod commands {
                 ),
             };
 
-            // DIPERBAIKI: Timeout reflection v1alpha dipangkas ke 2 detik
             let reflection_v1alpha_result = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
+                std::time::Duration::from_secs(3),
                 async {
                     let response = client_v1alpha.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha))).await?;
                     let mut stream = response.into_inner();
@@ -438,12 +431,12 @@ mod commands {
         let codec = super::RawBytesCodec::default();
         
         let response = match tokio::time::timeout(
-            std::time::Duration::from_secs(15),
+            std::time::Duration::from_secs(30),
             client.unary(req, path, codec)
         ).await {
             Ok(Ok(res)) => res,
             Ok(Err(status)) => return Err(format!("gRPC Error [Code {}]: {}", status.code(), status.message())),
-            Err(_) => return Err("gRPC request timeout (lebih dari 15 detik tanpa respons)".to_string()),
+            Err(_) => return Err("gRPC request timeout (lebih dari 30 detik tanpa respons)".to_string()),
         };
 
         let duration = start.elapsed().as_millis();
@@ -476,10 +469,12 @@ mod commands {
 
         let uri_endpoint = format!("http://{}", clean_endpoint);
 
+        // DIPERBAIKI: Menggunakan .http2_only() pada discovery
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             tonic::transport::Channel::from_shared(uri_endpoint)
                 .map_err(|e| format!("Invalid URL: {}", e))?
+                .http2_only()
                 .connect()
         ).await {
             Ok(Ok(ch)) => ch,
@@ -499,9 +494,8 @@ mod commands {
             ),
         };
 
-        // DIPERBAIKI: Timeout list services v1 dipangkas ke 2 detik
         let v1_success = match tokio::time::timeout(
-            std::time::Duration::from_secs(2),
+            std::time::Duration::from_secs(3),
             async {
                 let response = client_v1
                     .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1)))
@@ -542,9 +536,8 @@ mod commands {
                 ),
             };
 
-            // DIPERBAIKI: Timeout list services v1alpha dipangkas ke 2 detik
             let _ = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
+                std::time::Duration::from_secs(3),
                 async {
                     let response = client_v1alpha
                         .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha)))
@@ -587,9 +580,8 @@ mod commands {
                 ),
             };
 
-            // DIPERBAIKI: Timeout descriptor v1 per service dipangkas ke 2 detik
             let desc_v1_res = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
+                std::time::Duration::from_secs(3),
                 async {
                     let response = client_v1_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1))).await?;
                     let mut stream = response.into_inner();
@@ -621,9 +613,8 @@ mod commands {
                     ),
                 };
 
-                // DIPERBAIKI: Timeout descriptor v1alpha per service dipangkas ke 2 detik
                 let desc_v1alpha_res = tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
+                    std::time::Duration::from_secs(3),
                     async {
                         let response = client_v1alpha_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1alpha))).await?;
                         let mut stream = response.into_inner();
