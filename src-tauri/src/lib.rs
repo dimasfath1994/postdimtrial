@@ -307,6 +307,7 @@ mod commands {
             endpoint.clone()
         };
 
+        // PERBAIKAN: Ambil Host untuk request Reflection secara dinamis
         let parsed_uri = formatted_endpoint.parse::<http::Uri>().map_err(|_| "Format URL tidak valid")?;
         let target_host = parsed_uri.host().unwrap_or("").to_string();
 
@@ -317,7 +318,7 @@ mod commands {
         let (service_name, method_name) = if let Some(idx) = clean_path.rfind('/') {
             (clean_path[..idx].trim().to_string(), clean_path[idx+1..].trim().to_string())
         } else {
-            return Err("Format service_method salah. Gunakan format 'Service/Method'".to_string());
+            return Err("Format service_method salah. Gunakan format 'Service/Method' atau 'Service / Method'".to_string());
         };
 
         let channel = match tokio::time::timeout(
@@ -337,11 +338,13 @@ mod commands {
         };
 
         let cache_key = formatted_endpoint.clone();
-        let cached_pool;
+        let mut cached_pool = None;
 
         {
             let cache = GRPC_DESCRIPTOR_CACHE.read().await;
-            cached_pool = cache.get(&cache_key).cloned();
+            if let Some(pool) = cache.get(&cache_key) {
+                cached_pool = Some(pool.clone());
+            }
         }
 
         let (pool, was_cached) = if let Some(p) = cached_pool {
@@ -351,7 +354,7 @@ mod commands {
             let mut reflection_success = false;
             let mut reflection_err_detail = String::new();
 
-            // Reflection V1
+            // PERBAIKAN: Penanganan Stream v1 dan Error extraction
             let reflection_v1_result = tokio::time::timeout(
                 std::time::Duration::from_secs(4),
                 async {
@@ -364,19 +367,25 @@ mod commands {
                     };
                     let response = client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await?;
                     let mut stream = response.into_inner();
-                    stream.message().await
+                    stream.message().await // Kembalikan Result, jangan disembunyikan jika error
                 }
             ).await;
 
             match reflection_v1_result {
                 Ok(Ok(Some(msg))) => {
-                    if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
-                        for fd_bytes in fd_res.file_descriptor_proto {
-                            if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
-                                fd_set.file.push(fd);
+                    match msg.message_response {
+                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
+                            for fd_bytes in fd_res.file_descriptor_proto {
+                                if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
+                                    fd_set.file.push(fd);
+                                }
                             }
-                        }
-                        reflection_success = !fd_set.file.is_empty();
+                            reflection_success = !fd_set.file.is_empty();
+                        },
+                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                            reflection_err_detail = format!("v1 Error: {} (code {})", err.error_message, err.error_code);
+                        },
+                        _ => reflection_err_detail = "v1 Error: Invalid response type".to_string()
                     }
                 },
                 Ok(Err(e)) => reflection_err_detail = format!("v1 Status: {}", e.message()),
@@ -384,7 +393,7 @@ mod commands {
                 _ => {}
             }
 
-            // Fallback Reflection V1alpha jika V1 gagal
+            // PERBAIKAN: Fallback ke v1alpha beserta Error extraction
             if !reflection_success {
                 let reflection_v1alpha_result = tokio::time::timeout(
                     std::time::Duration::from_secs(4),
@@ -402,20 +411,32 @@ mod commands {
                     }
                 ).await;
 
-                if let Ok(Ok(Some(msg))) = reflection_v1alpha_result {
-                    if let Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
-                        for fd_bytes in fd_res.file_descriptor_proto {
-                            if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
-                                fd_set.file.push(fd);
-                            }
+                match reflection_v1alpha_result {
+                    Ok(Ok(Some(msg))) => {
+                        match msg.message_response {
+                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
+                                for fd_bytes in fd_res.file_descriptor_proto {
+                                    if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
+                                        fd_set.file.push(fd);
+                                    }
+                                }
+                                reflection_success = !fd_set.file.is_empty();
+                            },
+                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                                reflection_err_detail = format!("{} | v1alpha Error: {} (code {})", reflection_err_detail, err.error_message, err.error_code);
+                            },
+                            _ => reflection_err_detail = format!("{} | v1alpha Error: Invalid response type", reflection_err_detail)
                         }
-                        reflection_success = !fd_set.file.is_empty();
-                    }
+                    },
+                    Ok(Err(e)) => reflection_err_detail = format!("{} | v1alpha Status: {}", reflection_err_detail, e.message()),
+                    Err(_) => reflection_err_detail = format!("{} | v1alpha Timeout", reflection_err_detail),
+                    _ => {}
                 }
             }
 
             if !reflection_success {
-                return Err(format!("Gagal memuat descriptor untuk service '{}'. Detail: {}", service_name, reflection_err_detail));
+                // PERBAIKAN: Jika gagal, detail error dikembalikan ke Frontend agar user tahu alasannya
+                return Err(format!("Gagal memuat descriptor untuk service '{}'. Detail Server: {}", service_name, reflection_err_detail));
             }
 
             let mut new_pool = prost_reflect::DescriptorPool::new();
@@ -437,7 +458,7 @@ mod commands {
                 if was_cached {
                     let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
                     cache.remove(&cache_key);
-                    return Err(format!("Service '{}' usang atau tidak ditemukan di cache. Silakan klik 'Send' kembali.", service_name));
+                    return Err(format!("Service '{}' usang atau tidak ditemukan di cache. Silakan klik 'Send' kembali untuk melakukan re-reflection.", service_name));
                 }
                 return Err(format!("Service '{}' tidak ditemukan di pool descriptor", service_name));
             }
@@ -465,7 +486,6 @@ mod commands {
         prost::Message::encode(&request_msg, &mut req_bytes)
             .map_err(|e| format!("Gagal mem-parsing/encode Protobuf: {}", e))?;
 
-        // PERBAIKAN UTAMA: Gunakan codec bawaan Tonic yang aman dan bersih (prost codec / raw vec codec standar)
         let mut client = tonic::client::Grpc::new(channel);
         let req = tonic::Request::new(req_bytes);
         
@@ -473,9 +493,7 @@ mod commands {
         let path = http::uri::PathAndQuery::from_maybe_shared(path_uri.clone())
             .map_err(|_| format!("Invalid Route Path: {}", path_uri))?;
 
-        // Menggunakan codec byte standar bawaan tonic (tonic::codec::ProstCodec tidak dipakai langsung agar fleksibel dengan Vec<u8>)
-        // Sebagai gantinya, kita gunakan struktur codec byte standar aman berikut:
-        let codec = tonic::codec::ProstCodec::<Vec<u8>, Vec<u8>>::default();
+        let codec = super::RawBytesCodec::default();
         
         let response = match tokio::time::timeout(
             std::time::Duration::from_secs(30),
