@@ -31,7 +31,11 @@ impl tonic::codec::Encoder for RawBytesCodec {
     type Item = Vec<u8>;
     type Error = tonic::Status;
     fn encode(&mut self, item: Self::Item, dst: &mut tonic::codec::EncodeBuf<'_>) -> Result<(), Self::Error> {
-        dst.put_slice(&item);
+        let len = item.len();
+        dst.reserve(len + 5);
+        dst.put_u8(0);           // 1 byte: Compressed flag (0 = false)
+        dst.put_u32(len as u32); // 4 bytes: Message length (Big-endian)
+        dst.put_slice(&item);    // Payload biner protobuf
         Ok(())
     }
 }
@@ -40,10 +44,14 @@ impl tonic::codec::Decoder for RawBytesCodec {
     type Item = Vec<u8>;
     type Error = tonic::Status;
     fn decode(&mut self, src: &mut tonic::codec::DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-        if !src.has_remaining() {
+        if src.remaining() < 5 {
             return Ok(None);
         }
-        let len = src.remaining();
+        let _compressed = src.get_u8();
+        let len = src.get_u32() as usize;
+        if src.remaining() < len {
+            return Ok(None);
+        }
         let mut vec = vec![0; len];
         src.copy_to_slice(&mut vec);
         Ok(Some(vec))
