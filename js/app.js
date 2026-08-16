@@ -1139,11 +1139,21 @@ ui.send.onclick = async () => {
 
    try {
       if (tabBody?.mode === "grpc") {
+        // Panggil handler gRPC yang telah kita sinkronkan dengan backend Tauri v2
         res = await GrpcHandler.sendRequest(tab, resolveVars);
         
-        // Memastikan jika ada format error dari handler, tidak membuat UI nge-blank
-        if (res && res.error) {
-           res = { status: "ERROR", data: res.message, headers: {} };
+        // Pastikan struktur objek respons standar terbentuk dengan aman
+        if (!res) {
+          res = { status: "ERROR", data: "Tidak ada respons yang diterima dari server gRPC.", headers: {} };
+        } else if (res.error) {
+          res = { status: "ERROR", data: res.message || JSON.stringify(res), headers: {} };
+        } else {
+          // Jika sukses, bungkus ke format standar response Postdim
+          res = { 
+            status: res.status || "200 OK", 
+            data: res.data || res, 
+            headers: res.headers || {} 
+          };
         }
       }
       else {
@@ -1160,12 +1170,12 @@ ui.send.onclick = async () => {
     }
   }  
   catch (err) {
-      // INI BAGIAN PALING PENTING
-      // Jika terjadi error (misal command Rust tidak ditemukan), 
-      // error-nya akan ditangkap dan dijadikan text agar muncul di layar.
+      console.error("[Request Execution Error]:", err);
+      // Tangkap pesan error mentah dari Tauri / Rust / gRPC timeout
+      const errorMsg = typeof err === "string" ? err : (err?.message || JSON.stringify(err));
       res = { 
         status: "FAIL", 
-        data: err.toString() || "Unknown Error Occurred in UI", 
+        data: errorMsg, 
         headers: {} 
       };
     }
