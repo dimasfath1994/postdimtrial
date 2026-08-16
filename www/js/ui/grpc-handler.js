@@ -70,6 +70,7 @@ export class GrpcHandler {
       }
     } catch (err) {
       if (statusBtn) statusBtn.textContent = "❌ Reflection Failed";
+      console.error("Gagal melakukan gRPC discovery:", err);
     } finally {
       if (statusBtn) statusBtn.disabled = false;
     }
@@ -85,7 +86,10 @@ export class GrpcHandler {
       try {
         const sanitized = trimmed.replace(/(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '"$2":').replace(/'/g, '"').replace(/,\s*([}\]])/g, "$1");
         return JSON.parse(sanitized);
-      } catch (e) { return {}; }
+      } catch (e) { 
+        console.warn("[SafeParseJSON] Gagal memparsing JSON payload, mengirim objek kosong/mentah.");
+        return {}; 
+      }
     }
   }
 
@@ -278,23 +282,40 @@ export class GrpcHandler {
     if (!isGrpc) return null;
     
     const domMethod = document.getElementById("grpcServiceMethod")?.value || "";
+    const rawServiceMethod = domMethod || tabBody?.grpc?.serviceMethod || "";
+    
+    // Pastikan string service method dibersihkan dari spasi berlebih
+    const cleanedServiceMethod = resolveVars(rawServiceMethod).trim();
+
+    // Ambil nilai teks dari editor Monaco jika ada, atau fallback ke textarea
+    const rawBodyText = this.editors.body ? this.editors.body.getValue() : (tabBody?.grpc?.body || "{}");
+    const resolvedBodyText = resolveVars(rawBodyText);
+
     return {
-      serviceMethod: resolveVars(domMethod || tabBody?.grpc?.serviceMethod || ""),
+      serviceMethod: cleanedServiceMethod,
       protoFileName: tabBody?.grpc?.protoFileName || "",
-      data: this.safeParseJSON(resolveVars(tabBody?.grpc?.body || ""))
+      data: this.safeParseJSON(resolvedBodyText)
     };
   }
 
   static async sendRequest(tab, resolveVars = (v) => v) {
     const payload = this.prepareRequestBody(tab, resolveVars);
-    if (!payload || !payload.serviceMethod) throw new Error("gRPC Service / Method belum diisi!");
+    if (!payload || !payload.serviceMethod) {
+      throw new Error("gRPC Service / Method belum dipilih atau belum diisi!");
+    }
+    
     const endpoint = document.getElementById("url")?.value?.trim();
-    if (!endpoint) throw new Error("gRPC Endpoint belum diisi!");
+    if (!endpoint) {
+      throw new Error("gRPC Endpoint URL belum diisi!");
+    }
 
-    return await this.invokeTauri("grpc_request", {
+    // Memanggil backend Rust dengan parameter yang sudah divalidasi dengan aman
+    const response = await this.invokeTauri("grpc_request", {
       endpoint: endpoint,
       serviceMethod: payload.serviceMethod,
       payload: payload.data 
     });
+
+    return response;
   }
 }
