@@ -1135,7 +1135,13 @@ ui.send.onclick = async () => {
     console.log("BODY RAW", tabBody?.raw);
     console.log("FINAL BODY", body);
 
-    const res = await RequestEngine.send({
+    let res;
+
+    if (tabBody?.mode === "grpc") {
+      res = await GrpcHandler.sendRequest(tab, resolveVars);
+    }
+
+      res = await RequestEngine.send({
       method: ui.method.value,
       url: finalUrl,
       body,
