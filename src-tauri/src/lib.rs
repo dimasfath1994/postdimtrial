@@ -515,7 +515,7 @@ mod commands {
             ),
         };
 
-        // PERBAIKAN: Timeout stream v1 list services
+        // PERBAIKAN: Timeout stream v1 list services + break setelah menerima ListServicesResponse agar tidak hang
         let v1_success = match tokio::time::timeout(
             std::time::Duration::from_secs(5),
             async {
@@ -533,6 +533,7 @@ mod commands {
                                 local_names.push(svc.name);
                             }
                         }
+                        break; // PERBAIKAN: Keluar loop segera setelah response diterima untuk mencegah hang jika server tidak menutup stream
                     }
                 }
                 Ok::<Vec<String>, tonic::Status>(local_names)
@@ -558,7 +559,7 @@ mod commands {
                 ),
             };
 
-            // PERBAIKAN: Timeout stream v1alpha list services
+            // PERBAIKAN: Timeout stream v1alpha list services + break setelah menerima ListServicesResponse agar tidak hang
             let _ = tokio::time::timeout(
                 std::time::Duration::from_secs(5),
                 async {
@@ -576,6 +577,7 @@ mod commands {
                                     local_names.push(svc.name);
                                 }
                             }
+                            break; // PERBAIKAN: Keluar loop segera setelah response diterima untuk mencegah hang
                         }
                     }
                     raw_service_names = local_names;

@@ -288,7 +288,6 @@ export class GrpcHandler {
     const rawBodyText = this.editors.body ? this.editors.body.getValue() : (tabBody?.grpc?.body || "{}");
     const resolvedBodyText = resolveVars(rawBodyText).trim();
 
-    // Jika teks kosong atau hanya kurung kurawal kosong {}, jadikan objek kosong murni
     let parsedData = {};
     if (resolvedBodyText && resolvedBodyText !== "{}") {
       parsedData = this.safeParseJSON(resolvedBodyText);
@@ -301,7 +300,7 @@ export class GrpcHandler {
     };
   }
 
-static async sendRequest(tab, resolveVars = (v) => v) {
+  static async sendRequest(tab, resolveVars = (v) => v) {
     const payload = this.prepareRequestBody(tab, resolveVars);
     if (!payload || !payload.serviceMethod) {
       throw new Error("gRPC Service / Method belum dipilih atau belum diisi!");
@@ -313,12 +312,11 @@ static async sendRequest(tab, resolveVars = (v) => v) {
     }
 
     try {
-      // Buat janji timeout 10 detik di JavaScript
+      // Timeout JavaScript diatur ke 20 detik (selaras dengan batas waktu di Rust backend)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout JS: Backend Rust macet / tidak merespons dalam 10 detik!")), 10000)
+        setTimeout(() => reject(new Error("Timeout JS: Backend Rust macet / tidak merespons dalam 20 detik!")), 20000)
       );
 
-      // Adu cepat antara fungsi invoke Tauri vs Timeout 10 detik
       const response = await Promise.race([
         this.invokeTauri("grpc_request", {
           endpoint: endpoint,
@@ -328,11 +326,9 @@ static async sendRequest(tab, resolveVars = (v) => v) {
         timeoutPromise
       ]);
 
-      alert("✅ BERHASIL: " + JSON.stringify(response).substring(0, 150));
       return response;
     } catch (err) {
-      // Jika Rust macet (terkena timeout 10 detik) atau error, alert ini PASTI akan muncul!
-      alert("❌ ERROR / TIMEOUT: " + err.message);
+      console.error("❌ gRPC Request Error:", err);
       throw err;
     }
   }
