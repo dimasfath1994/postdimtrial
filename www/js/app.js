@@ -1139,19 +1139,18 @@ ui.send.onclick = async () => {
 
    try {
       if (tabBody?.mode === "grpc") {
-        // Panggil handler gRPC yang telah kita sinkronkan dengan backend Tauri v2
+        // Panggil handler gRPC yang tersambung ke backend Tauri
         res = await GrpcHandler.sendRequest(tab, resolveVars);
         
-        // Pastikan struktur objek respons standar terbentuk dengan aman
+        // PASTIKAN PENGECEKAN KONDISI RESPONS INI ADA:
         if (!res) {
           res = { status: "ERROR", data: "Tidak ada respons yang diterima dari server gRPC.", headers: {} };
         } else if (res.error) {
-          res = { status: "ERROR", data: res.message || JSON.stringify(res), headers: {} };
+          res = { status: "FAIL", data: res.message || JSON.stringify(res), headers: {} };
         } else {
-          // Jika sukses, bungkus ke format standar response Postdim
           res = { 
             status: res.status || "200 OK", 
-            data: res.data || res, 
+            data: res.data !== undefined ? res.data : res, 
             headers: res.headers || {} 
           };
         }
@@ -1997,6 +1996,8 @@ tabs.setActive = (id) => {
       ?.classList.add("active");
 
     renderBodyUI(tab.body);
+
+    GrpcHandler.syncFromState(tab, ui);
   }
 
   syncScriptToTab();
@@ -2237,6 +2238,8 @@ function initMonaco() {
 
         setupPMIntellisense();
         bindMonacoAutoSave(); // 🔥 TAMBAH INI
+
+        GrpcHandler.initMonacoEditors(ui, tabs, scheduleSync);
 
         // ✅ INI PENTING (FIX UTAMA)
         const tab = tabs.getActive();
@@ -2682,6 +2685,8 @@ document.getElementById("addFormData")?.addEventListener("click", () => {
   tabs.commit();
 saveActiveCollectionState();
 });
+
+
 function renderBodyUI(body) {
 
   const raw = document.getElementById("rawBodyBox");
@@ -2697,6 +2702,11 @@ function renderBodyUI(body) {
 
   GraphqlHandler.renderUI(body);
   GrpcHandler.renderUI(body);
+
+  if (body.mode === "grpc") {
+    const activeTab = tabs.getActive();
+    if (activeTab) GrpcHandler.syncFromState(activeTab, ui);
+  }
 
   if (body.mode === "raw") {
     raw.classList.remove("hidden");
