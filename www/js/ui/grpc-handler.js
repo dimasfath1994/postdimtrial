@@ -22,7 +22,7 @@ export class GrpcHandler {
   }
 
   static async loadReflectionServices(endpoint) {
-    const datalist = document.getElementById("grpcServicesList");
+    const selectElement = document.getElementById("grpcServiceMethod");
     const statusBtn = document.getElementById("btnFetchReflection");
     if (!endpoint || !endpoint.trim()) return;
 
@@ -33,25 +33,35 @@ export class GrpcHandler {
 
     try {
       const res = await this.invokeTauri("discover_grpc_services", { endpoint: endpoint.trim() });
-      if (datalist && res) {
-        datalist.innerHTML = "";
+      if (selectElement && res) {
+        selectElement.innerHTML = '<option value="">-- Pilih Service / Method --</option>';
         const services = res?.services || [];
+        
         if (services.length === 0) {
           if (statusBtn) statusBtn.textContent = "⚠️ No Services Found";
         } else {
           let total = 0;
           services.forEach((item) => {
             if (typeof item === "object" && item?.service && Array.isArray(item.methods)) {
+              // Buat optgroup untuk setiap Service (seperti grup di Postman)
+              const optGroup = document.createElement("optgroup");
+              optGroup.label = item.service;
+
               item.methods.forEach((method) => {
                 const opt = document.createElement("option");
                 opt.value = `${item.service}/${method}`;
-                datalist.appendChild(opt);
+                opt.textContent = method;
+                optGroup.appendChild(opt);
                 total++;
               });
+
+              selectElement.appendChild(optGroup);
             } else {
+              // Fallback jika format data berupa string biasa / item tunggal
               const opt = document.createElement("option");
               opt.value = typeof item === "string" ? item : JSON.stringify(item);
-              datalist.appendChild(opt);
+              opt.textContent = opt.value;
+              selectElement.appendChild(opt);
               total++;
             }
           });
@@ -103,6 +113,12 @@ export class GrpcHandler {
     const grpcPanels = document.querySelectorAll(".grpc-tab-panel");
     const grpcPanelsContainer = document.getElementById("grpcPanelsContainer");
 
+    const btnFetchReflection = document.getElementById("btnFetchReflection");
+    btnFetchReflection?.addEventListener("click", () => {
+      const endpoint = document.getElementById("url")?.value || "";
+      this.loadReflectionServices(endpoint);
+    });
+
     grpcTabButtons.forEach(btn => {
       btn.addEventListener("click", () => {
         grpcTabButtons.forEach(t => t.classList.remove("active"));
@@ -112,13 +128,11 @@ export class GrpcHandler {
         const sharedPanel = btn.getAttribute("data-shared-panel");
 
         if (sharedPanel) {
-          // 1. Sembunyikan kontainer gRPC khusus
           if (grpcPanelsContainer) {
             grpcPanelsContainer.style.display = "none";
           }
           grpcPanels.forEach(p => p.style.display = "none");
 
-          // 2. Tampilkan HANYA panel universal (Auth/Scripts) yang sesuai
           document.querySelectorAll(".tab-panel").forEach(p => {
             const pName = (p.getAttribute("data-panel") || p.id || "").toLowerCase();
             if (pName.includes(sharedPanel.toLowerCase())) {
@@ -128,17 +142,14 @@ export class GrpcHandler {
             }
           });
         } else {
-          // 1. Munculkan kembali kontainer gRPC khusus
           if (grpcPanelsContainer) {
             grpcPanelsContainer.style.display = "block";
           }
 
-          // 2. Sembunyikan seluruh panel universal REST agar tidak bocor
           document.querySelectorAll(".tab-panel").forEach(p => {
             p.style.display = "none";
           });
 
-          // 3. Tampilkan sub-panel gRPC yang dipilih
           grpcPanels.forEach(panel => {
             if (panel.getAttribute("data-grpc-panel") === targetTab) {
               panel.style.display = "block";
@@ -169,7 +180,7 @@ export class GrpcHandler {
       }
     });
 
-    document.getElementById("grpcServiceMethod")?.addEventListener("input", handleInputChange);
+    document.getElementById("grpcServiceMethod")?.addEventListener("change", handleInputChange);
     document.getElementById("grpcBody")?.addEventListener("input", handleInputChange);
   }
 
@@ -255,7 +266,6 @@ export class GrpcHandler {
         p.style.display = "none";
       });
       
-      // Kembalikan kendali penuh panel REST ke sistem asal aplikasi
       document.querySelectorAll(".tab-panel").forEach(p => {
         p.style.display = "";
       });
