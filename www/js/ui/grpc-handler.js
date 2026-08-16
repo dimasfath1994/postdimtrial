@@ -62,7 +62,7 @@ export class GrpcHandler {
                 opt.textContent = methodName;  // Teks yang tampil di dropdown cukup nama method-nya agar rapi
                 optGroup.appendChild(opt);
                 total++;
-            });
+              });
 
               selectElement.appendChild(optGroup);
             } else {
@@ -328,20 +328,11 @@ export class GrpcHandler {
     }
 
     try {
-      // PENTING: Timeout di JS diatur sedikit lebih lama (35 detik) dari backend Rust (30 detik).
-      // Tujuannya agar error timeout asli yang dikirim dari Rust tidak terpotong (masked) oleh timeout JS ini.
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout JS: Frontend memutuskan koneksi karena tidak ada respons sama sekali (35 detik).")), 35000)
-      );
-
-      const response = await Promise.race([
-        this.invokeTauri("grpc_request", {
-          endpoint: endpoint,
-          serviceMethod: payload.serviceMethod,
-          payload: payload.data 
-        }),
-        timeoutPromise
-      ]);
+      const response = await this.invokeTauri("grpc_request", {
+        endpoint: endpoint,
+        serviceMethod: payload.serviceMethod,
+        payload: payload.data 
+      });
 
       return response;
     } catch (err) {

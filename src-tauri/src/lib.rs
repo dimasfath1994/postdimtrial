@@ -291,7 +291,7 @@ mod commands {
     }
 
     // ==========================================
-    // PERBAIKAN: GRPC REQUEST DENGAN TIMEOUT 30 DETIK AGAR TIDAK HANG
+    // GRPC REQUEST TANPA TIMEOUT (MENGIKUTI POSTMAN)
     // ==========================================
     #[tauri::command]
     pub async fn grpc_request(
@@ -336,7 +336,7 @@ mod commands {
             Err(_) => return Err("Koneksi ke gRPC server timeout (lebih dari 10 detik)".to_string()),
         };
 
-        let cache_key = formatted_endpoint.clone();
+        let cache_key = format!("{}_{}", formatted_endpoint, service_name);
         let mut cached_pool = None;
 
         {
@@ -491,15 +491,9 @@ mod commands {
 
         let codec = RawBytesCodec::default();
         
-        // FIX: Eksekusi unary dibungkus timeout 30 detik agar tidak menggantung tanpa batas jika server tidak menutup stream
-        let response = match tokio::time::timeout(
-            Duration::from_secs(30),
-            client.unary(req, path, codec)
-        ).await {
-            Ok(Ok(res)) => res,
-            Ok(Err(status)) => return Err(format!("gRPC Error [Code {}]: {}", status.code(), status.message())),
-            Err(_) => return Err("gRPC request timeout (lebih dari 30 detik tanpa respons)".to_string()),
-        };
+        // TANPA TIMEOUT: Menunggu respons server sampai selesai layaknya Postman
+        let response = client.unary(req, path, codec).await
+            .map_err(|status| format!("gRPC Error [Code {}]: {}", status.code(), status.message()))?;
 
         let duration = start.elapsed().as_millis();
         let res_body_bytes = response.into_inner();
