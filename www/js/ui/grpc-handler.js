@@ -43,7 +43,6 @@ export class GrpcHandler {
           let total = 0;
           services.forEach((item) => {
             if (typeof item === "object" && item?.service && Array.isArray(item.methods)) {
-              // Buat optgroup untuk setiap Service (seperti grup di Postman)
               const optGroup = document.createElement("optgroup");
               optGroup.label = item.service;
 
@@ -57,7 +56,6 @@ export class GrpcHandler {
 
               selectElement.appendChild(optGroup);
             } else {
-              // Fallback jika format data berupa string biasa / item tunggal
               const opt = document.createElement("option");
               opt.value = typeof item === "string" ? item : JSON.stringify(item);
               opt.textContent = opt.value;
@@ -312,9 +310,9 @@ export class GrpcHandler {
     }
 
     try {
-      // Timeout JavaScript diatur ke 20 detik (selaras dengan batas waktu di Rust backend)
+      // DIPERBAIKI: Timeout JavaScript dinaikkan ke 30 detik agar aman dari pemotongan prematur
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout JS: Backend Rust macet / tidak merespons dalam 20 detik!")), 20000)
+        setTimeout(() => reject(new Error("Timeout JS: Backend Rust macet / tidak merespons dalam 30 detik!")), 30000)
       );
 
       const response = await Promise.race([

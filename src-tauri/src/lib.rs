@@ -301,7 +301,6 @@ mod commands {
             endpoint
         };
 
-        // 1. NORMALISASI SERVICE & METHOD (Mendukung format Postman "Service / Method", spasi, & multi-titik package)
         let sanitized = service_method.trim();
         let normalized = sanitized.replace(" / ", "/").replace(" /", "/").replace("/ ", "/");
         let clean_path = normalized.trim_start_matches('/');
@@ -312,7 +311,6 @@ mod commands {
             return Err("Format service_method salah. Gunakan format 'Service/Method' atau 'Service / Method'".to_string());
         };
 
-        // PERBAIKAN: Timeout koneksi gRPC channel (10 detik)
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             tonic::transport::Channel::from_shared(formatted_endpoint)
@@ -324,11 +322,9 @@ mod commands {
             Err(_) => return Err("Koneksi ke gRPC server timeout (lebih dari 10 detik)".to_string()),
         };
 
-        // 2. MENDAPATKAN DESKRIPTOR ON-THE-FLY VIA REFLECTION (V1 & V1Alpha Fallback)
         let mut fd_set = prost_types::FileDescriptorSet::default();
         let mut reflection_success = false;
 
-        // Coba V1 Terlebih Dahulu
         let mut client_v1 = tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient::new(channel.clone());
         let req_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
             host: "".to_string(),
@@ -337,9 +333,9 @@ mod commands {
             ),
         };
 
-        // PERBAIKAN: Timeout untuk reflection v1
+        // DIPERBAIKI: Timeout reflection v1 dipangkas ke 2 detik agar tidak boros waktu
         let reflection_v1_result = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(2),
             async {
                 let response = client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await?;
                 let mut stream = response.into_inner();
@@ -362,7 +358,6 @@ mod commands {
             }
         }
 
-        // Coba V1Alpha jika V1 Gagal
         if !reflection_success {
             let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
             let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
@@ -372,9 +367,9 @@ mod commands {
                 ),
             };
 
-            // PERBAIKAN: Timeout untuk reflection v1alpha
+            // DIPERBAIKI: Timeout reflection v1alpha dipangkas ke 2 detik
             let reflection_v1alpha_result = tokio::time::timeout(
-                std::time::Duration::from_secs(5),
+                std::time::Duration::from_secs(2),
                 async {
                     let response = client_v1alpha.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha))).await?;
                     let mut stream = response.into_inner();
@@ -402,7 +397,6 @@ mod commands {
             return Err(format!("Gagal memuat descriptor untuk service '{}' via Server Reflection.", service_name));
         }
 
-        // 3. MASUKKAN KE DESCRIPTOR POOL
         let mut pool = prost_reflect::DescriptorPool::new();
         let mut pool_bytes = Vec::new();
         prost::Message::encode(&fd_set, &mut pool_bytes).map_err(|e| e.to_string())?;
@@ -420,9 +414,7 @@ mod commands {
         let input_desc = method_desc.input();
         let output_desc = method_desc.output();
 
-        // 4. KONVERSI PAYLOAD (JSON MENTAH) -> BINER PROTOBUF (DYNAMIC MESSAGE)
         let request_msg = if payload.is_null() || (payload.is_object() && payload.as_object().unwrap().is_empty()) {
-            // Jika payload kosong, buat DynamicMessage kosong berdasarkan input_desc
             prost_reflect::DynamicMessage::new(input_desc.clone())
         } else {
             let json_str = payload.to_string();
@@ -436,7 +428,6 @@ mod commands {
         prost::Message::encode(&request_msg, &mut req_bytes)
             .map_err(|e| format!("Gagal mem-parsing/encode Protobuf: {}", e))?;
 
-        // 5. KIRIM DATA KE SERVER VIA TONIC DENGAN RAW BYTES CODEC YANG AMAN
         let mut client = tonic::client::Grpc::new(channel);
         let req = tonic::Request::new(req_bytes);
         
@@ -446,7 +437,6 @@ mod commands {
 
         let codec = super::RawBytesCodec::default();
         
-        // PERBAIKAN: Timeout eksekusi request gRPC unary (15 detik)
         let response = match tokio::time::timeout(
             std::time::Duration::from_secs(15),
             client.unary(req, path, codec)
@@ -456,7 +446,6 @@ mod commands {
             Err(_) => return Err("gRPC request timeout (lebih dari 15 detik tanpa respons)".to_string()),
         };
 
-        // 6. KONVERSI RESPON BINER (PROTOBUF) -> JSON UNTUK FRONTEND (GAYA POSTMAN)
         let duration = start.elapsed().as_millis();
         let res_body_bytes = response.into_inner();
         let res_size = res_body_bytes.len();
@@ -469,16 +458,13 @@ mod commands {
 
         Ok(json!({
             "status": 200,
-            "body": res_json.to_string(), // JSON string bersih yang siap diparse di frontend
+            "body": res_json.to_string(),
             "time": duration,
             "headers": [["content-type", "application/grpc"]],
             "size": res_size
         }))
     }
 
-    // ==========================================
-    // UPDATED: DISCOVER SERVICES & METHODS (POSTMAN STYLE)
-    // ==========================================
     #[tauri::command]
     pub async fn discover_grpc_services(
         endpoint: String
@@ -490,7 +476,6 @@ mod commands {
 
         let uri_endpoint = format!("http://{}", clean_endpoint);
 
-        // PERBAIKAN: Timeout koneksi channel discovery (10 detik)
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             tonic::transport::Channel::from_shared(uri_endpoint)
@@ -504,7 +489,6 @@ mod commands {
 
         let mut raw_service_names = Vec::new();
 
-        // 1. Coba Reflection v1 terlebih dahulu untuk mendapatkan list service names
         let mut client_v1 = ServerReflectionClient::new(channel.clone());
         let req_v1 = ServerReflectionRequest {
             host: "".to_string(),
@@ -515,9 +499,9 @@ mod commands {
             ),
         };
 
-        // PERBAIKAN: Timeout stream v1 list services + break setelah menerima ListServicesResponse agar tidak hang
+        // DIPERBAIKI: Timeout list services v1 dipangkas ke 2 detik
         let v1_success = match tokio::time::timeout(
-            std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(2),
             async {
                 let response = client_v1
                     .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1)))
@@ -533,7 +517,7 @@ mod commands {
                                 local_names.push(svc.name);
                             }
                         }
-                        break; // PERBAIKAN: Keluar loop segera setelah response diterima untuk mencegah hang jika server tidak menutup stream
+                        break;
                     }
                 }
                 Ok::<Vec<String>, tonic::Status>(local_names)
@@ -546,7 +530,6 @@ mod commands {
             _ => false,
         };
 
-        // 2. Jika v1 gagal atau kosong, fallback ke v1alpha
         if !v1_success {
             raw_service_names.clear();
             let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
@@ -559,9 +542,9 @@ mod commands {
                 ),
             };
 
-            // PERBAIKAN: Timeout stream v1alpha list services + break setelah menerima ListServicesResponse agar tidak hang
+            // DIPERBAIKI: Timeout list services v1alpha dipangkas ke 2 detik
             let _ = tokio::time::timeout(
-                std::time::Duration::from_secs(5),
+                std::time::Duration::from_secs(2),
                 async {
                     let response = client_v1alpha
                         .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha)))
@@ -577,7 +560,7 @@ mod commands {
                                     local_names.push(svc.name);
                                 }
                             }
-                            break; // PERBAIKAN: Keluar loop segera setelah response diterima untuk mencegah hang
+                            break;
                         }
                     }
                     raw_service_names = local_names;
@@ -590,14 +573,12 @@ mod commands {
             return Err("Reflection gagal: Server tidak mengembalikan service atau tidak mendukung reflection.".to_string());
         }
 
-        // 3. Ambil File Descriptor Set per service untuk mengekstrak daftar Method-nya
         let mut services_with_methods = Vec::new();
 
         for svc_name in raw_service_names {
             let mut fd_set = prost_types::FileDescriptorSet::default();
             let mut reflection_success = false;
 
-            // Coba V1 Descriptors
             let mut client_v1_desc = ServerReflectionClient::new(channel.clone());
             let req_desc_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
                 host: "".to_string(),
@@ -606,9 +587,9 @@ mod commands {
                 ),
             };
 
-            // PERBAIKAN: Timeout descriptor v1 per service
+            // DIPERBAIKI: Timeout descriptor v1 per service dipangkas ke 2 detik
             let desc_v1_res = tokio::time::timeout(
-                std::time::Duration::from_secs(3),
+                std::time::Duration::from_secs(2),
                 async {
                     let response = client_v1_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1))).await?;
                     let mut stream = response.into_inner();
@@ -631,7 +612,6 @@ mod commands {
                 }
             }
 
-            // Coba V1Alpha Descriptors jika V1 Gagal
             if !reflection_success {
                 let mut client_v1alpha_desc = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
                 let req_desc_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
@@ -641,9 +621,9 @@ mod commands {
                     ),
                 };
 
-                // PERBAIKAN: Timeout descriptor v1alpha per service
+                // DIPERBAIKI: Timeout descriptor v1alpha per service dipangkas ke 2 detik
                 let desc_v1alpha_res = tokio::time::timeout(
-                    std::time::Duration::from_secs(3),
+                    std::time::Duration::from_secs(2),
                     async {
                         let response = client_v1alpha_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1alpha))).await?;
                         let mut stream = response.into_inner();
