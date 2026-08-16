@@ -311,7 +311,7 @@ export class GrpcHandler {
     if (!endpoint) {
       throw new Error("gRPC Endpoint URL belum diisi!");
     }
-
+    alert(payload.serviceMethod);
     // Memanggil backend Rust dengan parameter yang sudah divalidasi dengan aman
     const response = await this.invokeTauri("grpc_request", {
       endpoint: endpoint,
