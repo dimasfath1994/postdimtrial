@@ -48,8 +48,11 @@ export class GrpcHandler {
 
               item.methods.forEach((method) => {
                 const opt = document.createElement("option");
-                opt.value = `${item.service}/${method}`;
-                opt.textContent = method;
+                // Backend Rust mengirimkan 'method' dalam format "Service/Method" (misal: "helloworld.Greeter/SayHello")
+                // Kita ambil nama method-nya saja untuk textContent agar rapi di dalam optgroup.
+                const methodName = method.includes('/') ? method.split('/').pop() : method;
+                opt.value = method;
+                opt.textContent = methodName;
                 optGroup.appendChild(opt);
                 total++;
               });
@@ -310,7 +313,6 @@ export class GrpcHandler {
     }
 
     try {
-      // DIPERBAIKI: Timeout JavaScript dinaikkan ke 30 detik agar aman dari pemotongan prematur
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("Timeout JS: Backend Rust macet / tidak merespons dalam 30 detik!")), 30000)
       );

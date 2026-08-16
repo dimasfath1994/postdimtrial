@@ -642,7 +642,8 @@ mod commands {
                     if pool.decode_file_descriptor_set(pool_bytes.as_slice()).is_ok() {
                         if let Some(service_desc) = pool.get_service_by_name(&svc_name) {
                             for method in service_desc.methods() {
-                                methods.push(method.name().to_string());
+                                // PERUBAHAN DI SINI: Gabungkan nama service dan method
+                                methods.push(format!("{}/{}", svc_name, method.name()));
                             }
                         }
                     }
