@@ -301,7 +301,7 @@ export class GrpcHandler {
     };
   }
 
-  static async sendRequest(tab, resolveVars = (v) => v) {
+ static async sendRequest(tab, resolveVars = (v) => v) {
     const payload = this.prepareRequestBody(tab, resolveVars);
     if (!payload || !payload.serviceMethod) {
       throw new Error("gRPC Service / Method belum dipilih atau belum diisi!");
@@ -311,14 +311,22 @@ export class GrpcHandler {
     if (!endpoint) {
       throw new Error("gRPC Endpoint URL belum diisi!");
     }
-    alert(payload.serviceMethod);
-    // Memanggil backend Rust dengan parameter yang sudah divalidasi dengan aman
-    const response = await this.invokeTauri("grpc_request", {
-      endpoint: endpoint,
-      serviceMethod: payload.serviceMethod,
-      payload: payload.data 
-    });
 
-    return response;
+    try {
+      // Memanggil backend Rust
+      const response = await this.invokeTauri("grpc_request", {
+        endpoint: endpoint,
+        serviceMethod: payload.serviceMethod,
+        payload: payload.data 
+      });
+
+      // Jika Berhasil, tampilkan isinya via alert
+      alert("✅ BERHASIL: " + JSON.stringify(response).substring(0, 150));
+      return response;
+    } catch (err) {
+      // Jika Gagal/Error dari Rust, tampilkan pesan error aslinya via alert!
+      alert("❌ ERROR RUST: " + err);
+      throw err;
+    }
   }
 }
