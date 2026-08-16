@@ -301,11 +301,16 @@ export class GrpcHandler {
     }
 
     // Panggil command Tauri backend untuk eksekusi gRPC
-    const response = await this.invokeTauri("send_grpc_request", {
-      endpoint: endpoint,
-      protoPath: payload.protoFileName,
-      serviceMethod: payload.serviceMethod,
-      data: payload.data
+    // const response = await this.invokeTauri("send_grpc_request", {
+    //   endpoint: endpoint,
+    //   protoPath: payload.protoFileName,
+    //   serviceMethod: payload.serviceMethod,
+    //   data: payload.data
+    // });
+    const response = await this.invokeTauri("grpc_request", {
+        endpoint: endpoint,
+        serviceMethod: payload.serviceMethod,
+        payload: payload.data // Sesuaikan dengan parameter 'payload: serde_json::Value' di Rust
     });
 
     return response;
