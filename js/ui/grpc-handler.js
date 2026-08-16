@@ -52,14 +52,17 @@ export class GrpcHandler {
 
               item.methods.forEach((method) => {
                 const opt = document.createElement("option");
-                // Backend Rust mengirimkan 'method' format "Service/Method" 
-                // Kita ambil nama method-nya saja untuk label textContent
+                
+                // Pastikan format 'method' dari backend sudah "Service/Method"
+                // Jika backend mengirim murni nama method, kita gabungkan secara manual dengan item.service
+                const fullServiceMethod = method.includes('/') ? method : `${item.service}/${method}`;
                 const methodName = method.includes('/') ? method.split('/').pop() : method;
-                opt.value = method;
-                opt.textContent = methodName;
+
+                opt.value = fullServiceMethod; // NILAI UTAMA WAJIB LENGKAP: "Service/Method"
+                opt.textContent = methodName;  // Teks yang tampil di dropdown cukup nama method-nya agar rapi
                 optGroup.appendChild(opt);
                 total++;
-              });
+            });
 
               selectElement.appendChild(optGroup);
             } else {
