@@ -283,18 +283,21 @@ export class GrpcHandler {
     
     const domMethod = document.getElementById("grpcServiceMethod")?.value || "";
     const rawServiceMethod = domMethod || tabBody?.grpc?.serviceMethod || "";
-    
-    // Pastikan string service method dibersihkan dari spasi berlebih
     const cleanedServiceMethod = resolveVars(rawServiceMethod).trim();
 
-    // Ambil nilai teks dari editor Monaco jika ada, atau fallback ke textarea
     const rawBodyText = this.editors.body ? this.editors.body.getValue() : (tabBody?.grpc?.body || "{}");
-    const resolvedBodyText = resolveVars(rawBodyText);
+    const resolvedBodyText = resolveVars(rawBodyText).trim();
+
+    // Jika teks kosong atau hanya kurung kurawal kosong {}, jadikan objek kosong murni
+    let parsedData = {};
+    if (resolvedBodyText && resolvedBodyText !== "{}") {
+      parsedData = this.safeParseJSON(resolvedBodyText);
+    }
 
     return {
       serviceMethod: cleanedServiceMethod,
       protoFileName: tabBody?.grpc?.protoFileName || "",
-      data: this.safeParseJSON(resolvedBodyText)
+      data: parsedData
     };
   }
 
