@@ -27,7 +27,6 @@ export class Tabs {
 
     this.tabs.push(newTab);
     
-    // Kirim objek newTab langsung ke addRequest
     if (collectionId) {
       this.collections.addRequest(collectionId, newTab, folderId);
     }
@@ -41,30 +40,45 @@ export class Tabs {
   }
 
   openRequest(request) {
-    // 1. Cek apakah tab dengan ID request ini ada di daftar tab
     let existingTab = this.tabs.find(t => t.id === request.id);
+    const isGrpcReq = (request.method || "").toUpperCase() === "GRPC";
 
     if (existingTab) {
         existingTab.opened = true; 
+        if (isGrpcReq) {
+          existingTab.body.mode = "grpc";
+        }
         this.setActive(existingTab.id);
     } else {
-        // Jika belum ada sama sekali, buat tab baru
         const newTab = {
             id: request.id,
             name: request.name,
             method: request.method || "GET",
             url: request.url || "",
-            body: typeof request.body === "object" ? request.body : {
-              mode: "none",
+            body: typeof request.body === "object" ? {
+              mode: request.body.mode || (isGrpcReq ? "grpc" : "raw"),
+              ...request.body,
+              grpc: {
+                protoFileName: request.body.grpc?.protoFileName || "",
+                serviceMethod: request.body.grpc?.serviceMethod || "",
+                body: request.body.grpc?.body || "",
+                metadata: request.body.grpc?.metadata || []
+              }
+            } : {
+              mode: isGrpcReq ? "grpc" : "none",
               raw: request.body || "",
               formData: [],
               urlencoded: [],
               graphql: { query: "", variables: "" },
-              grpc: { protoFileName: "", serviceMethod: "", body: "" }
+              grpc: { protoFileName: "", serviceMethod: "", body: "", metadata: [] }
             },
             collectionId: request.collectionId || null,
             folderId: request.folderId || null,
-            opened: true
+            opened: true,
+            params: request.params || {},
+            headers: request.headers || {},
+            auth: request.auth || { type: "", value: "" },
+            scripts: request.scripts || { pre: "", post: "" }
         };
         this.tabs.push(newTab);
         this.save();
@@ -97,7 +111,6 @@ export class Tabs {
         raw: "",
         formData: [],
         urlencoded: [],
-        // ADDED: GraphQL & gRPC data structure
         graphql: {
           query: "",
           variables: ""
@@ -105,7 +118,8 @@ export class Tabs {
         grpc: {
           protoFileName: "",
           serviceMethod: "",
-          body: ""
+          body: "",
+          metadata: []
         }
       },
       history: [],
@@ -170,16 +184,13 @@ export class Tabs {
       this.activeId = next?.id || null;
     }
 
-    this.commit(); // save + sync
-
+    this.commit();
     window.saveActiveCollectionState?.();
-
     this.render();
   }
 
   // ================= RENAME =================
   rename(tab, name) {
-    console.log("Tab ditemukan:", tab);
     tab.name = name?.trim() || "Untitled";
 
     const col = this.collections.getCollection(tab.collectionId);
@@ -210,7 +221,6 @@ export class Tabs {
 
   renameById(id, name, collectionId, folderId = null) {
     const tab = this.tabs.find(t => t.id === id);
-    console.log("Tab ditemukan:", tab);
     if (!tab) return;
 
     tab.name = name?.trim() || "Untitled";
@@ -308,6 +318,39 @@ export class Tabs {
     });
   }
 
+  // ================= UI METHOD TOGGLE HELPER =================
+  _updateMethodUI(method) {
+    const isGrpc = (method || "").toUpperCase() === "GRPC";
+
+    const reqTabs = document.getElementById("reqTabs");
+    const grpcReqTabs = document.getElementById("grpcReqTabs");
+    const grpcPanelsContainer = document.getElementById("grpcPanelsContainer");
+
+    const paramsPanel = document.querySelector('[data-panel="params"]');
+    const bodyPanel = document.querySelector('[data-panel="body"]');
+    const headersPanel = document.querySelector('[data-panel="headers"]');
+
+    if (isGrpc) {
+      reqTabs?.classList.add("hidden");
+      grpcReqTabs?.classList.remove("hidden");
+      grpcPanelsContainer?.classList.remove("hidden");
+
+      paramsPanel?.classList.add("hidden");
+      bodyPanel?.classList.add("hidden");
+      headersPanel?.classList.add("hidden");
+    } else {
+      reqTabs?.classList.remove("hidden");
+      grpcReqTabs?.classList.add("hidden");
+      grpcPanelsContainer?.classList.add("hidden");
+
+      // Munculkan kembali panel HTTP aktif (misal params jika itu yang sedang dibuka)
+      const activeReqTab = document.querySelector('.req-tab.active:not([data-grpc-tab])');
+      const activeTabName = activeReqTab ? activeReqTab.dataset.tab : 'params';
+      const activePanel = document.querySelector(`[data-panel="${activeTabName}"]`);
+      activePanel?.classList.remove("hidden");
+    }
+  }
+
   // ================= SYNC FORM (Tab -> UI) =================
   syncForm() {
     this._syncing = true;
@@ -318,6 +361,9 @@ export class Tabs {
     if (this.ui.method) this.ui.method.value = tab.method || "GET";
     if (this.ui.url) this.ui.url.value = tab.url || "";
 
+    // Validasi UI murni berdasarkan method tab
+    this._updateMethodUI(tab.method);
+
     if (typeof tab.body === "object") {
       if (this.ui.body) this.ui.body.value = tab.body.raw || "";
     } else {
@@ -327,16 +373,19 @@ export class Tabs {
     if (this.ui.authType) this.ui.authType.value = tab.auth?.type || "";
     if (this.ui.authValue) this.ui.authValue.value = tab.auth?.value || "";
 
-    // ADDED: Sync GraphQL fields ke UI
+    // Sync GraphQL fields ke UI
     if (this.ui.graphqlQuery) this.ui.graphqlQuery.value = tab.body?.graphql?.query || "";
     if (this.ui.graphqlVariables) this.ui.graphqlVariables.value = tab.body?.graphql?.variables || "";
 
-    // ADDED: Sync gRPC fields ke UI
+    // Sync gRPC data values ke UI
     if (this.ui.grpcServiceMethod) this.ui.grpcServiceMethod.value = tab.body?.grpc?.serviceMethod || "";
     if (this.ui.grpcBody) this.ui.grpcBody.value = tab.body?.grpc?.body || "";
     if (this.ui.protoFileName) {
       this.ui.protoFileName.innerText = tab.body?.grpc?.protoFileName || "No .proto loaded";
     }
+
+    // Panggil sinkronisasi state gRPC handler
+    window.GrpcHandler?.syncFromState?.(tab, this.ui);
 
     window.__syncMonacoFromTab?.();
 
@@ -353,31 +402,47 @@ export class Tabs {
     tab.method = this.ui.method?.value || "GET";
     tab.url = this.ui.url?.value || "";
 
+    const isGrpc = (tab.method || "").toUpperCase() === "GRPC";
+
+    // Panggil pembersih tampilan UI berdasarkan method secara langsung
+    this._updateMethodUI(tab.method);
+
     tab.body ||= {
-      mode: "none",
+      mode: isGrpc ? "grpc" : "none",
       raw: "",
       formData: [],
       urlencoded: [],
       graphql: { query: "", variables: "" },
-      grpc: { protoFileName: "", serviceMethod: "", body: "" }
+      grpc: { protoFileName: "", serviceMethod: "", body: "", metadata: [] }
     };
 
-    // HANYA RAW YANG DISYNC DARI TEXTAREA
+    // Atur mode body secara tegas berdasarkan apakah method-nya gRPC atau bukan
+    if (isGrpc) {
+      tab.body.mode = "grpc";
+    } else {
+      if (tab.body.mode === "grpc") {
+        tab.body.mode = "none"; // Reset dari grpc jika pindah ke method HTTP (termasuk GET)
+      }
+    }
+
     if (tab.body.mode === "raw") {
       tab.body.raw = this.ui.body?.value || "";
     }
 
-    // ADDED: Sync dari UI ke Tab Object jika mode GraphQL/gRPC
     tab.body.graphql ||= { query: "", variables: "" };
     if (tab.body.mode === "graphql") {
       tab.body.graphql.query = this.ui.graphqlQuery?.value || "";
       tab.body.graphql.variables = this.ui.graphqlVariables?.value || "";
     }
 
-    tab.body.grpc ||= { protoFileName: "", serviceMethod: "", body: "" };
-    if (tab.body.mode === "grpc" || tab.method === "GRPC") {
+    tab.body.grpc ||= { protoFileName: "", serviceMethod: "", body: "", metadata: [] };
+    
+    // HANYA ambil data gRPC jika method-nya benar-benar GRPC
+    if (isGrpc) {
+      tab.body.mode = "grpc";
       tab.body.grpc.serviceMethod = this.ui.grpcServiceMethod?.value || "";
       tab.body.grpc.body = this.ui.grpcBody?.value || "";
+      tab.body.grpc.metadata ||= [];
     }
 
     tab.formData ||= [];
@@ -412,45 +477,52 @@ export class Tabs {
     const data = Storage.load();
 
     if (data?.tabs?.length) {
-      this.tabs = data.tabs.map(tab => ({
-        id: tab.id,
-        name: tab.name || "Untitled",
-        method: tab.method || "GET",
-        url: tab.url || "",
-        body: typeof tab.body === "object"
-          ? {
-              mode: tab.body.mode || "raw",
-              raw: tab.body.raw || "",
-              formData: tab.body.formData || [],
-              urlencoded: tab.body.urlencoded || [],
-              // ADDED: Safe fallback untuk tab lama
-              graphql: tab.body.graphql || { query: "", variables: "" },
-              grpc: tab.body.grpc || { protoFileName: "", serviceMethod: "", body: "" }
-            }
-          : {
-              mode: "raw",
-              raw: tab.body || "",
-              formData: [],
-              urlencoded: [],
-              graphql: { query: "", variables: "" },
-              grpc: { protoFileName: "", serviceMethod: "", body: "" }
-            },
-        history: Array.isArray(tab.history) ? tab.history : [],
-        pinned: !!tab.pinned,
-        opened: tab.opened === undefined ? true : tab.opened,
+      this.tabs = data.tabs.map(tab => {
+        const isGrpcTab = (tab.method || "").toUpperCase() === "GRPC" || tab.body?.mode === "grpc";
+        return {
+          id: tab.id,
+          name: tab.name || "Untitled",
+          method: tab.method || "GET",
+          url: tab.url || "",
+          body: typeof tab.body === "object"
+            ? {
+                mode: tab.body.mode || (isGrpcTab ? "grpc" : "raw"),
+                raw: tab.body.raw || "",
+                formData: tab.body.formData || [],
+                urlencoded: tab.body.urlencoded || [],
+                graphql: tab.body.graphql || { query: "", variables: "" },
+                grpc: {
+                  protoFileName: tab.body.grpc?.protoFileName || "",
+                  serviceMethod: tab.body.grpc?.serviceMethod || "",
+                  body: tab.body.grpc?.body || "",
+                  metadata: tab.body.grpc?.metadata || []
+                }
+              }
+            : {
+                mode: isGrpcTab ? "grpc" : "raw",
+                raw: tab.body || "",
+                formData: [],
+                urlencoded: [],
+                graphql: { query: "", variables: "" },
+                grpc: { protoFileName: "", serviceMethod: "", body: "", metadata: [] }
+              },
+          history: Array.isArray(tab.history) ? tab.history : [],
+          pinned: !!tab.pinned,
+          opened: tab.opened === undefined ? true : tab.opened,
 
-        params: tab.params || {},
-        headers: tab.headers || {},
+          params: tab.params || {},
+          headers: tab.headers || {},
 
-        auth: tab.auth || { type: "", value: "" },
+          auth: tab.auth || { type: "", value: "" },
 
-        scripts: {
-          pre: tab.scripts?.pre || "",
-          post: tab.scripts?.post || ""
-        }
-      }));
+          scripts: {
+            pre: tab.scripts?.pre || "",
+            post: tab.scripts?.post || ""
+          }
+        };
+      });
 
-      const exists = this.tabs.find(t => t.id === data.activeId);
+      const exists = this.tabs.helpers?.find?.(t => t.id === data.activeId) || this.tabs.find(t => t.id === data.activeId);
       this.activeId = exists ? data.activeId : this.tabs[0].id;
 
     } else {
