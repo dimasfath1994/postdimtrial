@@ -1097,20 +1097,8 @@ ui.send.onclick = async () => {
       body = GraphqlHandler.prepareRequestBody(tab, resolveVars);
     } 
     if (tabBody?.mode === "grpc") {
-      const GrpcHandler = {
-          prepareRequestBody(tab, resolveVars) {
-              // Ambil service_method dan payload dari input UI gRPC tab terkait
-              return {
-                  serviceMethod: resolveVars(tab.body.grpc.serviceMethod), // contoh: "auth.AuthService/Login"
-                  payload: JSON.parse(resolveVars(tab.body.grpc.payload || "{}"))
-              };
-          },
-          syncToState(tab, ui) {
-              // sinkronisasi UI ke tab state jika diperlukan
-          }
-      };
-      body = GrpcHandler.prepareRequestBody(tab, resolveVars);
-    }
+    body = GrpcHandler.prepareRequestBody(tab, resolveVars);
+  }
 
     if (tabBody?.mode === "form-data") {
       body = Object.fromEntries(
