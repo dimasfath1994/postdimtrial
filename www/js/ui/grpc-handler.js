@@ -54,7 +54,6 @@ export class GrpcHandler {
                 const opt = document.createElement("option");
                 
                 // Pastikan format 'method' dari backend sudah "Service/Method"
-                // Jika backend mengirim murni nama method, kita gabungkan secara manual dengan item.service
                 const fullServiceMethod = method.includes('/') ? method : `${item.service}/${method}`;
                 const methodName = method.includes('/') ? method.split('/').pop() : method;
 
@@ -108,6 +107,43 @@ export class GrpcHandler {
     }
   }
 
+  // =========================================================================
+  // RENDER & SYNC METADATA gRPC
+  // =========================================================================
+  static renderGrpcMetadata(tab) {
+    const container = document.getElementById("grpcMetadataBox");
+    if (!container) return;
+    
+    container.innerHTML = "";
+    
+    tab.body ||= {};
+    tab.body.grpc ||= {};
+    tab.body.grpc.metadata ||= [{ key: "", value: "", active: true }];
+
+    const metadataList = tab.body.grpc.metadata;
+
+    metadataList.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.style.cssText = "display: flex; align-items: center; border-bottom: 1px solid #2a2a2a; padding: 4px 10px;";
+      
+      row.innerHTML = `
+        <div style="width: 30px; text-align: center;">
+          <input type="checkbox" class="grpc-meta-active" data-index="${index}" ${item.active !== false ? "checked" : ""}>
+        </div>
+        <div style="flex: 1; padding: 0 5px;">
+          <input type="text" class="grpc-meta-key" data-index="${index}" value="${item.key || ""}" placeholder="Key" style="width: 100%; background: transparent; border: none; color: #fff; outline: none; font-size: 12px;">
+        </div>
+        <div style="flex: 1; padding: 0 5px;">
+          <input type="text" class="grpc-meta-val" data-index="${index}" value="${item.value || ""}" placeholder="Value" style="width: 100%; background: transparent; border: none; color: #fff; outline: none; font-size: 12px;">
+        </div>
+        <div style="width: 30px; text-align: center;">
+          <button type="button" class="grpc-meta-del" data-index="${index}" style="background: none; border: none; color: #888; cursor: pointer; font-size: 14px;">&times;</button>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  }
+
   static syncToState(tab, ui = {}) {
     if (!tab) return;
     tab.body ||= {};
@@ -118,6 +154,29 @@ export class GrpcHandler {
     
     tab.body.grpc.body = this.editors.body ? this.editors.body.getValue() : (inputBody?.value || "");
     tab.body.grpc.serviceMethod = inputMethod?.value || "";
+
+    // Sync input metadata dinamis dari DOM langsung ke state tab
+    const container = document.getElementById("grpcMetadataBox");
+    if (container && tab.body.grpc.metadata) {
+      container.querySelectorAll("input.grpc-meta-key").forEach(input => {
+        const idx = input.dataset.index;
+        if (idx !== undefined && tab.body.grpc.metadata[idx]) {
+          tab.body.grpc.metadata[idx].key = input.value;
+        }
+      });
+      container.querySelectorAll("input.grpc-meta-val").forEach(input => {
+        const idx = input.dataset.index;
+        if (idx !== undefined && tab.body.grpc.metadata[idx]) {
+          tab.body.grpc.metadata[idx].value = input.value;
+        }
+      });
+      container.querySelectorAll("input.grpc-meta-active").forEach(input => {
+        const idx = input.dataset.index;
+        if (idx !== undefined && tab.body.grpc.metadata[idx]) {
+          tab.body.grpc.metadata[idx].active = input.checked;
+        }
+      });
+    }
   }
 
   static setupUI(ui, tabs, scheduleSync) {
@@ -136,6 +195,44 @@ export class GrpcHandler {
     btnFetchReflection?.addEventListener("click", () => {
       const endpoint = document.getElementById("url")?.value || "";
       this.loadReflectionServices(endpoint);
+    });
+
+    // Setup event listener interaktif untuk tabel Metadata gRPC
+    const metadataBox = document.getElementById("grpcMetadataBox");
+    metadataBox?.addEventListener("input", (e) => {
+      if (this.isSyncingFromState) return;
+      handleInputChange();
+    });
+
+    metadataBox?.addEventListener("change", (e) => {
+      if (this.isSyncingFromState) return;
+      handleInputChange();
+    });
+
+    metadataBox?.addEventListener("click", (e) => {
+      if (e.target.classList.contains("grpc-meta-del")) {
+        const idx = parseInt(e.target.dataset.index, 10);
+        const activeTab = tabs.getActive();
+        if (activeTab && activeTab.body?.grpc?.metadata) {
+          activeTab.body.grpc.metadata.splice(idx, 1);
+          if (activeTab.body.grpc.metadata.length === 0) {
+            activeTab.body.grpc.metadata.push({ key: "", value: "", active: true });
+          }
+          this.renderGrpcMetadata(activeTab);
+          handleInputChange();
+        }
+      }
+    });
+
+    document.getElementById("addGrpcMetadata")?.addEventListener("click", () => {
+      const activeTab = tabs.getActive();
+      if (!activeTab) return;
+      activeTab.body ||= {};
+      activeTab.body.grpc ||= {};
+      activeTab.body.grpc.metadata ||= [];
+      activeTab.body.grpc.metadata.push({ key: "", value: "", active: true });
+      this.renderGrpcMetadata(activeTab);
+      handleInputChange();
     });
 
     grpcTabButtons.forEach(btn => {
@@ -242,6 +339,9 @@ export class GrpcHandler {
       if (inputMethod) {
         inputMethod.value = tab.body?.grpc?.serviceMethod || "";
       }
+
+      // Render ulang metadata dari state tab
+      this.renderGrpcMetadata(tab);
       
       const protoFileNameEl = document.getElementById("protoFileName");
       if (protoFileNameEl) {
@@ -309,46 +409,57 @@ export class GrpcHandler {
       parsedData = this.safeParseJSON(resolvedBodyText);
     }
 
+    // Ambil metadata yang aktif saja untuk dikirimkan
+    const rawMetadata = tabBody?.grpc?.metadata || [];
+    const resolvedMetadata = {};
+    rawMetadata.forEach(m => {
+      if (m.active !== false && m.key && m.key.trim() !== "") {
+        resolvedMetadata[resolveVars(m.key).trim()] = resolveVars(m.value || "");
+      }
+    });
+
     return {
       serviceMethod: cleanedServiceMethod,
       protoFileName: tabBody?.grpc?.protoFileName || "",
+      metadata: resolvedMetadata,
       data: parsedData
     };
   }
 
   static async sendRequest(tab, resolveVars = (v) => v) {
     const payload = this.prepareRequestBody(tab, resolveVars);
-    
-    // --- VALIDASI TAMBAHAN DENGAN RETURN ---
     if (!payload || !payload.serviceMethod) {
-      alert("gRPC Service / Method belum dipilih atau kosong!");
-      return; // WAJIB ADA INI SUPAYA TIDAK LANJUT KE BAWAH
+      throw new Error("gRPC Service / Method belum dipilih atau belum diisi!");
     }
-
-    // Pastikan format mengandung karakter '/' (Service/Method)
-    if (!payload.serviceMethod.includes('/')) {
-      alert(`Format Service/Method salah ("${payload.serviceMethod}"). Wajib menggunakan format 'NamaService/NamaMethod' (Contoh: grpc.health.v1.Health/Check). Silakan klik 'Fetch Reflection' terlebih dahulu.`);
-      return; // WAJIB ADA INI JUGA
-    }
-    // ---------------------------------------------------------
     
     const endpoint = document.getElementById("url")?.value?.trim();
     if (!endpoint) {
-      alert("gRPC Endpoint URL belum diisi!");
-      return; // WAJIB ADA INI JUGA
+      throw new Error("gRPC Endpoint URL belum diisi!");
     }
 
     try {
       const response = await this.invokeTauri("grpc_request", {
         endpoint: endpoint,
         serviceMethod: payload.serviceMethod,
+        metadata: payload.metadata, // Disiapkan untuk dikirim ke backend Tauri/Rust
         payload: payload.data 
       });
+
+      if (response) {
+        if (response.is_stream && Array.isArray(response.body)) {
+          console.log(">>> [gRPC Stream Responses]:", response.body);
+          response.body_formatted = response.body.map(item => JSON.stringify(item, null, 2)).join("\n\n");
+        } else {
+          response.body_formatted = typeof response.body === "string" 
+            ? response.body 
+            : JSON.stringify(response.body, null, 2);
+        }
+      }
 
       return response;
     } catch (err) {
       console.error("❌ gRPC Request Error:", err);
-      alert(typeof err === 'string' ? err : (err?.message || JSON.stringify(err)));
+      throw err;
     }
   }
 }

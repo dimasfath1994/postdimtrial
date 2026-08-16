@@ -210,11 +210,25 @@
       </div>
 
       <!-- 2. METADATA PANEL -->
-      <div class="grpc-tab-panel hidden" data-grpc-panel="metadata" style="margin-top: 10px;">
-        <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">gRPC Metadata (Key-Value Headers)</div>
-        <div id="grpcMetadataBox"></div>
-        <button id="addGrpcMetadata" type="button">+ Metadata</button>
+    <div class="grpc-tab-panel hidden" data-grpc-panel="metadata" style="margin-top: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <div style="font-size: 12px; font-weight: bold; color: #ccc;">gRPC Metadata (Key-Value Headers)</div>
       </div>
+      
+      <!-- Tabel bergaya Postman -->
+      <div class="key-val-table" style="border: 1px solid #333; border-radius: 4px; overflow: hidden; background: #1e1e1e;">
+        <div style="display: flex; background: #2a2a2a; border-bottom: 1px solid #333; font-size: 11px; color: #aaa; padding: 6px 10px; font-weight: bold;">
+          <div style="width: 30px; text-align: center;">#</div>
+          <div style="flex: 1; padding: 0 5px;">Key</div>
+          <div style="flex: 1; padding: 0 5px;">Value</div>
+          <div style="width: 30px;"></div>
+        </div>
+        <div id="grpcMetadataBox" style="max-height: 200px; overflow-y: auto;">
+          <!-- Baris dinamis akan dirender di sini -->
+        </div>
+      </div>
+      <button id="addGrpcMetadata" type="button" style="margin-top: 8px; font-size: 11px; padding: 4px 8px; cursor: pointer;">+ Add Metadata</button>
+    </div>
 
       <!-- 3. SETTINGS PANEL -->
       <div class="grpc-tab-panel hidden" data-grpc-panel="settings" style="margin-top: 10px;">
