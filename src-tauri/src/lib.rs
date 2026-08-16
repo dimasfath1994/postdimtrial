@@ -1,5 +1,5 @@
 use serde_json::json;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use tokio;
 use base64::{Engine as _, engine::general_purpose};
 use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
@@ -77,7 +77,7 @@ mod commands {
         let client = reqwest::Client::builder()
             .cookie_store(true)
             .redirect(reqwest::redirect::Policy::limited(10))
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(Duration::from_secs(30))
             .danger_accept_invalid_certs(true)
             .build()
             .map_err(|e| e.to_string())?;
@@ -105,7 +105,7 @@ mod commands {
         let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
             .map_err(|_| "Invalid Method")?;
 
-        let start = std::time::Instant::now();
+        let start = Instant::now();
         let mut request = client.request(req_method, &url).headers(header_map);
     
         if let Some(b) = body {
@@ -172,7 +172,7 @@ mod commands {
         let client = reqwest::Client::builder()
             .cookie_store(true)
             .redirect(reqwest::redirect::Policy::limited(10))
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(Duration::from_secs(30))
             .danger_accept_invalid_certs(true)
             .build()
             .map_err(|e| format!("Failed to build client: {}", e))?;
@@ -204,7 +204,7 @@ mod commands {
         let req_method = reqwest::Method::from_bytes(actual_method.to_uppercase().as_bytes())
             .map_err(|_| "Invalid Method")?;
 
-        let start = std::time::Instant::now();
+        let start = Instant::now();
         let request_builder = client.request(req_method, &url).headers(header_map);
 
         let request = if body.is_null() || body.as_object().map_or(false, |obj| obj.is_empty()) {
@@ -291,7 +291,7 @@ mod commands {
     }
 
     // ==========================================
-    // PERBAIKAN: GRPC REQUEST (POSTMAN STYLE) DENGAN CACHE & FIX STREAM/ERROR HANDLING
+    // PERBAIKAN: GRPC REQUEST DENGAN TIMEOUT 30 DETIK AGAR TIDAK HANG
     // ==========================================
     #[tauri::command]
     pub async fn grpc_request(
@@ -307,7 +307,6 @@ mod commands {
             endpoint.clone()
         };
 
-        // PERBAIKAN: Ambil Host untuk request Reflection secara dinamis
         let parsed_uri = formatted_endpoint.parse::<http::Uri>().map_err(|_| "Format URL tidak valid")?;
         let target_host = parsed_uri.host().unwrap_or("").to_string();
 
@@ -322,7 +321,7 @@ mod commands {
         };
 
         let channel = match tokio::time::timeout(
-            std::time::Duration::from_secs(10),
+            Duration::from_secs(10),
             async {
                 let endpoint_uri = tonic::transport::Endpoint::from_shared(formatted_endpoint.clone())?;
                 endpoint_uri
@@ -354,12 +353,11 @@ mod commands {
             let mut reflection_success = false;
             let mut reflection_err_detail = String::new();
 
-            // PERBAIKAN: Penanganan Stream v1 dan Error extraction
             let reflection_v1_result = tokio::time::timeout(
-                std::time::Duration::from_secs(4),
+                Duration::from_secs(4),
                 async {
-                    let mut client_v1 = tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient::new(channel.clone());
-                    let req_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
+                    let mut client_v1 = ServerReflectionClient::new(channel.clone());
+                    let req_v1 = ServerReflectionRequest {
                         host: target_host.clone(),
                         message_request: Some(
                             tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
@@ -367,7 +365,7 @@ mod commands {
                     };
                     let response = client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await?;
                     let mut stream = response.into_inner();
-                    stream.message().await // Kembalikan Result, jangan disembunyikan jika error
+                    stream.message().await
                 }
             ).await;
 
@@ -393,10 +391,9 @@ mod commands {
                 _ => {}
             }
 
-            // PERBAIKAN: Fallback ke v1alpha beserta Error extraction
             if !reflection_success {
                 let reflection_v1alpha_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(4),
+                    Duration::from_secs(4),
                     async {
                         let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
                         let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
@@ -435,7 +432,6 @@ mod commands {
             }
 
             if !reflection_success {
-                // PERBAIKAN: Jika gagal, detail error dikembalikan ke Frontend agar user tahu alasannya
                 return Err(format!("Gagal memuat descriptor untuk service '{}'. Detail Server: {}", service_name, reflection_err_detail));
             }
 
@@ -493,10 +489,11 @@ mod commands {
         let path = http::uri::PathAndQuery::from_maybe_shared(path_uri.clone())
             .map_err(|_| format!("Invalid Route Path: {}", path_uri))?;
 
-        let codec = super::RawBytesCodec::default();
+        let codec = RawBytesCodec::default();
         
+        // FIX: Eksekusi unary dibungkus timeout 30 detik agar tidak menggantung tanpa batas jika server tidak menutup stream
         let response = match tokio::time::timeout(
-            std::time::Duration::from_secs(30),
+            Duration::from_secs(30),
             client.unary(req, path, codec)
         ).await {
             Ok(Ok(res)) => res,
@@ -524,13 +521,12 @@ mod commands {
     }
 
     // ==========================================
-    // PERBAIKAN: GRPC DISCOVERY YANG MENDUKUNG HTTPS DAN ERROR HANDLING LEBIH BAIK
+    // GRPC DISCOVERY (UTUH DENGAN VERSI LAMA)
     // ==========================================
     #[tauri::command]
     pub async fn discover_grpc_services(
         endpoint: String
     ) -> Result<serde_json::Value, String> {
-        // PERBAIKAN: Jika endpoint sudah berawalan https://, JANGAN ditimpa ke http://
         let uri_endpoint = if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
             format!("http://{}", endpoint)
         } else {
@@ -541,7 +537,7 @@ mod commands {
         let target_host = parsed_uri.host().unwrap_or("").to_string();
 
         let channel = match tokio::time::timeout(
-            std::time::Duration::from_secs(10),
+            Duration::from_secs(10),
             async {
                 let endpoint_uri = tonic::transport::Endpoint::from_shared(uri_endpoint)?;
                 endpoint_uri
@@ -560,7 +556,7 @@ mod commands {
         let mut discovery_err_detail = String::new();
 
         let v1_res = tokio::time::timeout(
-            std::time::Duration::from_secs(4),
+            Duration::from_secs(4),
             async {
                 let mut client_v1 = ServerReflectionClient::new(channel.clone());
                 let req_v1 = ServerReflectionRequest {
@@ -610,7 +606,7 @@ mod commands {
 
         if raw_service_names.is_empty() {
             let v1alpha_res = tokio::time::timeout(
-                std::time::Duration::from_secs(4),
+                Duration::from_secs(4),
                 async {
                     let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
                     let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
@@ -669,7 +665,7 @@ mod commands {
             let mut reflection_success = false;
 
             let desc_v1_res = tokio::time::timeout(
-                std::time::Duration::from_secs(3),
+                Duration::from_secs(3),
                 async {
                     let mut client_v1_desc = ServerReflectionClient::new(channel.clone());
                     let req_desc_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
@@ -697,7 +693,7 @@ mod commands {
 
             if !reflection_success {
                 let desc_v1alpha_res = tokio::time::timeout(
-                    std::time::Duration::from_secs(3),
+                    Duration::from_secs(3),
                     async {
                         let mut client_v1alpha_desc = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
                         let req_desc_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
