@@ -421,11 +421,16 @@ mod commands {
         let output_desc = method_desc.output();
 
         // 4. KONVERSI PAYLOAD (JSON MENTAH) -> BINER PROTOBUF (DYNAMIC MESSAGE)
-        let json_str = payload.to_string();
-        let mut deserializer = serde_json::Deserializer::from_str(&json_str);
-        
-        let request_msg = prost_reflect::DynamicMessage::deserialize(input_desc, &mut deserializer)
-            .map_err(|e| format!("Format JSON tidak sesuai dengan skema Protobuf gRPC: {}", e))?;
+        let request_msg = if payload.is_null() || (payload.is_object() && payload.as_object().unwrap().is_empty()) {
+            // Jika payload kosong, buat DynamicMessage kosong berdasarkan input_desc
+            prost_reflect::DynamicMessage::new(input_desc.clone())
+        } else {
+            let json_str = payload.to_string();
+            let mut deserializer = serde_json::Deserializer::from_str(&json_str);
+            
+            prost_reflect::DynamicMessage::deserialize(input_desc, &mut deserializer)
+                .map_err(|e| format!("Format JSON tidak sesuai dengan skema Protobuf gRPC: {}", e))?
+        };
         
         let mut req_bytes = Vec::new();
         prost::Message::encode(&request_msg, &mut req_bytes)
