@@ -304,12 +304,10 @@ mod commands {
             return Err("Format service_method salah. Gunakan format 'Service/Method' atau 'Service / Method'".to_string());
         };
 
-        // DIPERBAIKI: Menggunakan .http2_only() agar tidak hang pada server gRPC plaintext (h2c)
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             tonic::transport::Channel::from_shared(formatted_endpoint)
                 .map_err(|e| format!("Invalid Endpoint URL: {}", e))?
-                .http2_only()
                 .connect()
         ).await {
             Ok(Ok(ch)) => ch,
@@ -469,12 +467,10 @@ mod commands {
 
         let uri_endpoint = format!("http://{}", clean_endpoint);
 
-        // DIPERBAIKI: Menggunakan .http2_only() pada discovery
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             tonic::transport::Channel::from_shared(uri_endpoint)
                 .map_err(|e| format!("Invalid URL: {}", e))?
-                .http2_only()
                 .connect()
         ).await {
             Ok(Ok(ch)) => ch,
