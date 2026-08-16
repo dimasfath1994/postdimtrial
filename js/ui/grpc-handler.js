@@ -301,7 +301,7 @@ export class GrpcHandler {
     };
   }
 
- static async sendRequest(tab, resolveVars = (v) => v) {
+static async sendRequest(tab, resolveVars = (v) => v) {
     const payload = this.prepareRequestBody(tab, resolveVars);
     if (!payload || !payload.serviceMethod) {
       throw new Error("gRPC Service / Method belum dipilih atau belum diisi!");
@@ -313,19 +313,26 @@ export class GrpcHandler {
     }
 
     try {
-      // Memanggil backend Rust
-      const response = await this.invokeTauri("grpc_request", {
-        endpoint: endpoint,
-        serviceMethod: payload.serviceMethod,
-        payload: payload.data 
-      });
+      // Buat janji timeout 10 detik di JavaScript
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout JS: Backend Rust macet / tidak merespons dalam 10 detik!")), 10000)
+      );
 
-      // Jika Berhasil, tampilkan isinya via alert
+      // Adu cepat antara fungsi invoke Tauri vs Timeout 10 detik
+      const response = await Promise.race([
+        this.invokeTauri("grpc_request", {
+          endpoint: endpoint,
+          serviceMethod: payload.serviceMethod,
+          payload: payload.data 
+        }),
+        timeoutPromise
+      ]);
+
       alert("✅ BERHASIL: " + JSON.stringify(response).substring(0, 150));
       return response;
     } catch (err) {
-      // Jika Gagal/Error dari Rust, tampilkan pesan error aslinya via alert!
-      alert("❌ ERROR RUST: " + err);
+      // Jika Rust macet (terkena timeout 10 detik) atau error, alert ini PASTI akan muncul!
+      alert("❌ ERROR / TIMEOUT: " + err.message);
       throw err;
     }
   }
