@@ -1137,21 +1137,38 @@ ui.send.onclick = async () => {
 
     let res;
 
-    if (tabBody?.mode === "grpc") {
-      res = await GrpcHandler.sendRequest(tab, resolveVars);
+   try {
+      if (tabBody?.mode === "grpc") {
+        res = await GrpcHandler.sendRequest(tab, resolveVars);
+        
+        // Memastikan jika ada format error dari handler, tidak membuat UI nge-blank
+        if (res && res.error) {
+           res = { status: "ERROR", data: res.message, headers: {} };
+        }
+      }
+      else {
+        res = await RequestEngine.send({
+        method: ui.method.value,
+        url: finalUrl,
+        body,
+        headers: {
+          ...buildFinalHeaders(),
+          ...buildAuthHeaders()
+        },
+        bodyType: tab.body?.mode || "json"
+      });
     }
-    else {
-      res = await RequestEngine.send({
-      method: ui.method.value,
-      url: finalUrl,
-      body,
-      headers: {
-        ...buildFinalHeaders(),
-        ...buildAuthHeaders()
-      },
-       bodyType: tab.body?.mode || "json"
-    });
-  }
+  }  
+  catch (err) {
+      // INI BAGIAN PALING PENTING
+      // Jika terjadi error (misal command Rust tidak ditemukan), 
+      // error-nya akan ditangkap dan dijadikan text agar muncul di layar.
+      res = { 
+        status: "FAIL", 
+        data: err.toString() || "Unknown Error Occurred in UI", 
+        headers: {} 
+      };
+    }
 
     const time = Math.round(performance.now() - start);
 
