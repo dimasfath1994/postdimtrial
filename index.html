@@ -68,13 +68,22 @@
 
   <button id="send">Send Request</button>
 
-  <!-- POSTMAN STYLE TABS -->
+  <!-- POSTMAN STYLE TABS (HTTP) -->
   <div id="reqTabs" class="req-tabs">
     <span class="req-tab active" data-tab="params">Params</span>
     <span class="req-tab" data-tab="body">Body</span>
     <span class="req-tab" data-tab="headers">Headers</span>
     <span class="req-tab" data-tab="auth">Auth</span>
     <span class="req-tab" data-tab="scripts">Scripts</span>
+  </div>
+
+  <!-- POSTMAN STYLE TABS (gRPC - Tab Service Definition dihapus karena digabung di header atas) -->
+  <div id="grpcReqTabs" class="req-tabs hidden">
+    <span class="req-tab active" data-grpc-tab="message">Message</span>
+    <span class="req-tab" data-grpc-tab="metadata">Metadata</span>
+    <span class="req-tab" data-grpc-tab="authorization" data-shared-panel="auth">Auth</span>
+    <span class="req-tab" data-grpc-tab="scripts" data-shared-panel="scripts">Scripts</span>
+    <span class="req-tab" data-grpc-tab="settings">Settings</span>
   </div>
 
   <!-- DYNAMIC CONTENT -->
@@ -94,7 +103,6 @@
         <button class="body-tab" data-mode="form-data">form-data</button>
         <button class="body-tab" data-mode="urlencoded">x-www-form-urlencoded</button>
         <button class="body-tab" data-mode="graphql">GraphQL</button>
-        <button class="body-tab" data-mode="grpc">gRPC</button>
       </div>
 
       <!-- RAW BODY -->
@@ -132,36 +140,6 @@
           </div>
         </div>
       </div>
-
-      <!-- gRPC BOX (Perbaikan Fokus) -->
-      <div id="grpcBox" class="hidden" style="margin-top: 10px;">
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          
-          <!-- Reflection Status & Upload -->
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <button id="chooseProtoBtn" type="button">+ Upload .proto</button>
-            <input type="file" id="grpcProtoFile" accept=".proto" class="hidden">
-            <span id="protoFileName" style="font-size: 12px; color: #aaa;">No .proto loaded</span>
-            
-            <button id="btnFetchReflection" type="button" style="margin-left: auto; font-size: 11px; padding: 3px 8px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 4px;">
-              🔄 Refresh Reflection
-            </button>
-          </div>
-
-          <!-- Service / Method Input -->
-          <div>
-            <input id="grpcServiceMethod" list="grpcServicesList" placeholder="Service/Method (e.g. /helloworld.Greeter/SayHello)" style="width: 100%; padding: 6px; background: #1e1e1e; border: 1px solid #333; color: #fff;" />
-            <datalist id="grpcServicesList"></datalist>
-          </div>
-
-          <!-- JSON Body -->
-          <div>
-            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">JSON Message Body</div>
-            <div id="grpcMessageEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
-            <textarea id="grpcBody" class="hidden" placeholder='{ "name": "World" }'></textarea>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- HEADERS -->
@@ -170,7 +148,7 @@
       <button id="addHeader">+ Header</button>
     </div>
 
-    <!-- AUTH -->
+    <!-- AUTH (Digunakan bersama untuk HTTP & gRPC) -->
     <div class="tab-panel hidden" data-panel="auth">
       <h4>Auth</h4>
       <select id="authType">
@@ -181,7 +159,7 @@
       <input id="authValue" placeholder="token / key">
     </div>
 
-    <!-- SCRIPTS -->
+    <!-- SCRIPTS (Digunakan bersama untuk HTTP & gRPC) -->
     <div class="tab-panel hidden" data-panel="scripts">
       <div class="script-section">
         <div class="script-header">Pre Script</div>
@@ -192,6 +170,59 @@
         <div id="postEditor" class="monaco-editor"></div>
       </div>
     </div>
+
+    <!-- gRPC MAIN PANELS CONTAINER -->
+    <div id="grpcPanelsContainer" class="hidden">
+      
+      <!-- UNIFIED gRPC HEADER (Service/Method + Reflection / Proto Upload di satu tempat) -->
+      <div id="grpcHeaderControls" style="background: #181818; padding: 12px; border: 1px solid #333; border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;">
+        
+        <!-- Baris 1: Service / Method -->
+        <div>
+          <div style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #ccc;">Service / Method</div>
+          <input id="grpcServiceMethod" list="grpcServicesList" placeholder="Service/Method (e.g. /helloworld.Greeter/SayHello)" style="width: 100%; padding: 6px; background: #1e1e1e; border: 1px solid #333; color: #fff; border-radius: 4px;" />
+          <datalist id="grpcServicesList"></datalist>
+        </div>
+
+        <!-- Baris 2: Reflection & Proto Upload Tools -->
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 4px;">
+          <button id="chooseProtoBtn" type="button" style="padding: 4px 10px; font-size: 12px; cursor: pointer;">+ Upload .proto</button>
+          <input type="file" id="grpcProtoFile" accept=".proto" class="hidden">
+          <span id="protoFileName" style="font-size: 12px; color: #aaa;">No .proto loaded</span>
+          
+          <button id="btnFetchReflection" type="button" style="margin-left: auto; font-size: 11px; padding: 5px 10px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 4px;">
+            🔄 Refresh Reflection
+          </button>
+        </div>
+
+      </div>
+
+      <!-- 1. MESSAGE PANEL -->
+      <div class="grpc-tab-panel" data-grpc-panel="message" style="margin-top: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">Compose Message (JSON)</div>
+            <div id="grpcMessageEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
+            <textarea id="grpcBody" class="hidden" placeholder='{ "name": "World" }'></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. METADATA PANEL -->
+      <div class="grpc-tab-panel hidden" data-grpc-panel="metadata" style="margin-top: 10px;">
+        <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">gRPC Metadata (Key-Value Headers)</div>
+        <div id="grpcMetadataBox"></div>
+        <button id="addGrpcMetadata" type="button">+ Metadata</button>
+      </div>
+
+      <!-- 3. SETTINGS PANEL -->
+      <div class="grpc-tab-panel hidden" data-grpc-panel="settings" style="margin-top: 10px;">
+        <div style="font-size: 12px; color: #ccc;">gRPC Request Settings</div>
+        <label style="display: block; margin-top: 8px; font-size: 12px;"><input type="checkbox" id="grpcUseTls"> Use TLS / SSL</label>
+      </div>
+
+    </div>
+
   </div>
 
   <!-- STATUS -->
@@ -219,8 +250,8 @@
 <!-- ENV PANEL -->
 <div id="envPanel" class="env-panel hidden">
   <div class="env-header">
-    <h3>Variables</h3>
-    <button id="closeEnvPanel">✕</button>
+  <h3>Variables</h3>
+  <button id="closeEnvPanel">✕</button>
   </div>
   <div id="envList" class="env-list"></div>
   <div class="env-form">
