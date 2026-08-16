@@ -177,11 +177,12 @@
       <!-- UNIFIED gRPC HEADER (Service/Method + Reflection / Proto Upload di satu tempat) -->
       <div id="grpcHeaderControls" style="background: #181818; padding: 12px; border: 1px solid #333; border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;">
         
-        <!-- Baris 1: Service / Method -->
+        <!-- Baris 1: Service / Method (Diubah menjadi select dropdown) -->
         <div>
           <div style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #ccc;">Service / Method</div>
-          <input id="grpcServiceMethod" list="grpcServicesList" placeholder="Service/Method (e.g. /helloworld.Greeter/SayHello)" style="width: 100%; padding: 6px; background: #1e1e1e; border: 1px solid #333; color: #fff; border-radius: 4px;" />
-          <datalist id="grpcServicesList"></datalist>
+          <select id="grpcServiceMethod" style="width: 100%; padding: 6px; background: #1e1e1e; border: 1px solid #333; color: #fff; border-radius: 4px;">
+            <option value="">-- Choose Service / Method (Refresh Reflection) --</option>
+          </select>
         </div>
 
         <!-- Baris 2: Reflection & Proto Upload Tools -->
