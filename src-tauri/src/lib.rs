@@ -283,7 +283,7 @@ mod commands {
     }
 
     // ==========================================
-    // MATURE & FINAL: GRPC REQUEST (POSTMAN STYLE) DENGAN CACHE & FIX STREAM
+    // PERBAIKAN: GRPC REQUEST (POSTMAN STYLE) DENGAN CACHE & FIX STREAM/ERROR HANDLING
     // ==========================================
     #[tauri::command]
     pub async fn grpc_request(
@@ -299,6 +299,10 @@ mod commands {
             endpoint.clone()
         };
 
+        // PERBAIKAN: Ambil Host untuk request Reflection secara dinamis
+        let parsed_uri = formatted_endpoint.parse::<http::Uri>().map_err(|_| "Format URL tidak valid")?;
+        let target_host = parsed_uri.host().unwrap_or("").to_string();
+
         let sanitized = service_method.trim();
         let normalized = sanitized.replace(" / ", "/").replace(" /", "/").replace("/ ", "/");
         let clean_path = normalized.trim_start_matches('/');
@@ -309,12 +313,10 @@ mod commands {
             return Err("Format service_method salah. Gunakan format 'Service/Method' atau 'Service / Method'".to_string());
         };
 
-        // PERBAIKAN: Konfigurasi TCP NoDelay dan KeepAlive pada Tonic agar HTTP/2 Cleartext stabil.
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             async {
                 let endpoint_uri = tonic::transport::Endpoint::from_shared(formatted_endpoint.clone())?;
-                
                 endpoint_uri
                     .tcp_nodelay(true)
                     .keep_alive_while_idle(true)
@@ -330,7 +332,6 @@ mod commands {
         let cache_key = formatted_endpoint.clone();
         let mut cached_pool = None;
 
-        // CEK CACHE: Membaca Protobuf Descriptor untuk menghindari re-reflection.
         {
             let cache = GRPC_DESCRIPTOR_CACHE.read().await;
             if let Some(pool) = cache.get(&cache_key) {
@@ -343,87 +344,91 @@ mod commands {
         } else {
             let mut fd_set = prost_types::FileDescriptorSet::default();
             let mut reflection_success = false;
+            let mut reflection_err_detail = String::new();
 
-            let mut client_v1 = tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient::new(channel.clone());
-            let req_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
-                host: "".to_string(),
-                message_request: Some(
-                    tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
-                ),
-            };
-
+            // PERBAIKAN: Penanganan Stream v1 dan Error extraction
             let reflection_v1_result = tokio::time::timeout(
-                std::time::Duration::from_secs(3),
+                std::time::Duration::from_secs(4),
                 async {
+                    let mut client_v1 = tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient::new(channel.clone());
+                    let req_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
+                        host: target_host.clone(),
+                        message_request: Some(
+                            tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
+                        ),
+                    };
                     let response = client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await?;
                     let mut stream = response.into_inner();
-                    let msg = stream.message().await;
-                    
-                    // FIX: Drop stream dan client untuk melepas HTTP/2 stream yang tertahan di multiplex
-                    drop(stream);
-                    drop(client_v1);
-                    
-                    if let Ok(Some(m)) = msg {
-                        Ok::<_, tonic::Status>(Some(m))
-                    } else {
-                        Ok(None)
-                    }
+                    stream.message().await // Kembalikan Result, jangan disembunyikan jika error
                 }
             ).await;
 
-            if let Ok(Ok(Some(msg))) = reflection_v1_result {
-                if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
-                    for fd_bytes in fd_res.file_descriptor_proto {
-                        if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
-                            fd_set.file.push(fd);
-                        }
+            match reflection_v1_result {
+                Ok(Ok(Some(msg))) => {
+                    match msg.message_response {
+                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
+                            for fd_bytes in fd_res.file_descriptor_proto {
+                                if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
+                                    fd_set.file.push(fd);
+                                }
+                            }
+                            reflection_success = !fd_set.file.is_empty();
+                        },
+                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                            reflection_err_detail = format!("v1 Error: {} (code {})", err.error_message, err.error_code);
+                        },
+                        _ => reflection_err_detail = "v1 Error: Invalid response type".to_string()
                     }
-                    reflection_success = !fd_set.file.is_empty();
-                }
+                },
+                Ok(Err(e)) => reflection_err_detail = format!("v1 Status: {}", e.message()),
+                Err(_) => reflection_err_detail = "v1 Timeout".to_string(),
+                _ => {}
             }
 
+            // PERBAIKAN: Fallback ke v1alpha beserta Error extraction
             if !reflection_success {
-                let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
-                let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
-                    host: "".to_string(),
-                    message_request: Some(
-                        tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
-                    ),
-                };
-
                 let reflection_v1alpha_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(3),
+                    std::time::Duration::from_secs(4),
                     async {
+                        let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
+                        let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
+                            host: target_host.clone(),
+                            message_request: Some(
+                                tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
+                            ),
+                        };
                         let response = client_v1alpha.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha))).await?;
                         let mut stream = response.into_inner();
-                        let msg = stream.message().await;
-                        
-                        // FIX: Drop stream dan client
-                        drop(stream);
-                        drop(client_v1alpha);
-                        
-                        if let Ok(Some(m)) = msg {
-                            Ok::<_, tonic::Status>(Some(m))
-                        } else {
-                            Ok(None)
-                        }
+                        stream.message().await
                     }
                 ).await;
 
-                if let Ok(Ok(Some(msg))) = reflection_v1alpha_result {
-                    if let Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) = msg.message_response {
-                        for fd_bytes in fd_res.file_descriptor_proto {
-                            if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
-                                fd_set.file.push(fd);
-                            }
+                match reflection_v1alpha_result {
+                    Ok(Ok(Some(msg))) => {
+                        match msg.message_response {
+                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
+                                for fd_bytes in fd_res.file_descriptor_proto {
+                                    if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
+                                        fd_set.file.push(fd);
+                                    }
+                                }
+                                reflection_success = !fd_set.file.is_empty();
+                            },
+                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                                reflection_err_detail = format!("{} | v1alpha Error: {} (code {})", reflection_err_detail, err.error_message, err.error_code);
+                            },
+                            _ => reflection_err_detail = format!("{} | v1alpha Error: Invalid response type", reflection_err_detail)
                         }
-                        reflection_success = !fd_set.file.is_empty();
-                    }
+                    },
+                    Ok(Err(e)) => reflection_err_detail = format!("{} | v1alpha Status: {}", reflection_err_detail, e.message()),
+                    Err(_) => reflection_err_detail = format!("{} | v1alpha Timeout", reflection_err_detail),
+                    _ => {}
                 }
             }
 
             if !reflection_success {
-                return Err(format!("Gagal memuat descriptor untuk service '{}' via Server Reflection.", service_name));
+                // PERBAIKAN: Jika gagal, detail error dikembalikan ke Frontend agar user tahu alasannya
+                return Err(format!("Gagal memuat descriptor untuk service '{}'. Detail Server: {}", service_name, reflection_err_detail));
             }
 
             let mut new_pool = prost_reflect::DescriptorPool::new();
@@ -433,19 +438,16 @@ mod commands {
             new_pool.decode_file_descriptor_set(pool_bytes.as_slice())
                 .map_err(|e| format!("Gagal memuat Protobuf descriptor pool: {}", e))?;
 
-            // SIMPAN KE CACHE
             let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
             cache.insert(cache_key.clone(), new_pool.clone());
             
             (new_pool, false)
         };
 
-        // Pencarian service descriptor dengan sistem cache-invalidation
         let service_desc = match pool.get_service_by_name(&service_name) {
             Some(desc) => desc,
             None => {
                 if was_cached {
-                    // Jika data cache ternyata usang (misal server diperbarui), hapus paksa agar user meretrieve ulang.
                     let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
                     cache.remove(&cache_key);
                     return Err(format!("Service '{}' usang atau tidak ditemukan di cache. Silakan klik 'Send' kembali untuk melakukan re-reflection.", service_name));
@@ -513,22 +515,27 @@ mod commands {
         }))
     }
 
+    // ==========================================
+    // PERBAIKAN: GRPC DISCOVERY YANG MENDUKUNG HTTPS DAN ERROR HANDLING LEBIH BAIK
+    // ==========================================
     #[tauri::command]
     pub async fn discover_grpc_services(
         endpoint: String
     ) -> Result<serde_json::Value, String> {
-        let clean_endpoint = endpoint
-            .trim_start_matches("http://")
-            .trim_start_matches("https://")
-            .to_string();
+        // PERBAIKAN: Jika endpoint sudah berawalan https://, JANGAN ditimpa ke http://
+        let uri_endpoint = if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
+            format!("http://{}", endpoint)
+        } else {
+            endpoint.clone()
+        };
 
-        let uri_endpoint = format!("http://{}", clean_endpoint);
+        let parsed_uri = uri_endpoint.parse::<http::Uri>().map_err(|_| "Format URL tidak valid")?;
+        let target_host = parsed_uri.host().unwrap_or("").to_string();
 
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
             async {
                 let endpoint_uri = tonic::transport::Endpoint::from_shared(uri_endpoint)?;
-                
                 endpoint_uri
                     .tcp_nodelay(true)
                     .keep_alive_while_idle(true)
@@ -542,97 +549,109 @@ mod commands {
         };
 
         let mut raw_service_names = Vec::new();
+        let mut discovery_err_detail = String::new();
 
-        let mut client_v1 = ServerReflectionClient::new(channel.clone());
-        let req_v1 = ServerReflectionRequest {
-            host: "".to_string(),
-            message_request: Some(
-                tonic_reflection::pb::v1::server_reflection_request::MessageRequest::ListServices(
-                    "".to_string(),
-                ),
-            ),
-        };
-
-        let v1_success = match tokio::time::timeout(
-            std::time::Duration::from_secs(3),
+        let v1_res = tokio::time::timeout(
+            std::time::Duration::from_secs(4),
             async {
-                let response = client_v1
-                    .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1)))
-                    .await?
-                    .into_inner();
-
-                let mut stream = response;
-                let mut local_names = Vec::new();
-                while let Some(resp) = stream.message().await? {
-                    if let Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ListServicesResponse(list)) = resp.message_response {
-                        for svc in list.service {
-                            if !svc.name.starts_with("grpc.reflection") {
-                                local_names.push(svc.name);
-                            }
-                        }
-                        break;
-                    }
-                }
-                
-                // FIX: Membersihkan stream resource
-                drop(stream);
-                drop(client_v1);
-                
-                Ok::<Vec<String>, tonic::Status>(local_names)
-            }
-        ).await {
-            Ok(Ok(names)) => {
-                raw_service_names = names;
-                !raw_service_names.is_empty()
-            }
-            _ => false,
-        };
-
-        if !v1_success {
-            raw_service_names.clear();
-            let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
-            let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
-                host: "".to_string(),
-                message_request: Some(
-                    tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::ListServices(
-                        "".to_string(),
+                let mut client_v1 = ServerReflectionClient::new(channel.clone());
+                let req_v1 = ServerReflectionRequest {
+                    host: target_host.clone(),
+                    message_request: Some(
+                        tonic_reflection::pb::v1::server_reflection_request::MessageRequest::ListServices("".to_string())
                     ),
-                ),
-            };
+                };
+                let response = client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await?;
+                let mut stream = response.into_inner();
+                
+                let mut local_names = Vec::new();
+                let mut server_err = None;
 
-            let _ = tokio::time::timeout(
-                std::time::Duration::from_secs(3),
-                async {
-                    let response = client_v1alpha
-                        .server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha)))
-                        .await?
-                        .into_inner();
-
-                    let mut stream = response;
-                    let mut local_names = Vec::new();
-                    while let Some(resp) = stream.message().await? {
-                        if let Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ListServicesResponse(list)) = resp.message_response {
+                while let Some(resp) = stream.message().await? {
+                    match resp.message_response {
+                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ListServicesResponse(list)) => {
                             for svc in list.service {
                                 if !svc.name.starts_with("grpc.reflection") {
                                     local_names.push(svc.name);
                                 }
                             }
-                            break;
-                        }
+                        },
+                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                            server_err = Some(format!("v1 Error: {} (code {})", err.error_message, err.error_code));
+                        },
+                        _ => {}
                     }
-                    
-                    // FIX: Membersihkan resource
-                    drop(stream);
-                    drop(client_v1alpha);
-                    
-                    raw_service_names = local_names;
-                    Ok::<(), tonic::Status>(())
                 }
-            ).await;
+
+                if let Some(e) = server_err {
+                    Err(tonic::Status::internal(e))
+                } else {
+                    Ok::<Vec<String>, tonic::Status>(local_names)
+                }
+            }
+        ).await;
+
+        match v1_res {
+            Ok(Ok(names)) if !names.is_empty() => {
+                raw_service_names = names;
+            },
+            Ok(Err(e)) => discovery_err_detail = format!("v1 Status: {}", e.message()),
+            Err(_) => discovery_err_detail = "v1 Timeout".to_string(),
+            _ => {}
         }
 
         if raw_service_names.is_empty() {
-            return Err("Reflection gagal: Server tidak mengembalikan service atau tidak mendukung reflection.".to_string());
+            let v1alpha_res = tokio::time::timeout(
+                std::time::Duration::from_secs(4),
+                async {
+                    let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
+                    let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
+                        host: target_host.clone(),
+                        message_request: Some(
+                            tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::ListServices("".to_string())
+                        ),
+                    };
+                    let response = client_v1alpha.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha))).await?;
+                    let mut stream = response.into_inner();
+                    
+                    let mut local_names = Vec::new();
+                    let mut server_err = None;
+
+                    while let Some(resp) = stream.message().await? {
+                        match resp.message_response {
+                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ListServicesResponse(list)) => {
+                                for svc in list.service {
+                                    if !svc.name.starts_with("grpc.reflection") {
+                                        local_names.push(svc.name);
+                                    }
+                                }
+                            },
+                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                                server_err = Some(format!("v1alpha Error: {} (code {})", err.error_message, err.error_code));
+                            },
+                            _ => {}
+                        }
+                    }
+                    if let Some(e) = server_err {
+                        Err(tonic::Status::internal(e))
+                    } else {
+                        Ok::<Vec<String>, tonic::Status>(local_names)
+                    }
+                }
+            ).await;
+
+            match v1alpha_res {
+                Ok(Ok(names)) if !names.is_empty() => {
+                    raw_service_names = names;
+                },
+                Ok(Err(e)) => discovery_err_detail = format!("{} | v1alpha Status: {}", discovery_err_detail, e.message()),
+                Err(_) => discovery_err_detail = format!("{} | v1alpha Timeout", discovery_err_detail),
+                _ => {}
+            }
+        }
+
+        if raw_service_names.is_empty() {
+            return Err(format!("Reflection gagal: Server tidak mengembalikan service atau menolak request. Detail: {}", discovery_err_detail));
         }
 
         let mut services_with_methods = Vec::new();
@@ -641,29 +660,19 @@ mod commands {
             let mut fd_set = prost_types::FileDescriptorSet::default();
             let mut reflection_success = false;
 
-            let mut client_v1_desc = ServerReflectionClient::new(channel.clone());
-            let req_desc_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
-                host: "".to_string(),
-                message_request: Some(
-                    tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(svc_name.clone())
-                ),
-            };
-
             let desc_v1_res = tokio::time::timeout(
                 std::time::Duration::from_secs(3),
                 async {
+                    let mut client_v1_desc = ServerReflectionClient::new(channel.clone());
+                    let req_desc_v1 = tonic_reflection::pb::v1::ServerReflectionRequest {
+                        host: target_host.clone(),
+                        message_request: Some(
+                            tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(svc_name.clone())
+                        ),
+                    };
                     let response = client_v1_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1))).await?;
                     let mut stream = response.into_inner();
-                    let msg = stream.message().await;
-                    
-                    drop(stream);
-                    drop(client_v1_desc);
-                    
-                    if let Ok(Some(m)) = msg {
-                        Ok::<_, tonic::Status>(Some(m))
-                    } else {
-                        Ok(None)
-                    }
+                    stream.message().await
                 }
             ).await;
 
@@ -679,29 +688,19 @@ mod commands {
             }
 
             if !reflection_success {
-                let mut client_v1alpha_desc = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
-                let req_desc_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
-                    host: "".to_string(),
-                    message_request: Some(
-                        tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(svc_name.clone())
-                    ),
-                };
-
                 let desc_v1alpha_res = tokio::time::timeout(
                     std::time::Duration::from_secs(3),
                     async {
+                        let mut client_v1alpha_desc = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
+                        let req_desc_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
+                            host: target_host.clone(),
+                            message_request: Some(
+                                tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(svc_name.clone())
+                            ),
+                        };
                         let response = client_v1alpha_desc.server_reflection_info(tonic::Request::new(tokio_stream::once(req_desc_v1alpha))).await?;
                         let mut stream = response.into_inner();
-                        let msg = stream.message().await;
-                        
-                        drop(stream);
-                        drop(client_v1alpha_desc);
-                        
-                        if let Ok(Some(m)) = msg {
-                            Ok::<_, tonic::Status>(Some(m))
-                        } else {
-                            Ok(None)
-                        }
+                        stream.message().await
                     }
                 ).await;
 
