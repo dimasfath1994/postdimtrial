@@ -281,4 +281,33 @@ export class GrpcHandler {
       data: this.safeParseJSON(resolveVars(rawBody), "gRPC Body")
     };
   }
+
+  /**
+   * Mengirim request gRPC ke backend Tauri dan mengembalikan response-nya
+   */
+  static async sendRequest(tab, resolveVars = (v) => v) {
+    const payload = this.prepareRequestBody(tab, resolveVars);
+    if (!payload) {
+      throw new Error("Mode request bukan gRPC atau konfigurasi gRPC belum lengkap.");
+    }
+
+    if (!payload.serviceMethod) {
+      throw new Error("gRPC Service / Method belum diisi!");
+    }
+
+    const endpoint = document.getElementById("url")?.value?.trim();
+    if (!endpoint) {
+      throw new Error("gRPC Endpoint (URL) belum diisi!");
+    }
+
+    // Panggil command Tauri backend untuk eksekusi gRPC
+    const response = await this.invokeTauri("send_grpc_request", {
+      endpoint: endpoint,
+      protoPath: payload.protoFileName,
+      serviceMethod: payload.serviceMethod,
+      data: payload.data
+    });
+
+    return response;
+  }
 }
