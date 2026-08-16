@@ -12,7 +12,7 @@ export class GrpcHandler {
       } else if (window.__TAURI_INTERNALS__?.invoke) {
         return await window.__TAURI_INTERNALS__.invoke(command, payload);
       } else {
-        console.warn(`[Tauri Safe Invoke] Command '${command}' diabaikan.`);
+        console.warn(`[Tauri Safe Invoke] Command '${command}' diabaikan (Tauri API tidak ditemukan).`);
         return null;
       }
     } catch (err) {
@@ -31,10 +31,14 @@ export class GrpcHandler {
       statusBtn.disabled = true;
     }
 
+    // Pastikan dropdown di-reset sebelum memulai fetch baru
+    if (selectElement) {
+      selectElement.innerHTML = '<option value="">-- Pilih Service / Method --</option>';
+    }
+
     try {
       const res = await this.invokeTauri("discover_grpc_services", { endpoint: endpoint.trim() });
       if (selectElement && res) {
-        selectElement.innerHTML = '<option value="">-- Pilih Service / Method --</option>';
         const services = res?.services || [];
         
         if (services.length === 0) {
@@ -48,8 +52,8 @@ export class GrpcHandler {
 
               item.methods.forEach((method) => {
                 const opt = document.createElement("option");
-                // Backend Rust mengirimkan 'method' dalam format "Service/Method" (misal: "helloworld.Greeter/SayHello")
-                // Kita ambil nama method-nya saja untuk textContent agar rapi di dalam optgroup.
+                // Backend Rust mengirimkan 'method' format "Service/Method" 
+                // Kita ambil nama method-nya saja untuk label textContent
                 const methodName = method.includes('/') ? method.split('/').pop() : method;
                 opt.value = method;
                 opt.textContent = methodName;
@@ -71,6 +75,9 @@ export class GrpcHandler {
       }
     } catch (err) {
       if (statusBtn) statusBtn.textContent = "❌ Reflection Failed";
+      if (selectElement) {
+        selectElement.innerHTML = '<option value="">-- Gagal memuat reflection --</option>';
+      }
       console.error("Gagal melakukan gRPC discovery:", err);
     } finally {
       if (statusBtn) statusBtn.disabled = false;
@@ -85,10 +92,14 @@ export class GrpcHandler {
       return JSON.parse(trimmed);
     } catch (err) {
       try {
-        const sanitized = trimmed.replace(/(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '"$2":').replace(/'/g, '"').replace(/,\s*([}\]])/g, "$1");
+        // Coba perbaiki format JSON yang malformed (kutip tunggal, trailing comma, dll)
+        const sanitized = trimmed
+          .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '"$2":')
+          .replace(/'/g, '"')
+          .replace(/,\s*([}\]])/g, "$1");
         return JSON.parse(sanitized);
       } catch (e) { 
-        console.warn("[SafeParseJSON] Gagal memparsing JSON payload, mengirim objek kosong/mentah.");
+        console.warn("[SafeParseJSON] Gagal memparsing JSON payload, mengirim objek kosong/mentah ke Rust.");
         return {}; 
       }
     }
@@ -158,6 +169,7 @@ export class GrpcHandler {
           grpcPanels.forEach(panel => {
             if (panel.getAttribute("data-grpc-panel") === targetTab) {
               panel.style.display = "block";
+              // Timeout kecil agar layout editor Monaco bisa re-render sempurna setelah di-display
               if (targetTab === "message") setTimeout(() => this.editors.body?.layout(), 50);
             } else {
               panel.style.display = "none";
@@ -313,8 +325,10 @@ export class GrpcHandler {
     }
 
     try {
+      // PENTING: Timeout di JS diatur sedikit lebih lama (35 detik) dari backend Rust (30 detik).
+      // Tujuannya agar error timeout asli yang dikirim dari Rust tidak terpotong (masked) oleh timeout JS ini.
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout JS: Backend Rust macet / tidak merespons dalam 30 detik!")), 30000)
+        setTimeout(() => reject(new Error("Timeout JS: Frontend memutuskan koneksi karena tidak ada respons sama sekali (35 detik).")), 35000)
       );
 
       const response = await Promise.race([
