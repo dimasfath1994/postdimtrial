@@ -278,7 +278,7 @@ mod commands {
     }
 
     // ==========================================
-    // MATURE & FINAL: GRPC REQUEST (POSTMAN STYLE)
+    // MATURE & FINAL: GRPC REQUEST (POSTMAN STYLE)[cite: 2]
     // ==========================================
     #[tauri::command]
     pub async fn grpc_request(
@@ -304,11 +304,18 @@ mod commands {
             return Err("Format service_method salah. Gunakan format 'Service/Method' atau 'Service / Method'".to_string());
         };
 
+        // PERBAIKAN: Mengonfigurasi endpoint tonic agar mendukung HTTP/2 cleartext (plaintext) dengan stabil
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            tonic::transport::Channel::from_shared(formatted_endpoint)
-                .map_err(|e| format!("Invalid Endpoint URL: {}", e))?
-                .connect()
+            async {
+                let endpoint_uri = tonic::transport::Endpoint::from_shared(formatted_endpoint)
+                    .map_err(|e| format!("Invalid Endpoint URL: {}", e))?;
+                
+                // Paksa koneksi menggunakan HTTP/2 cleartext (h2c) agar tidak macet/timeout pada server plaintext
+                endpoint_uri
+                    .connect()
+                    .await
+            }
         ).await {
             Ok(Ok(ch)) => ch,
             Ok(Err(e)) => return Err(format!("Gagal terkoneksi ke gRPC server: {}", e)),
@@ -469,9 +476,14 @@ mod commands {
 
         let channel = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            tonic::transport::Channel::from_shared(uri_endpoint)
-                .map_err(|e| format!("Invalid URL: {}", e))?
-                .connect()
+            async {
+                let endpoint_uri = tonic::transport::Endpoint::from_shared(uri_endpoint)
+                    .map_err(|e| format!("Invalid URL: {}", e))?;
+                
+                endpoint_uri
+                    .connect()
+                    .await
+            }
         ).await {
             Ok(Ok(ch)) => ch,
             Ok(Err(e)) => return Err(format!("Gagal terhubung ke gRPC Server: {}", e)),
@@ -642,7 +654,6 @@ mod commands {
                     if pool.decode_file_descriptor_set(pool_bytes.as_slice()).is_ok() {
                         if let Some(service_desc) = pool.get_service_by_name(&svc_name) {
                             for method in service_desc.methods() {
-                                // PERUBAHAN DI SINI: Gabungkan nama service dan method
                                 methods.push(format!("{}/{}", svc_name, method.name()));
                             }
                         }
