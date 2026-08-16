@@ -318,13 +318,24 @@ export class GrpcHandler {
 
   static async sendRequest(tab, resolveVars = (v) => v) {
     const payload = this.prepareRequestBody(tab, resolveVars);
+    
+    // --- VALIDASI TAMBAHAN DENGAN RETURN ---
     if (!payload || !payload.serviceMethod) {
-      throw new Error("gRPC Service / Method belum dipilih atau belum diisi!");
+      alert("gRPC Service / Method belum dipilih atau kosong!");
+      return; // WAJIB ADA INI SUPAYA TIDAK LANJUT KE BAWAH
     }
+
+    // Pastikan format mengandung karakter '/' (Service/Method)
+    if (!payload.serviceMethod.includes('/')) {
+      alert(`Format Service/Method salah ("${payload.serviceMethod}"). Wajib menggunakan format 'NamaService/NamaMethod' (Contoh: grpc.health.v1.Health/Check). Silakan klik 'Fetch Reflection' terlebih dahulu.`);
+      return; // WAJIB ADA INI JUGA
+    }
+    // ---------------------------------------------------------
     
     const endpoint = document.getElementById("url")?.value?.trim();
     if (!endpoint) {
-      throw new Error("gRPC Endpoint URL belum diisi!");
+      alert("gRPC Endpoint URL belum diisi!");
+      return; // WAJIB ADA INI JUGA
     }
 
     try {
@@ -337,7 +348,7 @@ export class GrpcHandler {
       return response;
     } catch (err) {
       console.error("❌ gRPC Request Error:", err);
-      throw err;
+      alert(typeof err === 'string' ? err : (err?.message || JSON.stringify(err)));
     }
   }
 }
