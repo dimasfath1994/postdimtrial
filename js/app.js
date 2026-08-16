@@ -1140,7 +1140,7 @@ ui.send.onclick = async () => {
     if (tabBody?.mode === "grpc") {
       res = await GrpcHandler.sendRequest(tab, resolveVars);
     }
-
+    else {
       res = await RequestEngine.send({
       method: ui.method.value,
       url: finalUrl,
@@ -1151,6 +1151,7 @@ ui.send.onclick = async () => {
       },
        bodyType: tab.body?.mode || "json"
     });
+  }
 
     const time = Math.round(performance.now() - start);
 
