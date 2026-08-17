@@ -197,6 +197,82 @@ export class GrpcHandler {
       this.loadReflectionServices(endpoint);
     });
 
+    // =========================================================================
+    // SETUP EVENT LISTENER UNTUK UPLOAD .PROTO LOKAL
+    // =========================================================================
+    const chooseProtoBtn = document.getElementById("chooseProtoBtn");
+    const grpcProtoFile = document.getElementById("grpcProtoFile");
+    const protoFileName = document.getElementById("protoFileName");
+
+    chooseProtoBtn?.addEventListener("click", () => {
+      grpcProtoFile?.click();
+    });
+
+    grpcProtoFile?.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const content = await file.text();
+        
+        // Panggil command Rust yang mengembalikan JSON dinamis (Pilihan 2)
+        const result = await this.invokeTauri("load_local_proto", { 
+          content: content, 
+          filename: file.name 
+        });
+
+        // Simpan nama file ke state tab aktif
+        const activeTab = tabs.getActive();
+        if (activeTab) {
+          activeTab.body ||= {};
+          activeTab.body.grpc ||= {};
+          activeTab.body.grpc.protoFileName = file.name;
+          scheduleSync();
+        }
+
+        // Update UI Label
+        if (protoFileName) {
+          protoFileName.textContent = file.name;
+          protoFileName.style.color = "#4CAF50"; // Hijau jika sukses
+        }
+
+        // Otomatis isi dropdown grpcServiceMethod dari result.services
+        const selectElement = document.getElementById("grpcServiceMethod");
+        if (selectElement && result?.services) {
+          selectElement.innerHTML = '<option value="">-- Pilih Service / Method --</option>';
+          let total = 0;
+
+          result.services.forEach((item) => {
+            if (item?.service && Array.isArray(item.methods)) {
+              const optGroup = document.createElement("optgroup");
+              optGroup.label = item.service;
+
+              item.methods.forEach((method) => {
+                const opt = document.createElement("option");
+                const fullServiceMethod = `${item.service}/${method}`;
+                
+                opt.value = fullServiceMethod; // Format: "package.Service/Method"
+                opt.textContent = method;      // Nama method saja agar rapi
+                optGroup.appendChild(opt);
+                total++;
+              });
+
+              selectElement.appendChild(optGroup);
+            }
+          });
+          console.log(`>>> [Local Proto Loaded]: ${result.message || file.name} (${total} endpoints)`);
+        } else {
+          console.log(">>> [Local Proto Loaded]:", result);
+        }
+      } catch (err) {
+        console.error("❌ Gagal memuat file .proto lokal:", err);
+        if (protoFileName) {
+          protoFileName.textContent = "Error loading file";
+          protoFileName.style.color = "red";
+        }
+      }
+    });
+
     // Setup event listener interaktif untuk tabel Metadata gRPC
     const metadataBox = document.getElementById("grpcMetadataBox");
     metadataBox?.addEventListener("input", (e) => {
@@ -244,24 +320,35 @@ export class GrpcHandler {
         const sharedPanel = btn.getAttribute("data-shared-panel");
 
         if (sharedPanel) {
+          // Sembunyikan kontainer gRPC khusus
           if (grpcPanelsContainer) {
             grpcPanelsContainer.style.display = "none";
           }
           grpcPanels.forEach(p => p.style.display = "none");
 
+          // Tampilkan panel shared (Auth atau Scripts) dari HTTP area
           document.querySelectorAll(".tab-panel").forEach(p => {
             const pName = (p.getAttribute("data-panel") || p.id || "").toLowerCase();
             if (pName.includes(sharedPanel.toLowerCase())) {
               p.style.display = "block";
+              // Trigger layout ulang untuk editor Monaco script jika panel scripts dibuka
+              if (sharedPanel === "scripts") {
+                setTimeout(() => {
+                  if (window.preScriptEditor) window.preScriptEditor.layout();
+                  if (window.postScriptEditor) window.postScriptEditor.layout();
+                }, 50);
+              }
             } else {
               p.style.display = "none";
             }
           });
         } else {
+          // Tampilkan kembali kontainer gRPC khusus
           if (grpcPanelsContainer) {
             grpcPanelsContainer.style.display = "block";
           }
 
+          // Sembunyikan semua panel tab HTTP/shared
           document.querySelectorAll(".tab-panel").forEach(p => {
             p.style.display = "none";
           });
@@ -299,6 +386,10 @@ export class GrpcHandler {
 
     document.getElementById("grpcServiceMethod")?.addEventListener("change", handleInputChange);
     document.getElementById("grpcBody")?.addEventListener("input", handleInputChange);
+    
+    // Tambahan listener untuk Auth agar langsung mentrigger sinkronisasi state
+    document.getElementById("authType")?.addEventListener("change", handleInputChange);
+    document.getElementById("authValue")?.addEventListener("input", handleInputChange);
   }
 
   static initMonacoEditors(ui, tabs, scheduleSync) {
@@ -345,7 +436,14 @@ export class GrpcHandler {
       
       const protoFileNameEl = document.getElementById("protoFileName");
       if (protoFileNameEl) {
-        protoFileNameEl.textContent = tab.body?.grpc?.protoFileName || "No .proto loaded";
+        const loadedName = tab.body?.grpc?.protoFileName;
+        if (loadedName) {
+          protoFileNameEl.textContent = loadedName;
+          protoFileNameEl.style.color = "#4CAF50";
+        } else {
+          protoFileNameEl.textContent = "No .proto loaded";
+          protoFileNameEl.style.color = "#aaa";
+        }
       }
     }
 
@@ -418,11 +516,29 @@ export class GrpcHandler {
       }
     });
 
+    // Tangkap Konfigurasi Auth (Menyatu dengan panel shared Auth HTTP)
+    const authType = document.getElementById("authType")?.value || "none";
+    const authVal = resolveVars(document.getElementById("authValue")?.value || "").trim();
+    
+    if (authType === "bearer" && authVal) {
+      resolvedMetadata["authorization"] = `Bearer ${authVal}`;
+    } else if (authType === "apiKey" && authVal) {
+      resolvedMetadata["x-api-key"] = authVal;
+    }
+
+    // Tangkap Skrip Pengujian (Pre & Post Scripts dari editor global/shared)
+    const preScript = window.preScriptEditor ? window.preScriptEditor.getValue() : "";
+    const postScript = window.postScriptEditor ? window.postScriptEditor.getValue() : "";
+
     return {
       serviceMethod: cleanedServiceMethod,
       protoFileName: tabBody?.grpc?.protoFileName || "",
       metadata: resolvedMetadata,
-      data: parsedData
+      data: parsedData,
+      scripts: {
+        pre: preScript,
+        post: postScript
+      }
     };
   }
 
@@ -441,8 +557,9 @@ export class GrpcHandler {
       const response = await this.invokeTauri("grpc_request", {
         endpoint: endpoint,
         serviceMethod: payload.serviceMethod,
-        metadata: payload.metadata, // Disiapkan untuk dikirim ke backend Tauri/Rust
-        payload: payload.data 
+        metadata: payload.metadata, // Menyertakan metadata + auth
+        payload: payload.data,
+        scripts: payload.scripts   // Menyertakan pre/post script ke backend Rust
       });
 
       if (response) {
