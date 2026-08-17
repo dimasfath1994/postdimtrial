@@ -21,15 +21,15 @@
       <button id="collabLogoutBtn" style="
         background: transparent; 
         border: none; 
-        color: #aaa;              /* Lebih terang dari #666 */
+        color: #aaa;              
         cursor: pointer; 
-        font-size: 11px;          /* Sedikit lebih besar */
-        font-weight: 500;         /* Lebih tegas/tebal */
+        font-size: 11px;          
+        font-weight: 500;         
         padding: 0 4px;
         text-decoration: underline;
         transition: color 0.2s;
     ">Logout</button>
-   </div>
+  </div>
   </div>
 
 
@@ -174,8 +174,6 @@
 </div>
 </aside>
 
-</aside>
-
 <!-- ================= MAIN ================= -->
 <main class="container">
 
@@ -197,6 +195,7 @@
       <option>DELETE</option>
       <option>HEAD</option>
       <option>OPTIONS</option>
+      <option value="GRPC">gRPC</option>
     </select>
 
     <input id="url" placeholder="https://api.example.com" />
@@ -208,13 +207,22 @@
 
   <button id="send">Send Request</button>
 
-  <!-- ================= REQUEST TABS ================= -->
+  <!-- ================= REQUEST TABS (HTTP) ================= -->
   <div id="reqTabs" class="req-tabs">
     <span class="req-tab active" data-tab="params">Params</span>
     <span class="req-tab" data-tab="body">Body</span>
     <span class="req-tab" data-tab="headers">Headers</span>
     <span class="req-tab" data-tab="auth">Auth</span>
     <span class="req-tab" data-tab="scripts">Scripts</span>
+  </div>
+
+  <!-- ================= REQUEST TABS (gRPC) ================= -->
+  <div id="grpcReqTabs" class="req-tabs hidden">
+    <span class="req-tab active" data-grpc-tab="message">Message</span>
+    <span class="req-tab" data-grpc-tab="metadata">Metadata</span>
+    <span class="req-tab" data-grpc-tab="authorization" data-shared-panel="auth">Auth</span>
+    <span class="req-tab" data-grpc-tab="scripts" data-shared-panel="scripts">Scripts</span>
+    <span class="req-tab" data-grpc-tab="settings">Settings</span>
   </div>
 
   <!-- ================= CONTENT ================= -->
@@ -230,19 +238,40 @@
           <option value="raw">raw</option>
           <option value="form-data">form-data</option>
           <option value="urlencoded">x-www-form-urlencoded</option>
+          <option value="graphql">GraphQL</option>
         </select>
       </div>
-    
+  
       <div class="body-tabs" style="display: none;">
         <button class="body-tab active" data-mode="none">none</button>
         <button class="body-tab" data-mode="raw">raw</button>
         <button class="body-tab" data-mode="form-data">form-data</button>
         <button class="body-tab" data-mode="urlencoded">x-www-form-urlencoded</button>
+        <button class="body-tab" data-mode="graphql">GraphQL</button>
       </div>
-    
+  
       <div id="rawBodyBox"><textarea id="body"></textarea></div>
       <div id="formDataBox" class="hidden"><div id="formDataList"></div></div>
       <div id="urlencodedBox" class="hidden"><div id="urlencodedList"></div></div>
+
+      <!-- GRAPHQL BOX -->
+      <div id="graphqlBox" class="hidden" style="margin-top: 10px;">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <!-- Kolom Query -->
+          <div style="flex: 1; min-width: 300px;">
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Query / Mutation</div>
+            <div id="graphqlQueryEditor" class="monaco-editor" style="height: 200px; border: 1px solid #333; border-radius: 4px; overflow: hidden;"></div>
+            <textarea id="graphqlQuery" class="graphql-query-input hidden"></textarea>
+          </div>
+          
+          <!-- Kolom Variables -->
+          <div style="flex: 1; min-width: 300px;">
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Variables (JSON)</div>
+            <div id="graphqlVariablesEditor" class="monaco-editor" style="height: 200px; border: 1px solid #333; border-radius: 4px; overflow: hidden;"></div>
+            <textarea id="graphqlVariables" class="graphql-variables-input hidden"></textarea>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="tab-panel hidden" data-panel="headers">
@@ -270,6 +299,71 @@
       </div>
     </div>
 
+    <!-- gRPC MAIN PANELS CONTAINER -->
+    <div id="grpcPanelsContainer" class="hidden">
+      
+      <!-- UNIFIED gRPC HEADER -->
+      <div id="grpcHeaderControls" style="background: #181818; padding: 12px; border: 1px solid #333; border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;">
+        
+        <!-- Baris 1: Service / Method -->
+        <div>
+          <div style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #ccc;">Service / Method</div>
+          <select id="grpcServiceMethod" style="width: 100%; padding: 6px; background: #1e1e1e; border: 1px solid #333; color: #fff; border-radius: 4px;">
+            <option value="">-- Choose Service / Method (Refresh Reflection) --</option>
+          </select>
+        </div>
+
+        <!-- Baris 2: Reflection & Proto Upload Tools -->
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 4px;">
+          <button id="chooseProtoBtn" type="button" style="padding: 4px 10px; font-size: 12px; cursor: pointer;">+ Upload .proto</button>
+          <input type="file" id="grpcProtoFile" accept=".proto" class="hidden">
+          <span id="protoFileName" style="font-size: 12px; color: #aaa;">No .proto loaded</span>
+          
+          <button id="btnFetchReflection" type="button" style="margin-left: auto; font-size: 11px; padding: 5px 10px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 4px;">
+            🔄 Refresh Reflection
+          </button>
+        </div>
+
+      </div>
+
+      <!-- 1. MESSAGE PANEL -->
+      <div class="grpc-tab-panel" data-grpc-panel="message" style="margin-top: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">Compose Message (JSON)</div>
+            <div id="grpcMessageEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
+            <textarea id="grpcBody" class="hidden" placeholder='{ "name": "World" }'></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. METADATA PANEL -->
+      <div class="grpc-tab-panel hidden" data-grpc-panel="metadata" style="margin-top: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 12px; font-weight: bold; color: #ccc;">gRPC Metadata (Key-Value Headers)</div>
+        </div>
+        
+        <div class="key-val-table" style="border: 1px solid #333; border-radius: 4px; overflow: hidden; background: #1e1e1e;">
+          <div style="display: flex; background: #2a2a2a; border-bottom: 1px solid #333; font-size: 11px; color: #aaa; padding: 6px 10px; font-weight: bold;">
+            <div style="width: 30px; text-align: center;">#</div>
+            <div style="flex: 1; padding: 0 5px;">Key</div>
+            <div style="flex: 1; padding: 0 5px;">Value</div>
+            <div style="width: 30px;"></div>
+          </div>
+          <div id="grpcMetadataBox" style="max-height: 200px; overflow-y: auto;">
+          </div>
+        </div>
+        <button id="addGrpcMetadata" type="button" style="margin-top: 8px; font-size: 11px; padding: 4px 8px; cursor: pointer;">+ Add Metadata</button>
+      </div>
+
+      <!-- 3. SETTINGS PANEL -->
+      <div class="grpc-tab-panel hidden" data-grpc-panel="settings" style="margin-top: 10px;">
+        <div style="font-size: 12px; color: #ccc;">gRPC Request Settings</div>
+        <label style="display: block; margin-top: 8px; font-size: 12px;"><input type="checkbox" id="grpcUseTls"> Use TLS / SSL</label>
+      </div>
+
+    </div>
+
   </div>
 
   <div id="response-container">
@@ -293,10 +387,6 @@
       </div>
   </div>
   
-</div>
-
-
-
 </div>
 
 </main>
@@ -325,7 +415,7 @@
   </div>
 </div>
 
-<!-- ================= MONACO ================= -->
+<!-- ================= MONACO & CONTROLLER SWITCHER ================= -->
 <script>
   window.MonacoEnvironment = {
     getWorkerUrl: function () {
@@ -333,34 +423,50 @@
     }
   };
 
-const mainBtn = document.getElementById('mainActionBtn');
-const dropdown = document.getElementById('actionDropdown');
+  const mainBtn = document.getElementById('mainActionBtn');
+  const dropdown = document.getElementById('actionDropdown');
 
-mainBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  // Toggle visibility
-  dropdown.style.display = (dropdown.style.display === 'block') ? 'none' : 'block';
-});
+  mainBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.style.display = (dropdown.style.display === 'block') ? 'none' : 'block';
+  });
 
-// Menutup menu jika klik area luar
-document.addEventListener('click', () => {
-  dropdown.style.display = 'none';
-});
+  document.addEventListener('click', () => {
+    if (dropdown) dropdown.style.display = 'none';
+  });
 
+  // --- LOGIK TOGGLE SWITCHER TAB BODY GRAPHQL ---
+  function updateBodyMode(mode) {
+    const rawBox = document.getElementById('rawBodyBox');
+    const formBox = document.getElementById('formDataBox');
+    const urlBox = document.getElementById('urlencodedBox');
+    const gqlBox = document.getElementById('graphqlBox');
 
+    if (rawBox) rawBox.classList.toggle('hidden', mode !== 'raw' && mode !== 'none');
+    if (formBox) formBox.classList.toggle('hidden', mode !== 'form-data');
+    if (urlBox) urlBox.classList.toggle('hidden', mode !== 'urlencoded');
+    if (gqlBox) gqlBox.classList.toggle('hidden', mode !== 'graphql');
+  }
 
-const select = document.getElementById('bodyModeSelect');
-const buttons = document.querySelectorAll('.body-tab');
+  const select = document.getElementById('bodyModeSelect');
+  const buttons = document.querySelectorAll('.body-tab');
 
-// Saat dropdown berubah, cari tombol yang punya data-mode sama lalu klik
-select.addEventListener('change', (e) => {
+  select?.addEventListener('change', (e) => {
     const selectedMode = e.target.value;
+    updateBodyMode(selectedMode);
+
     const targetButton = Array.from(buttons).find(btn => btn.dataset.mode === selectedMode);
-    
     if (targetButton) {
-        targetButton.click(); // Ini akan memicu semua logika JS lama kamu!
+      targetButton.click(); 
     }
-});
+  });
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      updateBodyMode(mode);
+    });
+  });
 </script>
 
 <script src="./lib/js/monaco-editor/min/vs/loader.js"></script>

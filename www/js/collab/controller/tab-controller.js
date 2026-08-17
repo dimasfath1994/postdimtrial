@@ -5,7 +5,7 @@ import { DataBridge } from './bridge.js'; // Pastikan import ini
 import { showDraftPicker } from '../ui/request-picker-draft.js';
 
 export class TabController {
-    constructor(ui, handlers, State, paramCtrl, headerCtrl) {
+    constructor(ui, handlers, State, paramCtrl, headerCtrl, graphqlCtrl, grpcCtrl) {
         this.tabs = [];
         this.activeTabId = null;
         this.handlers = handlers;
@@ -14,6 +14,9 @@ export class TabController {
 
         this.paramCtrl = paramCtrl;
         this.headerCtrl = headerCtrl;
+
+        this.graphqlCtrl = graphqlCtrl; // <-- Tambahan
+        this.grpcCtrl = grpcCtrl;     // <-- Tambahan
 
         document.addEventListener('blur', (e) => {
             if (e.target.classList.contains('auto-save')) {
@@ -183,6 +186,13 @@ export class TabController {
         // 1. Reset Method & URL (DOM biasa)
         document.getElementById("method").value = "GET";
         document.getElementById("url").value = "";
+
+        // Tambahan pembersihan gRPC & GraphQL inputs
+        const grpcEndpointEl = document.querySelector(".grpc-endpoint-input");
+        if (grpcEndpointEl) grpcEndpointEl.value = "";
+
+        const graphqlQueryEl = document.querySelector(".graphql-query-input");
+        if (graphqlQueryEl) graphqlQueryEl.value = "";
         
         
         // 4. Reset Body Text/Raw
@@ -262,6 +272,16 @@ export class TabController {
         const activePanel = document.querySelector('.tab-panel:not(.hidden)');
         const activePanelType = activePanel ? activePanel.getAttribute('data-panel') : 'params';
         this.refreshActivePanel(activePanelType, isDraft);
+
+
+        // --- TAMBAHAN: Inisialisasi eksplisit untuk controller GraphQL & gRPC berdasarkan tipe request ---
+        if (finalData.method === 'GRPC' && this.grpcCtrl) {
+            const grpcBox = document.getElementById('grpcBox');
+            if (grpcBox) this.grpcCtrl.init(id, grpcBox, isDraft);
+        } else if (finalData.method === 'GRAPHQL' && this.graphqlCtrl) {
+            const graphqlBox = document.getElementById('graphqlBox');
+            if (graphqlBox) this.graphqlCtrl.init(id, graphqlBox, isDraft);
+        }
         
         // Sync Body Mode
         requestAnimationFrame(() => {
@@ -291,6 +311,12 @@ export class TabController {
         } else if (panelType === 'headers') {
             const headersBox = document.getElementById('headersBox');
             if (headersBox) this.headerCtrl.init(id, headersBox, isDraft); // Oper ke init
+        } else if (panelType === 'graphql') { // <-- Tambahan
+            const graphqlBox = document.getElementById('graphqlBox');
+            if (graphqlBox && this.graphqlCtrl) { this.graphqlCtrl.init(id, graphqlBox, isDraft); }
+        } else if (panelType === 'grpc') {     // <-- Tambahan
+            const grpcBox = document.getElementById('grpcBox');
+            if (grpcBox && this.grpcCtrl) { this.grpcCtrl.init(id, grpcBox, isDraft); }
         }
     }
 

@@ -2,6 +2,8 @@
  * js/ui/body-tabs.js
  * Modul ini menangani perpindahan sub-tab di dalam panel "Body"
  */
+import { GraphqlUI } from './graphql-ui.js';
+
 export function initBodyTabs(bodyParamCtrl, tabCtrl) {
 
   // Helper untuk mengambil elemen live dari DOM setiap kali dibutuhkan
@@ -12,7 +14,8 @@ export function initBodyTabs(bodyParamCtrl, tabCtrl) {
       'none': document.getElementById('noneBodyBox'), // Asumsi jika ada box 'none'
       'raw': document.getElementById('rawBodyBox'),
       'form-data': document.getElementById('formDataBox'),
-      'urlencoded': document.getElementById('urlencodedBox')
+      'urlencoded': document.getElementById('urlencodedBox'),
+      'graphql': document.getElementById('graphqlBox')
     }
   });
 
@@ -51,9 +54,11 @@ export function initBodyTabs(bodyParamCtrl, tabCtrl) {
       boxes[normalizedMode].classList.remove('hidden');
     }
 
-    // 5. Inisialisasi Data ke Controller (menggunakan rAF agar DOM ready)
-    if (bodyParamCtrl) {
-      requestAnimationFrame(async () => {
+    // 5. Inisialisasi Data ke Controller / Re-layout Editor (menggunakan rAF agar DOM ready)
+    requestAnimationFrame(async () => {
+      if (normalizedMode === 'graphql') {
+        GraphqlUI.layout();
+      } else if (bodyParamCtrl) {
         if (normalizedMode === 'raw') {
           const rawEditor = document.getElementById('body');
           const request = tabCtrl.tabs.find(t => t.id === activeRequestId);
@@ -66,8 +71,8 @@ export function initBodyTabs(bodyParamCtrl, tabCtrl) {
           const container = document.getElementById('urlencodedList');
           if (container) await bodyParamCtrl.init(activeRequestId, container, 'urlencoded');
         }
-      });
-    }
+      }
+    });
 
     // 6. Trigger event global untuk keperluan sinkronisasi lain
     if (!isInitial) {
