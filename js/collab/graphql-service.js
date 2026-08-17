@@ -28,6 +28,11 @@ export const GraphqlService = {
 
   // ================= CREATE =================
   async create(payload) {
+    const reqId = Number(payload.request_id || payload.requestId);
+    const variablesStr = typeof payload.variables === 'string' 
+      ? payload.variables 
+      : JSON.stringify(payload.variables || {});
+
     const r = await fetch(
       API,
       {
@@ -37,9 +42,9 @@ export const GraphqlService = {
           Authorization: `Bearer ${Auth.getToken()}`
         },
         body: JSON.stringify({
-          request_id: payload.request_id,
+          request_id: reqId,
           query: payload.query ?? "",
-          variables: payload.variables ?? ""
+          variables: variablesStr
         })
       }
     );
@@ -54,6 +59,12 @@ export const GraphqlService = {
 
   // ================= UPDATE =================
   async update(id, payload) {
+    // Pastikan request_id selalu terisi angka valid
+    const reqId = Number(payload?.request_id || payload?.requestId || id);
+    const variablesStr = typeof payload?.variables === 'string' 
+      ? payload.variables 
+      : JSON.stringify(payload?.variables || {});
+
     const r = await fetch(
       `${API}/${id}`,
       {
@@ -63,9 +74,9 @@ export const GraphqlService = {
           Authorization: `Bearer ${Auth.getToken()}`
         },
         body: JSON.stringify({
-          request_id: payload.request_id,
-          query: payload.query ?? "",
-          variables: payload.variables ?? ""
+          request_id: reqId,
+          query: payload?.query ?? "",
+          variables: variablesStr
         })
       }
     );

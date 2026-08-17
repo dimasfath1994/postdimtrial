@@ -4,7 +4,7 @@
  */
 import { GraphqlUI } from './graphql-ui.js';
 
-export function initBodyTabs(bodyParamCtrl, tabCtrl) {
+export function initBodyTabs(bodyParamCtrl, tabCtrl, graphqlCtrl) {
 
   // Helper untuk mengambil elemen live dari DOM setiap kali dibutuhkan
   const getElements = () => ({
@@ -57,6 +57,13 @@ export function initBodyTabs(bodyParamCtrl, tabCtrl) {
     // 5. Inisialisasi Data ke Controller / Re-layout Editor (menggunakan rAF agar DOM ready)
     requestAnimationFrame(async () => {
       if (normalizedMode === 'graphql') {
+        const container = document.getElementById('graphqlBox');
+        const activeGraphqlCtrl = graphqlCtrl || window.graphqlCtrl;
+
+        if (activeGraphqlCtrl && container) {
+          const isDraft = String(activeRequestId).startsWith('draft_');
+          await activeGraphqlCtrl.init(activeRequestId, container, isDraft);
+        }
         GraphqlUI.layout();
       } else if (bodyParamCtrl) {
         if (normalizedMode === 'raw') {

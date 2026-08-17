@@ -12,10 +12,23 @@ export class RequestFormatter {
      * @returns {Promise<Object>} { method, url, headers, params, body, useProxy }
      */
     static async collectFromUI(State) {
+        const headers = this.getHeaders(State);
+        const mode = document.getElementById('bodyModeSelect')?.value;
+
+        // Otomatis tambahkan Content-Type: application/json jika mode GraphQL dan header belum ada
+        if (mode === 'graphql') {
+            const hasContentType = Object.keys(headers).some(
+                k => k.toLowerCase() === 'content-type'
+            );
+            if (!hasContentType) {
+                headers['Content-Type'] = 'application/json';
+            }
+        }
+
         return {
             method: document.getElementById('method').value,
             url: document.getElementById('url').value.trim(),
-            headers: this.getHeaders(State),
+            headers: headers,
             params: this.getParams(State), 
             body: await this.getBody(), // Sekarang async
             useProxy: document.getElementById('use-proxy')?.checked || false
@@ -49,7 +62,7 @@ export class RequestFormatter {
     }
 
     static async getBody() {
-        const mode = document.getElementById('bodyModeSelect').value;
+        const mode = document.getElementById('bodyModeSelect')?.value;
         switch (mode) {
             case 'raw':
                 return document.getElementById('body').value;
@@ -57,9 +70,34 @@ export class RequestFormatter {
                 return await this.getFormData(); // Sekarang async
             case 'urlencoded':
                 return this.getUrlEncoded();
+            case 'graphql':
+                return this.getGraphQL();
             default:
                 return null;
         }
+    }
+
+    /**
+     * Memformat input GraphQL dari UI menjadi JSON string { query, variables }
+     */
+    static getGraphQL() {
+        const query = document.getElementById('graphqlQuery')?.value || '';
+        const varsRaw = document.getElementById('graphqlVariables')?.value || '{}';
+
+        let variables = {};
+        try {
+            variables = typeof varsRaw === 'string' && varsRaw.trim() !== '' 
+                ? JSON.parse(varsRaw) 
+                : {};
+        } catch (e) {
+            console.warn('[RequestFormatter] JSON Variables GraphQL tidak valid:', e);
+            variables = {};
+        }
+
+        return JSON.stringify({
+            query: query,
+            variables: variables
+        });
     }
 
     /**
@@ -78,7 +116,7 @@ export class RequestFormatter {
                     formData.append(p.key, p.file);
                 } 
                 // 2. Jika tidak ada, tapi ada value (path string), ambil blob dari server
-               // Analisis di tempat kamu memproses FormData:
+                // Analisis di tempat kamu memproses FormData:
                 else if (p.value) {
                     try {
                         let blob;
