@@ -31,7 +31,7 @@ http = "1.0"
 tokio-stream = "0.1"
 
 # --- gRPC & PROST ---
-tonic = "0.12"
+tonic = { version = "0.12", features = ["transport", "tls", "tls-roots", "prost"] }
 tonic-reflection = "0.12"
 prost = "0.13"
 prost-types = "0.13"
