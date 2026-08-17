@@ -9,25 +9,21 @@ export class GraphqlController {
         this.State = State;
         this.container = null;
         this.currentRequestId = null;
-        this.isReceiving = false; // Flag penanda untuk cegah infinite loop saat menerima update remote
+        this.isReceiving = false;
         this.debounceTimer = null;
         this.bc = new BroadcastChannel('graphql_channel');
         this.setupBroadcastListener();
     }
 
-    // --- Getter untuk mendeteksi active tab / request ID ---
     get activeId() {
         return window.tabCtrl?.activeTabId || this.currentRequestId;
     }
 
-    /**
-     * Inisialisasi: Render GraphQL data untuk request yang sedang aktif
-     */
     async init(requestId, container, isDraft) {
         if (!container && !document.getElementById('graphqlBox')) return;
 
-        // --- GUARD MUTLAK ---
         const forceIsDraft = String(requestId).startsWith('draft_');
+        const numericReqId = Number(requestId) || requestId;
 
         this.container = container || document.getElementById('graphqlBox');
         this.currentRequestId = requestId;
@@ -35,17 +31,23 @@ export class GraphqlController {
         if (forceIsDraft) {
             console.log(`[GUARD] Mode Draft aktif untuk GraphQL ${requestId}. Membatalkan API call.`);
             const localData = DataBridge.load(requestId, 'graphql') || { query: '', variables: '{}', operationName: '' };
-            this.State.graphql = localData;
-            this.renderGraphQL(localData);
+            this.State.graphql = { ...localData, request_id: requestId };
+            this.renderGraphQL(this.State.graphql);
             return;
         }
 
         console.log("DEBUG: init GraphQL dipanggil untuk ID:", requestId);
 
-        const graphqlData = await GraphqlService.getByRequest(requestId) || { query: '', variables: '{}', operationName: '' };
-        this.State.graphql = graphqlData;
+        const fetchedData = await GraphqlService.getByRequest(requestId);
+        const graphqlData = fetchedData || { query: '', variables: '{}', operationName: '' };
 
-        this.renderGraphQL(graphqlData);
+        // Pastikan request_id selalu tersimpan di state
+        this.State.graphql = { 
+            ...graphqlData, 
+            request_id: numericReqId 
+        };
+
+        this.renderGraphQL(this.State.graphql);
     }
 
     renderGraphQL(data) {
@@ -89,12 +91,74 @@ export class GraphqlController {
         const variables = varsInput ? varsInput.value : (this.State.graphql?.variables || '{}');
         const operationName = opInput ? opInput.value : (this.State.graphql?.operationName || '');
 
-        this.State.graphql = { query, variables, operationName };
+        this.State.graphql = { 
+            ...this.State.graphql, 
+            query, 
+            variables, 
+            operationName,
+            request_id: Number(this.currentRequestId) || this.currentRequestId
+        };
     }
 
-    /**
-     * Handle Event dari BroadcastChannel / Server
-     */
+    async syncGraphQLUpdate(newData) {
+        if (this.isReceiving) return;
+
+        const activeId = this.activeId;
+        const numericReqId = Number(this.currentRequestId || activeId) || activeId;
+        
+        // Update local state dengan menyertakan request_id
+        this.State.graphql = { 
+            ...(this.State.graphql || {}), 
+            ...newData,
+            request_id: numericReqId
+        };
+
+        if (String(activeId).startsWith('draft_')) {
+            console.log(`[SYNC] Updating draft GraphQL data for ${activeId}`);
+            DataBridge.save(activeId, 'graphql', this.State.graphql);
+            return;
+        }
+
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(async () => {
+            let updated = null;
+            const recordId = this.State.graphql?.id;
+
+            // 1. Jika record sudah punya ID di DB, coba UPDATE
+            if (recordId) {
+                updated = await GraphqlService.update(recordId, this.State.graphql);
+            }
+
+            // 2. Jika belum ada ID atau UPDATE menghasilkan 404, lakukan CREATE
+            if (!updated) {
+                updated = await GraphqlService.create(this.State.graphql);
+            }
+
+            if (updated && typeof updated === 'object') {
+                this.State.graphql = { ...this.State.graphql, ...updated };
+                this.broadcastMessage('GRAPHQL_UPDATED', this.State.graphql);
+            }
+        }, 300);
+    }
+
+    broadcastMessage(type, data) {
+        const messagePayload = {
+            type,
+            requestId: this.currentRequestId,
+            workspaceId: this.State?.workspaceId,
+            data
+        };
+
+        this.bc.postMessage(messagePayload);
+
+        if (window.dispatcher && typeof window.dispatcher.dispatch === 'function') {
+            window.dispatcher.dispatch({
+                action: type,
+                ...messagePayload
+            });
+        }
+    }
+
     handleSocketMessage(payload) {
         if (!payload || !payload.type) return;
         const { type, data, requestId } = payload;
@@ -115,54 +179,6 @@ export class GraphqlController {
             }
         } finally {
             this.isReceiving = false;
-        }
-    }
-
-    /**
-     * Sinkronisasi ke Server & Broadcast ke tab lain
-     */
-    async syncGraphQLUpdate(newData) {
-        if (this.isReceiving) return;
-
-        const activeId = this.activeId;
-        
-        // Update local state terlebih dahulu
-        this.State.graphql = { ...(this.State.graphql || {}), ...newData };
-
-        if (String(activeId).startsWith('draft_')) {
-            console.log(`[SYNC] Updating draft GraphQL data for ${activeId}`);
-            DataBridge.save(activeId, 'graphql', this.State.graphql);
-            return;
-        }
-
-        clearTimeout(this.debounceTimer);
-        this.debounceTimer = setTimeout(async () => {
-            const updated = await GraphqlService.update(this.currentRequestId, this.State.graphql);
-            if (updated) {
-                this.State.graphql = updated;
-                this.broadcastMessage('GRAPHQL_UPDATED', updated);
-            }
-        }, 300);
-    }
-
-    /**
-     * Mengirimkan pesan ke BroadcastChannel (Lokal Tab) & WebSocket Dispatcher (Kolaborasi)
-     */
-    broadcastMessage(type, data) {
-        const messagePayload = {
-            type,
-            requestId: this.currentRequestId,
-            workspaceId: this.State?.workspaceId,
-            data
-        };
-
-        this.bc.postMessage(messagePayload);
-
-        if (window.dispatcher && typeof window.dispatcher.dispatch === 'function') {
-            window.dispatcher.dispatch({
-                action: type,
-                ...messagePayload
-            });
         }
     }
 

@@ -133,7 +133,7 @@ const headerCtrl = new RequestHeaderController(State);
 //=============== INITIALIZE TAB REQUEST ================
 const tabCtrl = new TabController(ui, null, State, paramCtrl, headerCtrl, graphqlCtrl, grpcCtrl);
 
-initBodyTabs(bodyParamCtrl, tabCtrl);
+initBodyTabs(bodyParamCtrl, tabCtrl, graphqlCtrl);
 
  //=============== INITIALIZE REQUEST ================
 const requestCtrl = new RequestController(ui, State, {
