@@ -276,100 +276,66 @@ mod commands {
     }
 
    // ==========================================
-// GRPC REQUEST (SUPPORT UNARY, STREAMING & OPTIONAL METADATA)
-// ==========================================
-#[tauri::command]
-pub async fn grpc_request(
-    endpoint: String,
-    service_method: String,
-    payload: serde_json::Value,
-    metadata: Option<serde_json::Value>
-) -> Result<serde_json::Value, String> {
-    let start = Instant::now();
-    
-    // Ganti logika manual lama dengan helper cerdas resolve_and_connect_grpc
-    let (channel, formatted_endpoint, target_host) = resolve_and_connect_grpc(&endpoint).await?;
+    // GRPC REQUEST (SUPPORT UNARY, STREAMING, OPTIONAL METADATA & SCRIPTS)
+    // ==========================================
+    #[tauri::command]
+    pub async fn grpc_request(
+        endpoint: String,
+        service_method: String,
+        payload: serde_json::Value,
+        metadata: Option<serde_json::Value>,
+        _scripts: Option<serde_json::Value>, // <-- Ditambahkan agar sinkron dengan payload frontend
+    ) -> Result<serde_json::Value, String> {
+        let start = Instant::now();
+        
+        // Ganti logika manual lama dengan helper cerdas resolve_and_connect_grpc
+        let (channel, formatted_endpoint, target_host) = resolve_and_connect_grpc(&endpoint).await?;
 
-    let sanitized = service_method.trim();
-    let normalized = sanitized.replace(" / ", "/").replace(" /", "/").replace("/ ", "/");
-    let clean_path = normalized.trim_start_matches('/');
+        let sanitized = service_method.trim();
+        let normalized = sanitized.replace(" / ", "/").replace(" /", "/").replace("/ ", "/");
+        let clean_path = normalized.trim_start_matches('/');
 
-    let (service_name, method_name) = if let Some(idx) = clean_path.rfind('/') {
-        (clean_path[..idx].trim().to_string(), clean_path[idx+1..].trim().to_string())
-    } else {
-        return Err(format!("Format service_method salah ('{}'). Gunakan format 'Service/Method'", service_method));
-    };
+        let (service_name, method_name) = if let Some(idx) = clean_path.rfind('/') {
+            (clean_path[..idx].trim().to_string(), clean_path[idx+1..].trim().to_string())
+        } else {
+            return Err(format!("Format service_method salah ('{}'). Gunakan format 'Service/Method'", service_method));
+        };
 
-    let cache_key = format!("{}_{}", formatted_endpoint, service_name);
-    let mut cached_pool = None;
+        let cache_key = format!("{}_{}", formatted_endpoint, service_name);
+        let mut cached_pool = None;
 
-    {
-        let cache = GRPC_DESCRIPTOR_CACHE.read().await;
-        if let Some(pool) = cache.get(&cache_key) {
-            cached_pool = Some(pool.clone());
-        }
-    }
-
-    let (pool, was_cached) = if let Some(p) = cached_pool {
-        (p, true)
-    } else {
-        let mut fd_set = prost_types::FileDescriptorSet::default();
-        let mut reflection_success = false;
-        let mut reflection_err_detail = String::new();
-
-        // PANGGILAN REFLECTION V1
-        let reflection_v1_result = async {
-            let mut client_v1 = ServerReflectionClient::new(channel.clone());
-            let req_v1 = ServerReflectionRequest {
-                host: target_host.clone(),
-                message_request: Some(
-                    tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
-                ),
-            };
-            client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await
-        }.await;
-
-        match reflection_v1_result {
-            Ok(response) => {
-                let mut stream = response.into_inner();
-                if let Ok(Some(msg)) = stream.message().await {
-                    match msg.message_response {
-                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
-                            for fd_bytes in fd_res.file_descriptor_proto {
-                                if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
-                                    fd_set.file.push(fd);
-                                }
-                            }
-                            reflection_success = !fd_set.file.is_empty();
-                        },
-                        Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
-                            reflection_err_detail = format!("v1 Error: {} (code {})", err.error_message, err.error_code);
-                        },
-                        _ => reflection_err_detail = "v1 Error: Invalid response type".to_string()
-                    }
-                }
-            },
-            Err(e) => reflection_err_detail = format!("v1 Status: {}", e),
+        {
+            let cache = GRPC_DESCRIPTOR_CACHE.read().await;
+            if let Some(pool) = cache.get(&cache_key) {
+                cached_pool = Some(pool.clone());
+            }
         }
 
-        if !reflection_success {
-            let reflection_v1alpha_result = async {
-                let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
-                let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
+        let (pool, was_cached) = if let Some(p) = cached_pool {
+            (p, true)
+        } else {
+            let mut fd_set = prost_types::FileDescriptorSet::default();
+            let mut reflection_success = false;
+            let mut reflection_err_detail = String::new();
+
+            // PANGGILAN REFLECTION V1
+            let reflection_v1_result = async {
+                let mut client_v1 = ServerReflectionClient::new(channel.clone());
+                let req_v1 = ServerReflectionRequest {
                     host: target_host.clone(),
                     message_request: Some(
-                        tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
+                        tonic_reflection::pb::v1::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
                     ),
                 };
-                client_v1alpha.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha))).await
+                client_v1.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1))).await
             }.await;
 
-            match reflection_v1alpha_result {
+            match reflection_v1_result {
                 Ok(response) => {
                     let mut stream = response.into_inner();
                     if let Ok(Some(msg)) = stream.message().await {
                         match msg.message_response {
-                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
+                            Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
                                 for fd_bytes in fd_res.file_descriptor_proto {
                                     if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
                                         fd_set.file.push(fd);
@@ -377,219 +343,304 @@ pub async fn grpc_request(
                                 }
                                 reflection_success = !fd_set.file.is_empty();
                             },
-                            Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
-                                reflection_err_detail = format!("{} | v1alpha Error: {} (code {})", reflection_err_detail, err.error_message, err.error_code);
+                            Some(tonic_reflection::pb::v1::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                                reflection_err_detail = format!("v1 Error: {} (code {})", err.error_message, err.error_code);
                             },
-                            _ => reflection_err_detail = format!("{} | v1alpha Error: Invalid response type", reflection_err_detail)
+                            _ => reflection_err_detail = "v1 Error: Invalid response type".to_string()
                         }
                     }
                 },
-                Err(e) => reflection_err_detail = format!("{} | v1alpha Status: {}", reflection_err_detail, e),
+                Err(e) => reflection_err_detail = format!("v1 Status: {}", e),
             }
-        }
 
-        if !reflection_success {
-            return Err(format!("Gagal memuat descriptor untuk service '{}'. Detail Server: {}", service_name, reflection_err_detail));
-        }
+            if !reflection_success {
+                let reflection_v1alpha_result = async {
+                    let mut client_v1alpha = tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient::new(channel.clone());
+                    let req_v1alpha = tonic_reflection::pb::v1alpha::ServerReflectionRequest {
+                        host: target_host.clone(),
+                        message_request: Some(
+                            tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest::FileContainingSymbol(service_name.clone())
+                        ),
+                    };
+                    client_v1alpha.server_reflection_info(tonic::Request::new(tokio_stream::once(req_v1alpha))).await
+                }.await;
 
-        let mut new_pool = prost_reflect::DescriptorPool::new();
-        let mut pool_bytes = Vec::new();
-        prost::Message::encode(&fd_set, &mut pool_bytes).map_err(|e| e.to_string())?;
-        
-        new_pool.decode_file_descriptor_set(pool_bytes.as_slice())
-            .map_err(|e| format!("Gagal memuat Protobuf descriptor pool: {}", e))?;
-
-        let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
-        cache.insert(cache_key.clone(), new_pool.clone());
-        
-        (new_pool, false)
-    };
-
-    let service_desc = match pool.get_service_by_name(&service_name) {
-        Some(desc) => desc,
-        None => {
-            if was_cached {
-                let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
-                cache.remove(&cache_key);
-                return Err(format!("Service '{}' usang. Silakan klik 'Send' kembali untuk melakukan re-reflection.", service_name));
+                match reflection_v1alpha_result {
+                    Ok(response) => {
+                        let mut stream = response.into_inner();
+                        if let Ok(Some(msg)) = stream.message().await {
+                            match msg.message_response {
+                                Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::FileDescriptorResponse(fd_res)) => {
+                                    for fd_bytes in fd_res.file_descriptor_proto {
+                                        if let Ok(fd) = prost_types::FileDescriptorProto::decode(fd_bytes.as_slice()) {
+                                            fd_set.file.push(fd);
+                                        }
+                                    }
+                                    reflection_success = !fd_set.file.is_empty();
+                                },
+                                Some(tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse::ErrorResponse(err)) => {
+                                    reflection_err_detail = format!("{} | v1alpha Error: {} (code {})", reflection_err_detail, err.error_message, err.error_code);
+                                },
+                                _ => reflection_err_detail = format!("{} | v1alpha Error: Invalid response type", reflection_err_detail)
+                            }
+                        }
+                    },
+                    Err(e) => reflection_err_detail = format!("{} | v1alpha Status: {}", reflection_err_detail, e),
+                }
             }
-            return Err(format!("Service '{}' tidak ditemukan di pool descriptor", service_name));
-        }
-    };
-    
-    let method_desc = match service_desc.methods().find(|m| m.name() == method_name) {
-        Some(desc) => desc,
-        None => return Err(format!("Method '{}' tidak ditemukan di dalam service '{}'", method_name, service_name)),
-    };
 
-    let input_desc = method_desc.input();
-    let output_desc = method_desc.output();
+            if !reflection_success {
+                return Err(format!("Gagal memuat descriptor untuk service '{}'. Detail Server: {}", service_name, reflection_err_detail));
+            }
 
-    // --- PENANGANAN FLEKSIBEL KONFLIK ONEOF & FIELD KOSONG ---
-    let mut clean_payload_val = if payload.is_null() {
-        serde_json::json!({})
-    } else if let Some(s) = payload.as_str() {
-        let s_trim = s.trim();
-        if s_trim.is_empty() {
+            let mut new_pool = prost_reflect::DescriptorPool::new();
+            let mut pool_bytes = Vec::new();
+            prost::Message::encode(&fd_set, &mut pool_bytes).map_err(|e| e.to_string())?;
+            
+            new_pool.decode_file_descriptor_set(pool_bytes.as_slice())
+                .map_err(|e| format!("Gagal memuat Protobuf descriptor pool: {}", e))?;
+
+            let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
+            cache.insert(cache_key.clone(), new_pool.clone());
+            
+            (new_pool, false)
+        };
+
+        let service_desc = match pool.get_service_by_name(&service_name) {
+            Some(desc) => desc,
+            None => {
+                if was_cached {
+                    let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
+                    cache.remove(&cache_key);
+                    return Err(format!("Service '{}' usang. Silakan klik 'Send' kembali untuk melakukan re-reflection.", service_name));
+                }
+                return Err(format!("Service '{}' tidak ditemukan di pool descriptor", service_name));
+            }
+        };
+        
+        let method_desc = match service_desc.methods().find(|m| m.name() == method_name) {
+            Some(desc) => desc,
+            None => return Err(format!("Method '{}' tidak ditemukan di dalam service '{}'", method_name, service_name)),
+        };
+
+        let input_desc = method_desc.input();
+        let output_desc = method_desc.output();
+
+        // --- PENANGANAN FLEKSIBEL KONFLIK ONEOF & FIELD KOSONG ---
+        let mut clean_payload_val = if payload.is_null() {
             serde_json::json!({})
+        } else if let Some(s) = payload.as_str() {
+            let s_trim = s.trim();
+            if s_trim.is_empty() {
+                serde_json::json!({})
+            } else {
+                serde_json::from_str(s_trim).unwrap_or(payload.clone())
+            }
         } else {
-            serde_json::from_str(s_trim).unwrap_or(payload.clone())
-        }
-    } else {
-        payload.clone()
-    };
+            payload.clone()
+        };
 
-    if let Some(obj) = clean_payload_val.as_object_mut() {
-        for oneof_desc in input_desc.oneofs() {
-            let fields_in_oneof: Vec<String> = oneof_desc.fields().map(|f| f.name().to_string()).collect();
-            let mut found_first = false;
-            let mut to_remove = Vec::new();
+        if let Some(obj) = clean_payload_val.as_object_mut() {
+            for oneof_desc in input_desc.oneofs() {
+                let fields_in_oneof: Vec<String> = oneof_desc.fields().map(|f| f.name().to_string()).collect();
+                let mut found_first = false;
+                let mut to_remove = Vec::new();
 
-            for field_name in &fields_in_oneof {
-                if let Some(val) = obj.get(field_name) {
-                    let is_empty_val = val.is_null() 
-                        || (val.is_object() && val.as_object().unwrap().is_empty())
-                        || (val.is_string() && val.as_str().unwrap().is_empty());
+                for field_name in &fields_in_oneof {
+                    if let Some(val) = obj.get(field_name) {
+                        let is_empty_val = val.is_null() 
+                            || (val.is_object() && val.as_object().unwrap().is_empty())
+                            || (val.is_string() && val.as_str().unwrap().is_empty());
 
-                    if is_empty_val {
-                        to_remove.push(field_name.clone());
-                    } else if !found_first {
-                        found_first = true;
-                    } else {
-                        to_remove.push(field_name.clone());
+                        if is_empty_val {
+                            to_remove.push(field_name.clone());
+                        } else if !found_first {
+                            found_first = true;
+                        } else {
+                            to_remove.push(field_name.clone());
+                        }
                     }
                 }
-            }
 
-            for rem in to_remove {
-                obj.remove(&rem);
-            }
-        }
-    }
-
-    let request_msg = {
-        let json_str = clean_payload_val.to_string();
-        let mut deserializer = serde_json::Deserializer::from_str(&json_str);
-        prost_reflect::DynamicMessage::deserialize(input_desc, &mut deserializer)
-            .map_err(|e| format!("Format JSON tidak sesuai dengan skema Protobuf gRPC: {}", e))?
-    };
-
-    let mut req_bytes = Vec::new();
-    prost::Message::encode(&request_msg, &mut req_bytes)
-        .map_err(|e| format!("Gagal mem-parsing/encode Protobuf: {}", e))?;
-
-    let path_uri = format!("/{}/{}", service_name, method_name);
-    let path = http::uri::PathAndQuery::from_maybe_shared(path_uri.clone())
-        .map_err(|_| format!("Invalid Route Path: {}", path_uri))?;
-
-    let codec = RawBytesCodec::default();
-
-    // --- PEMBUATAN TONIC REQUEST DAN INJEKSI METADATA OPSIONAL ---
-    let mut req = tonic::Request::new(req_bytes);
-    
-    if let Some(meta) = metadata {
-        let headers_mut = req.metadata_mut();
-        if let Some(obj) = meta.as_object() {
-            for (k, v) in obj {
-                if let Some(v_str) = v.as_str() {
-                    if let (Ok(key), Ok(val)) = (
-                        tonic::metadata::MetadataKey::from_bytes(k.as_bytes()),
-                        v_str.parse::<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>()
-                    ) {
-                        headers_mut.insert(key, val);
-                    }
+                for rem in to_remove {
+                    obj.remove(&rem);
                 }
             }
-        } else if let Some(arr) = meta.as_array() {
-            for item in arr {
-                if let Some(pair) = item.as_array() {
-                    if pair.len() >= 2 {
-                        let k = pair[0].as_str().unwrap_or("");
-                        let v = pair[1].as_str().unwrap_or("");
-                        if !k.is_empty() {
-                            if let (Ok(key), Ok(val)) = (
-                                tonic::metadata::MetadataKey::from_bytes(k.as_bytes()),
-                                v.parse::<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>()
-                            ) {
-                                headers_mut.insert(key, val);
+        }
+
+        let request_msg = {
+            let json_str = clean_payload_val.to_string();
+            let mut deserializer = serde_json::Deserializer::from_str(&json_str);
+            prost_reflect::DynamicMessage::deserialize(input_desc, &mut deserializer)
+                .map_err(|e| format!("Format JSON tidak sesuai dengan skema Protobuf gRPC: {}", e))?
+        };
+
+        let mut req_bytes = Vec::new();
+        prost::Message::encode(&request_msg, &mut req_bytes)
+            .map_err(|e| format!("Gagal mem-parsing/encode Protobuf: {}", e))?;
+
+        let path_uri = format!("/{}/{}", service_name, method_name);
+        let path = http::uri::PathAndQuery::from_maybe_shared(path_uri.clone())
+            .map_err(|_| format!("Invalid Route Path: {}", path_uri))?;
+
+        let codec = RawBytesCodec::default();
+
+        // --- PEMBUATAN TONIC REQUEST DAN INJEKSI METADATA OPSIONAL ---
+        let mut req = tonic::Request::new(req_bytes);
+        
+        if let Some(meta) = metadata {
+            let headers_mut = req.metadata_mut();
+            if let Some(obj) = meta.as_object() {
+                for (k, v) in obj {
+                    if let Some(v_str) = v.as_str() {
+                        if let (Ok(key), Ok(val)) = (
+                            tonic::metadata::MetadataKey::from_bytes(k.as_bytes()),
+                            v_str.parse::<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>()
+                        ) {
+                            headers_mut.insert(key, val);
+                        }
+                    }
+                }
+            } else if let Some(arr) = meta.as_array() {
+                for item in arr {
+                    if let Some(pair) = item.as_array() {
+                        if pair.len() >= 2 {
+                            let k = pair[0].as_str().unwrap_or("");
+                            let v = pair[1].as_str().unwrap_or("");
+                            if !k.is_empty() {
+                                if let (Ok(key), Ok(val)) = (
+                                    tonic::metadata::MetadataKey::from_bytes(k.as_bytes()),
+                                    v.parse::<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>()
+                                ) {
+                                    headers_mut.insert(key, val);
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
 
-    // CEK APAKAH METHOD INI SERVER STREAMING
-    if method_desc.is_server_streaming() {
+        // (Opsional) Jika nanti ingin mengeksekusi scripts (pre/post script):
+        // if let Some(scr) = scripts {
+        //     let pre = scr.get("pre").and_then(|v| v.as_str()).unwrap_or("");
+        //     let post = scr.get("post").and_then(|v| v.as_str()).unwrap_or("");
+        //     // Eksekusi skrip di sini jika menggunakan engine JS sandbox (seperti rquickjs/deno)
+        // }
+
+        // CEK APAKAH METHOD INI SERVER STREAMING
+        if method_desc.is_server_streaming() {
+            let mut client = tonic::client::Grpc::new(channel);
+            client.ready().await.map_err(|e| format!("gRPC Client belum siap: {}", e))?;
+
+            let response = client.server_streaming(req, path, codec).await
+                .map_err(|status| format!("gRPC Server Streaming Error [Code {}]: {}", status.code(), status.message()))?;
+
+            let mut stream = response.into_inner();
+            let mut results = Vec::new();
+            let mut total_bytes = 0;
+
+            while let Some(item_res) = stream.next().await {
+                match item_res {
+                    Ok(res_bytes) => {
+                        total_bytes += res_bytes.len();
+                        match prost_reflect::DynamicMessage::decode(output_desc.clone(), res_bytes.as_slice()) {
+                            Ok(response_msg) => {
+                                if let Ok(res_json) = serde_json::to_value(&response_msg) {
+                                    results.push(res_json);
+                                }
+                            }
+                            Err(e) => println!(">>> [ERROR] Gagal decode stream chunk: {}", e),
+                        }
+                    }
+                    Err(e) => {
+                        println!(">>> [ERROR] Stream error: {}", e);
+                        break;
+                    }
+                }
+            }
+
+            let duration = start.elapsed().as_millis();
+
+            return Ok(json!({
+                "status": 200,
+                "body": results, 
+                "time": duration,
+                "headers": [["content-type", "application/grpc"]],
+                "size": total_bytes,
+                "is_stream": true
+            }));
+        }
+
+        // UNARY REQUEST BIASA
         let mut client = tonic::client::Grpc::new(channel);
         client.ready().await.map_err(|e| format!("gRPC Client belum siap: {}", e))?;
 
-        let response = client.server_streaming(req, path, codec).await
-            .map_err(|status| format!("gRPC Server Streaming Error [Code {}]: {}", status.code(), status.message()))?;
+        let response = client.unary(req, path, codec).await
+            .map_err(|status| format!("gRPC Error [Code {}]: {}", status.code(), status.message()))?;
 
-        let mut stream = response.into_inner();
-        let mut results = Vec::new();
-        let mut total_bytes = 0; // [OPTIMASI]: Akumulasi byte langsung tanpa re-serialize ke JSON string
+        let duration = start.elapsed().as_millis();
+        let res_body_bytes = response.into_inner();
+        let res_size = res_body_bytes.len();
+        
+        let response_msg = prost_reflect::DynamicMessage::decode(output_desc, res_body_bytes.as_slice())
+            .map_err(|e| format!("Gagal men-decode response dari Protobuf: {}", e))?;
+        
+        let res_json = serde_json::to_value(&response_msg)
+            .map_err(|e| format!("Gagal men-serialize response Protobuf ke JSON: {}", e))?;
 
-        while let Some(item_res) = stream.next().await {
-            match item_res {
-                Ok(res_bytes) => {
-                    total_bytes += res_bytes.len(); // [OPTIMASI]: Menghemat CPU & memori secara drastis
-                    match prost_reflect::DynamicMessage::decode(output_desc.clone(), res_bytes.as_slice()) {
-                        Ok(response_msg) => {
-                            if let Ok(res_json) = serde_json::to_value(&response_msg) {
-                                results.push(res_json);
-                            }
-                        }
-                        Err(e) => println!(">>> [ERROR] Gagal decode stream chunk: {}", e),
-                    }
-                }
-                Err(e) => {
-                    println!(">>> [ERROR] Stream error: {}", e);
-                    break;
-                }
+        Ok(json!({
+            "status": 200,
+            "body": res_json,
+            "time": duration,
+            "headers": [["content-type", "application/grpc"]],
+            "size": res_size,
+            "is_stream": false
+        }))
+    }
+
+
+   #[tauri::command]
+    pub async fn load_local_proto(content: String, filename: String) -> Result<serde_json::Value, String> {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join(&filename);
+
+        tokio::fs::write(&file_path, content.as_bytes())
+            .await
+            .map_err(|e| format!("Gagal menulis file temporary: {}", e))?;
+
+        let file_descriptor_set = protox::compile(&[file_path], &[temp_dir])
+            .map_err(|e| format!("Gagal compile .proto: {}", e))?;
+
+        let mut pool = prost_reflect::DescriptorPool::new();
+        pool.add_file_descriptor_set(file_descriptor_set)
+            .map_err(|e| format!("Gagal memuat descriptor: {}", e))?;
+
+        // Ekstrak service & methods secara dinamis pakai JSON macro
+        let mut services_list = Vec::new();
+        for file in pool.files() {
+            for service in file.services() {
+                let service_name = service.full_name().to_string();
+                let methods: Vec<String> = service.methods().map(|m| m.name().to_string()).collect();
+                
+                services_list.push(serde_json::json!({
+                    "service": service_name,
+                    "methods": methods
+                }));
             }
         }
 
-        let duration = start.elapsed().as_millis();
+        let mut cache = GRPC_DESCRIPTOR_CACHE.write().await;
+        cache.insert("local_proto".to_string(), pool);
 
-        return Ok(json!({
-            "status": 200,
-            "body": results, 
-            "time": duration,
-            "headers": [["content-type", "application/grpc"]],
-            "size": total_bytes, // [OPTIMASI]: Menggunakan total ukuran byte stream
-            "is_stream": true
-        }));
+        // Kembalikan dalam bentuk objek JSON dinamis tanpa struct
+        Ok(serde_json::json!({
+            "message": format!("{} berhasil dimuat!", filename),
+            "services": services_list
+        }))
     }
 
-    // UNARY REQUEST BIASA
-    let mut client = tonic::client::Grpc::new(channel);
-    client.ready().await.map_err(|e| format!("gRPC Client belum siap: {}", e))?;
 
-    let response = client.unary(req, path, codec).await
-        .map_err(|status| format!("gRPC Error [Code {}]: {}", status.code(), status.message()))?;
-
-    let duration = start.elapsed().as_millis();
-    let res_body_bytes = response.into_inner();
-    let res_size = res_body_bytes.len();
-    
-    let response_msg = prost_reflect::DynamicMessage::decode(output_desc, res_body_bytes.as_slice())
-        .map_err(|e| format!("Gagal men-decode response dari Protobuf: {}", e))?;
-    
-    let res_json = serde_json::to_value(&response_msg)
-        .map_err(|e| format!("Gagal men-serialize response Protobuf ke JSON: {}", e))?;
-
-    Ok(json!({
-        "status": 200,
-        "body": res_json,
-        "time": duration,
-        "headers": [["content-type", "application/grpc"]],
-        "size": res_size,
-        "is_stream": false
-    }))
-}
 
    // ==========================================
     // HELPER KONEKSI DINAMIS & CERDAS (TANPA HARDCODE)
@@ -826,7 +877,8 @@ pub fn run() {
         commands::http_request, 
         commands::http_request_collabs,
         commands::grpc_request,
-        commands::discover_grpc_services
+        commands::discover_grpc_services,
+        commands::load_local_proto
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

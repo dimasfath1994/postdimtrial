@@ -38,3 +38,4 @@ prost-types = "0.13"
 prost-reflect = { version = "0.14", features = ["serde"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5.3"
+protox = "0.7"
