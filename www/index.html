@@ -127,15 +127,18 @@
 
       <!-- GRAPHQL BOX -->
       <div id="graphqlBox" class="hidden" style="margin-top: 10px;">
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <!-- Kolom Query -->
+          <div style="flex: 1; min-width: 300px;">
             <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Query / Mutation</div>
             <div id="graphqlQueryEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
             <textarea id="graphqlQuery" class="hidden" placeholder="query { ... }"></textarea>
           </div>
-          <div>
+          
+          <!-- Kolom Variables -->
+          <div style="flex: 1; min-width: 300px;">
             <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Variables (JSON)</div>
-            <div id="graphqlVariablesEditor" class="monaco-editor" style="height: 100px; border: 1px solid #333;"></div>
+            <div id="graphqlVariablesEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
             <textarea id="graphqlVariables" class="hidden" placeholder="{ &quot;id&quot;: 1 }"></textarea>
           </div>
         </div>
