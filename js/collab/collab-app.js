@@ -51,6 +51,11 @@ import { initInviteModal } from "./controller/invite-controller.js";
 
 import { initWorkspaceModal, showWorkspaceModal } from "./ui/workspace-management.js";
 
+import { GraphqlController } from "./controller/graphql-controller.js";
+import { GraphqlUI } from './ui/graphql-ui.js';
+import { GrpcController } from "./controller/grpc-controller.js";
+import { RequestModeController } from './controller/request-mode-controller.js';
+
 const isTauri = window.__TAURI_INTERNALS__ !== undefined;
 
 if (isTauri) {
@@ -107,6 +112,14 @@ const dispatcher = new SocketDispatcher();
 
 
 
+// =============== INITIALIZE GRAPHQL & GRPC CONTROLLER ================
+const graphqlCtrl = new GraphqlController(State);
+const grpcCtrl = new GrpcController(State);
+
+window.graphqlCtrl = graphqlCtrl;
+window.grpcCtrl = grpcCtrl;
+
+
 // =============== INITIALIZE REQUEST-PARAM-CONTROLLER ================
 const paramCtrl = new RequestParamController(State);
 
@@ -118,7 +131,7 @@ window.bodyParamCtrl = bodyParamCtrl;
 const headerCtrl = new RequestHeaderController(State);
 
 //=============== INITIALIZE TAB REQUEST ================
-const tabCtrl = new TabController(ui, null, State, paramCtrl, headerCtrl);
+const tabCtrl = new TabController(ui, null, State, paramCtrl, headerCtrl, graphqlCtrl, grpcCtrl);
 
 initBodyTabs(bodyParamCtrl, tabCtrl);
 
@@ -224,7 +237,9 @@ const draftServerCtrl = new DraftServerController(State, {
     requestController: requestCtrl,
     requestParamController: paramCtrl,
     requestHeaderController: headerCtrl,
-    requestBodyParamController: bodyParamCtrl
+    requestBodyParamController: bodyParamCtrl,
+    graphqlController: graphqlCtrl,
+    grpcController: grpcCtrl
 });
 
 // Penting: Daftarkan ke window agar bisa diakses jika dibutuhkan
@@ -242,6 +257,8 @@ dispatcher.register('FOLDER_', folderCtrl);
 dispatcher.register('REQUEST_', requestCtrl);
 dispatcher.register('PARAM_', paramCtrl);
 dispatcher.register('HEADER_', headerCtrl);
+dispatcher.register('GRAPHQL_', graphqlCtrl);
+dispatcher.register('GRPC_', grpcCtrl);
 
 
 // Saat inisialisasi socket, cukup panggil dispatcher.dispatch
@@ -255,6 +272,25 @@ function initSocket(workspaceId) {
 let currentSocket = null;
 let currentConnectedId = null; 
 let isConnecting = false;
+
+
+function updateBodyMode(mode) {
+    const rawBox = document.getElementById('rawBodyBox');
+    const formBox = document.getElementById('formDataBox');
+    const urlBox = document.getElementById('urlencodedBox');
+    const gqlBox = document.getElementById('graphqlBox');
+
+    if (rawBox) rawBox.classList.toggle('hidden', mode !== 'raw' && mode !== 'none');
+    if (formBox) formBox.classList.toggle('hidden', mode !== 'form-data');
+    if (urlBox) urlBox.classList.toggle('hidden', mode !== 'urlencoded');
+    if (gqlBox) gqlBox.classList.toggle('hidden', mode !== 'graphql');
+
+    // Re-layout Monaco Editor saat tab GraphQL diaktifkan
+    if (mode === 'graphql') {
+        GraphqlUI.layout();
+    }
+} 
+
 
 function connectSocket(id) {
     // 1. Guard: Tidak perlu melakukan apa-apa jika sudah terhubung
@@ -321,6 +357,7 @@ document.addEventListener("DOMContentLoaded", async () => {
          await workspaceCtrl.loadFlow();
 
          const wsId = State.workspaceId; // Pastikan ID workspace tersedia
+        RequestModeController.init();
         await envCtrl.init(null, wsId); // Pass null karena kita tidak butuh render ke UI dulu
         await globalCtrl.init(null);
 
@@ -395,7 +432,9 @@ window.addEventListener('request-tab-switched', async (e) => {
     await Promise.all([
         bodyParamCtrl ? bodyParamCtrl.syncWithRequest(requestId) : Promise.resolve(),
         headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox'), isDraft) : Promise.resolve(),
-        paramCtrl ? paramCtrl.init(requestId, document.getElementById('paramsBox'), isDraft) : Promise.resolve()
+        paramCtrl ? paramCtrl.init(requestId, document.getElementById('paramsBox'), isDraft) : Promise.resolve(),
+        graphqlCtrl ? graphqlCtrl.init(requestId, document.getElementById('graphqlBox'), isDraft) : Promise.resolve(),
+        grpcCtrl ? grpcCtrl.init(requestId, document.getElementById('grpcBox'), isDraft) : Promise.resolve()
     ]);
     
     console.log(`[SYNC] Semua data untuk ${requestId} berhasil dimuat ke State.`);
@@ -601,6 +640,7 @@ document.getElementById('newTab').addEventListener('click', async () => {
 
     console.log("Draft request created locally with collection:", targetCollectionId);
 });
+
 
 
 function logout() {

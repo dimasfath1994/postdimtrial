@@ -8,13 +8,17 @@ export class DraftServerController {
         requestController, 
         requestParamController, 
         requestHeaderController, 
-        requestBodyParamController 
+        requestBodyParamController,
+        graphqlController, // <-- Tambahan
+        grpcController     // <-- Tambahan
     }) {
         this.State = State;
         this.requestController = requestController;
         this.requestParamController = requestParamController;
         this.requestHeaderController = requestHeaderController;
         this.requestBodyParamController = requestBodyParamController;
+        this.graphqlController = graphqlController; // <-- Tambahan
+        this.grpcController = grpcController;         // <-- Tambahan
     }
 
     /**
@@ -26,6 +30,7 @@ export class DraftServerController {
             const draftData = DataBridge.getAll(draftId);
             if (!draftData) throw new Error("Draft tidak ditemukan");
             console.log("ISI DRAFT DATA SEBELUM KE SERVER", draftData);
+            
             // 2. Buat Request Utama
             const requestPayload = {
                 id: draftData.id,
@@ -51,7 +56,9 @@ export class DraftServerController {
             await Promise.all([
                 this.saveParams(newId, draftData.params),
                 this.saveHeaders(newId, draftData.headers),
-                this.saveBodyParams(newId, draftData.bodyParams)
+                this.saveBodyParams(newId, draftData.bodyParams),
+                this.saveGraphql(newId, draftData.graphql), // <-- Tambahan migrasi GraphQL
+                this.saveGrpc(newId, draftData.grpc)         // <-- Tambahan migrasi gRPC
             ]);
 
             return newId;
@@ -77,5 +84,20 @@ export class DraftServerController {
         if (!bodyParams || !Array.isArray(bodyParams)) return;
         
         await this.requestBodyParamController.migrateBodyParamsToRequest(reqId, bodyParams);
+    }
+
+    // --- TAMBAHAN METHOD UNTUK GRAPHQL & GRPC ---
+    async saveGraphql(reqId, graphqlData) {
+        if (!graphqlData || !this.graphqlController) return;
+        if (typeof this.graphqlController.migrateGraphqlToRequest === 'function') {
+            await this.graphqlController.migrateGraphqlToRequest(reqId, graphqlData);
+        }
+    }
+
+    async saveGrpc(reqId, grpcData) {
+        if (!grpcData || !this.grpcController) return;
+        if (typeof this.grpcController.migrateGrpcToRequest === 'function') {
+            await this.grpcController.migrateGrpcToRequest(reqId, grpcData);
+        }
     }
 }
