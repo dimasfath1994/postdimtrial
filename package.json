@@ -1,9 +1,9 @@
 {
-  "name": "postdim-vscode",
-  "displayName": "Postdim API Client",
+  "name": "postdim-api-client-dimasfath94",
+  "displayName": "Postdim API Client by Dimasfath94",
   "description": "API development client for Visual Studio Code.",
-  "version": "0.1.0",
-  "publisher": "dimasfath1994",
+  "version": "0.1.21",
+  "publisher": "dimasfath94",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -20,9 +20,16 @@
     "commands": [
       {
         "command": "postdim.open",
-        "title": "Postdim: Open API Client"
+        "title": "Postdim: Open API Client (postdim.open)"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "postdim.open"
+        }
+      ]
+    }
   },
   "scripts": {
     "package": "vsce package",
@@ -30,5 +37,9 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^3.2.2"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.13.4",
+    "@grpc/proto-loader": "^0.7.13"
   }
 }

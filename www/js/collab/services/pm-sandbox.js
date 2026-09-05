@@ -10,12 +10,23 @@ export class PMSandbox {
         
         // Objek PM yang akan disuntikkan ke dalam script
         const pm = {
+            variables: {
+                get: (key) => state.runtimeVariables?.[key],
+                set: (key, value) => {
+                    state.runtimeVariables ||= {};
+                    state.runtimeVariables[key] = value;
+                },
+                unset: (key) => {
+                    if (state.runtimeVariables) delete state.runtimeVariables[key];
+                },
+                all: () => ({ ...(state.runtimeVariables || {}) })
+            },
             response: {
                 json: () => {
-                    try { return JSON.parse(response.body); } 
+                    try { return response?.body ? JSON.parse(response.body) : null; } 
                     catch (e) { return null; }
                 },
-                text: () => response.body
+                text: () => response?.body || ""
             },
             environment: {
                 // Mengambil nilai dari State melalui controller

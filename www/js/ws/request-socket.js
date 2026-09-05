@@ -3,8 +3,15 @@ import { WS_BASE_URL } from '../core/api/api-config.js';
 
 let globalSocket = null;
 let currentWorkspaceId = null;
+let reconnectTimer = null;
+let connectionGeneration = 0;
 
 export function setupGlobalSocket(workspaceId, callback) {
+    const generation = ++connectionGeneration;
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
     // 1. Jika sudah terhubung ke workspace yang sama, jangan lakukan apa-apa
     if (globalSocket && currentWorkspaceId === workspaceId && globalSocket.readyState === WebSocket.OPEN) {
         return globalSocket;
@@ -48,14 +55,16 @@ export function setupGlobalSocket(workspaceId, callback) {
     // PENTING: Jika error, reset variabel agar bisa dicoba lagi
     globalSocket.onerror = (err) => {
         console.error("[SOCKET] Error:", err);
-        globalSocket = null;
     };
 
     globalSocket.onclose = () => {
         console.log("[SOCKET] Koneksi tertutup");
+        if (generation !== connectionGeneration || currentWorkspaceId !== workspaceId) return;
         globalSocket = null;
-        // Opsional: Reconnect otomatis setelah 3 detik
-      
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            setupGlobalSocket(workspaceId, callback);
+        }, 3000);
     };
 
     return globalSocket;

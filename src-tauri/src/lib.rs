@@ -308,6 +308,8 @@ mod commands {
             let cache = GRPC_DESCRIPTOR_CACHE.read().await;
             if let Some(pool) = cache.get(&cache_key) {
                 cached_pool = Some(pool.clone());
+            } else if let Some(pool) = cache.get("local_proto") {
+                cached_pool = Some(pool.clone());
             }
         }
 

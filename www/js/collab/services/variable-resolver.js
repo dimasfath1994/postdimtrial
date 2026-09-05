@@ -12,6 +12,8 @@ export class VariableResolver {
         resolved.url = this.resolveString(requestData.url, state);
         resolved.params = this.resolveObject(requestData.params, state);
         resolved.headers = this.resolveObject(requestData.headers, state);
+        resolved.pre_script = this.resolveString(requestData.pre_script, state);
+        resolved.post_script = this.resolveString(requestData.post_script, state);
 
         // --- PENANGANAN BODY YANG DINAMIS ---
         if (requestData.body instanceof FormData) {
@@ -41,6 +43,8 @@ export class VariableResolver {
         } else if (typeof requestData.body === 'string') {
             // Raw mode (JSON/Text)
             resolved.body = this.resolveString(requestData.body, state);
+        } else if (requestData.body && typeof requestData.body === 'object') {
+            resolved.body = this.resolveValue(requestData.body, state);
         }
 
         return resolved;
@@ -64,6 +68,13 @@ export class VariableResolver {
             const envs = state.environments || [];
             const envVar = envs.find(v => v.env_key === cleanKey);
             if (envVar) return envVar.env_value;
+
+            const runtimeValue = state.runtimeVariables?.[cleanKey];
+            if (runtimeValue !== undefined && runtimeValue !== null) return runtimeValue;
+
+            const collectionValue = state.collectionVariables?.[cleanKey]
+                ?? state.collectionVars?.[cleanKey];
+            if (collectionValue !== undefined && collectionValue !== null) return collectionValue;
     
             // 3. Cek Global Vars (Data ada di state.globals)
             const globals = state.globals || [];
@@ -78,11 +89,20 @@ export class VariableResolver {
 
     static resolveObject(obj, state) {
         if (!obj) return {};
-        const resolved = {};
-        for (const [key, value] of Object.entries(obj)) {
-            resolved[this.resolveString(key, state)] = this.resolveString(value, state);
-        }
-        return resolved;
+        return this.resolveValue(obj, state);
+    }
+
+    static resolveValue(value, state) {
+        if (typeof value === 'string') return this.resolveString(value, state);
+        if (Array.isArray(value)) return value.map((item) => this.resolveValue(item, state));
+        if (!value || typeof value !== 'object' || value instanceof Blob || value instanceof File) return value;
+
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [
+                this.resolveString(key, state),
+                this.resolveValue(item, state)
+            ])
+        );
     }
 
     /**

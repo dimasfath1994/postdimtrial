@@ -2,7 +2,6 @@
 .github/**
 .vscode/**
 src-tauri/**
-node_modules/**
 www/node_modules/**
 www/package-lock.json
 www/package.json

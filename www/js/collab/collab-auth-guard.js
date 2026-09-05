@@ -68,7 +68,11 @@ function block(reason) {
     sessionStorage.removeItem("collab_cache");
   } catch {}
 
-  window.location.replace("login.html");
+  if (window.postdimBridge?.navigate) {
+    window.postdimBridge.navigate("login.html");
+  } else {
+    window.location.replace("login.html");
+  }
 
   return false;
 }

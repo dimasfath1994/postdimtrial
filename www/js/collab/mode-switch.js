@@ -9,7 +9,11 @@ export function initModeSwitch() {
     const current = AppMode.get();
 
     if (current === "local") {
-      window.location.href = "/login.html";
+      if (window.postdimBridge?.navigate) {
+        window.postdimBridge.navigate("login.html");
+      } else {
+        window.location.href = "/login.html";
+      }
       return;
     }
 

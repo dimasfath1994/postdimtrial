@@ -69,7 +69,11 @@ export class GraphqlHandler {
         value: ui.graphqlQuery?.value || "",
         language: "graphql",
         theme: "vs-dark",
+        readOnly: false,
+        domReadOnly: false,
         automaticLayout: true,
+        quickSuggestions: { other: true, comments: false, strings: true },
+        suggestOnTriggerCharacters: true,
         minimap: { enabled: false }
       });
       this.editors.query.onDidChangeModelContent(() => {
@@ -84,7 +88,11 @@ export class GraphqlHandler {
         value: ui.graphqlVariables?.value || "",
         language: "json",
         theme: "vs-dark",
+        readOnly: false,
+        domReadOnly: false,
         automaticLayout: true,
+        quickSuggestions: { other: true, comments: false, strings: true },
+        suggestOnTriggerCharacters: true,
         minimap: { enabled: false }
       });
       this.editors.variables.onDidChangeModelContent(() => {

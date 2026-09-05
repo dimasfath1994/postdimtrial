@@ -7,7 +7,11 @@ export function initCollabMode() {
   btn.onclick = () => {
 
     if (!Auth.isLoggedIn()) {
-      window.location.href = "./login.html";
+      if (window.postdimBridge?.navigate) {
+        window.postdimBridge.navigate("login.html");
+      } else {
+        window.location.href = "./login.html";
+      }
       return;
     }
 

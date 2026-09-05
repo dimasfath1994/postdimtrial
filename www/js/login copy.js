@@ -110,7 +110,11 @@ document.addEventListener("DOMContentLoaded", () => {
       trace("LOGIN_SUCCESS");
 
       // 🚀 REDIRECT KE COLLAB MODE
-      window.location.href = "/collaboration.html";
+      if (window.postdimBridge?.navigate) {
+        window.postdimBridge.navigate("collaboration.html");
+      } else {
+        window.location.href = "/collaboration.html";
+      }
 
     } catch (err) {
       console.error(err);
@@ -152,7 +156,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       trace("REGISTER_SUCCESS");
 
-      window.location.href = "/collaboration.html";
+      if (window.postdimBridge?.navigate) {
+        window.postdimBridge.navigate("collaboration.html");
+      } else {
+        window.location.href = "/collaboration.html";
+      }
 
     } catch (err) {
       console.error(err);

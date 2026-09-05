@@ -260,14 +260,14 @@
           <!-- Kolom Query -->
           <div style="flex: 1; min-width: 300px;">
             <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Query / Mutation</div>
-            <div id="graphqlQueryEditor" class="monaco-editor" style="height: 200px; border: 1px solid #333; border-radius: 4px; overflow: hidden;"></div>
+            <div id="graphqlQueryEditor" class="monaco-container" style="height: 200px; border: 1px solid #333; border-radius: 4px; overflow: hidden;"></div>
             <textarea id="graphqlQuery" class="graphql-query-input hidden"></textarea>
           </div>
           
           <!-- Kolom Variables -->
           <div style="flex: 1; min-width: 300px;">
             <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">GraphQL Variables (JSON)</div>
-            <div id="graphqlVariablesEditor" class="monaco-editor" style="height: 200px; border: 1px solid #333; border-radius: 4px; overflow: hidden;"></div>
+            <div id="graphqlVariablesEditor" class="monaco-container" style="height: 200px; border: 1px solid #333; border-radius: 4px; overflow: hidden;"></div>
             <textarea id="graphqlVariables" class="graphql-variables-input hidden"></textarea>
           </div>
         </div>
@@ -290,12 +290,12 @@
     <div class="tab-panel hidden" data-panel="scripts">
       <div class="script-section">
         <div class="script-header">Pre Script</div>
-        <div id="preEditor" class="monaco-editor"></div>
+        <div id="preEditor" class="monaco-container"></div>
       </div>
 
       <div class="script-section">
         <div class="script-header">Post Script</div>
-        <div id="postEditor" class="monaco-editor"></div>
+        <div id="postEditor" class="monaco-container"></div>
       </div>
     </div>
 
@@ -331,7 +331,7 @@
         <div style="display: flex; flex-direction: column; gap: 12px;">
           <div>
             <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">Compose Message (JSON)</div>
-            <div id="grpcMessageEditor" class="monaco-editor" style="height: 180px; border: 1px solid #333;"></div>
+            <div id="grpcMessageEditor" class="monaco-container" style="height: 180px; border: 1px solid #333;"></div>
             <textarea id="grpcBody" class="hidden" placeholder='{ "name": "World" }'></textarea>
           </div>
         </div>
@@ -418,8 +418,12 @@
 <!-- ================= MONACO & CONTROLLER SWITCHER ================= -->
 <script>
   window.MonacoEnvironment = {
+    getWorker: function (_moduleId, label) {
+      const workerUrl = window.__POSTDIM_MONACO_WORKER__ || "./lib/js/monaco-editor/min/vs/workers-DcJshg-q.js";
+      return new Worker(workerUrl, { type: "module", name: label });
+    },
     getWorkerUrl: function () {
-      return "./lib/js/monaco-editor/min/vs/base/worker/workerMain.js";
+      return window.__POSTDIM_MONACO_WORKER__ || "./lib/js/monaco-editor/min/vs/workers-DcJshg-q.js";
     }
   };
 

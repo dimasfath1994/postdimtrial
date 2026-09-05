@@ -4,6 +4,7 @@ import { GrpcService } from "../grpc-service.js";
 import { RequestGrpcMetadataService } from "../request-grpc-metadata-service.js";
 import { GrpcUI } from "../ui/grpc-ui.js";
 import { DataBridge } from './bridge.js';
+import { VariableResolver } from '../services/variable-resolver.js';
 
 export class GrpcController {
     constructor(State) {
@@ -281,8 +282,9 @@ export class GrpcController {
     async invokeGrpc() {
         this.syncStateFromDOM();
         const currentData = this.State.grpc || {};
+        const resolvedData = VariableResolver.resolveValue(currentData, this.State);
 
-        let parsedPayload = currentData.payload;
+        let parsedPayload = resolvedData.payload;
         if (typeof parsedPayload === 'string') {
             try {
                 parsedPayload = JSON.parse(parsedPayload);
@@ -291,30 +293,39 @@ export class GrpcController {
             }
         }
 
-        // Format metadata menjadi tuple [key, value] yang diaktifkan untuk Tauri backend
         const formattedMetadata = (currentData.metadata || [])
             .filter(m => m.enabled !== false)
             .map(m => Array.isArray(m) ? m : [m.key, m.value])
             .filter(([k]) => k && k.trim() !== '');
 
-        const tauriPayload = {
-            endpoint: currentData.endpoint || '',
-            service_method: currentData.service_method || '',
+        const grpcPayload = {
+            endpoint: resolvedData.endpoint || '',
+            service_method: resolvedData.service_method || '',
             payload: parsedPayload,
             metadata: formattedMetadata,
+            tls: resolvedData.tls === true || document.getElementById('grpcUseTls')?.checked === true,
             _scripts: null
         };
 
         try {
-            console.log("[gRPC] Mengirim request ke Tauri command 'grpc_request':", tauriPayload);
-            
-            const result = await window.__TAURI__?.core?.invoke('grpc_request', tauriPayload) 
-                        || await window.__TAURI__?.invoke('grpc_request', tauriPayload);
+            console.log("[gRPC] Mengirim request via webview bridge / native runtime:", grpcPayload);
+
+            const invokeBridge = typeof window.postdimBridge?.invoke === 'function'
+                ? window.postdimBridge.invoke.bind(window.postdimBridge)
+                : null;
+
+            const result = invokeBridge
+                ? await invokeBridge('grpc_request', grpcPayload)
+                : await window.__TAURI__?.core?.invoke('grpc_request', grpcPayload)
+                    || await window.__TAURI__?.invoke('grpc_request', grpcPayload);
 
             GrpcUI.renderResponse(result);
+            return result;
         } catch (error) {
             console.error("[gRPC] Error saat invoke:", error);
-            GrpcUI.renderResponse({ status: 500, body: error, is_stream: false });
+            const result = { status: 500, body: error, is_stream: false };
+            GrpcUI.renderResponse(result);
+            return result;
         }
     }
 
@@ -323,13 +334,19 @@ export class GrpcController {
      */
     async discoverServices(endpoint) {
         try {
-            const res = await window.__TAURI__?.core?.invoke('discover_grpc_services', { endpoint }) 
-                     || await window.__TAURI__?.invoke('discover_grpc_services', { endpoint });
+            const tls = this.State?.grpc?.tls === true || document.getElementById('grpcUseTls')?.checked === true;
+            const invokeBridge = typeof window.postdimBridge?.invoke === 'function'
+                ? window.postdimBridge.invoke.bind(window.postdimBridge)
+                : null;
+
+            const res = invokeBridge
+                ? await invokeBridge('discover_grpc_services', { endpoint, tls })
+                : await window.__TAURI__?.core?.invoke('discover_grpc_services', { endpoint, tls })
+                    || await window.__TAURI__?.invoke('discover_grpc_services', { endpoint, tls });
 
             this.State.grpc.discoveredServices = res;
             GrpcUI.renderDiscoveredServices(res);
 
-            // Broadcast skema yang ditemukan agar peer kolaborasi melihat daftar service yang sama
             this.broadcastMessage('GRPC_SERVICES_DISCOVERED', { services: res });
         } catch (err) {
             console.error("[gRPC Discovery Error]:", err);
@@ -342,13 +359,18 @@ export class GrpcController {
      */
     async loadLocalProto(content, filename) {
         try {
-            const res = await window.__TAURI__?.core?.invoke('load_local_proto', { content, filename })
-                     || await window.__TAURI__?.invoke('load_local_proto', { content, filename });
+            const invokeBridge = typeof window.postdimBridge?.invoke === 'function'
+                ? window.postdimBridge.invoke.bind(window.postdimBridge)
+                : null;
+
+            const res = invokeBridge
+                ? await invokeBridge('load_local_proto', { content, filename })
+                : await window.__TAURI__?.core?.invoke('load_local_proto', { content, filename })
+                    || await window.__TAURI__?.invoke('load_local_proto', { content, filename });
 
             this.State.grpc.discoveredServices = res;
             GrpcUI.renderLocalProtoServices(res);
 
-            // Broadcast skema proto lokal agar peer kolaborasi ikut mendapatkan daftar service
             this.broadcastMessage('GRPC_SERVICES_DISCOVERED', { services: res });
         } catch (err) {
             console.error("[gRPC Local Proto Error]:", err);

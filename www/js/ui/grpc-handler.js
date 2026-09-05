@@ -7,6 +7,9 @@ export class GrpcHandler {
 
   static async invokeTauri(command, payload = {}) {
     try {
+      if (window.postdimBridge?.invoke) {
+        return await window.postdimBridge.invoke(command, payload);
+      }
       if (window.__TAURI__?.core?.invoke) {
         return await window.__TAURI__.core.invoke(command, payload);
       } else if (window.__TAURI_INTERNALS__?.invoke) {
@@ -37,7 +40,10 @@ export class GrpcHandler {
     }
 
     try {
-      const res = await this.invokeTauri("discover_grpc_services", { endpoint: endpoint.trim() });
+      const res = await this.invokeTauri("discover_grpc_services", {
+        endpoint: endpoint.trim(),
+        tls: document.getElementById("grpcUseTls")?.checked === true
+      });
       if (selectElement && res) {
         const services = res?.services || [];
         
@@ -398,7 +404,11 @@ export class GrpcHandler {
       const inputBody = ui.grpcBody || document.getElementById("grpcBody");
       this.editors.body = monaco.editor.create(grpcEl, {
         value: inputBody?.value || "",
-        language: "json", theme: "vs-dark", automaticLayout: true, minimap: { enabled: false }
+        language: "json", theme: "vs-dark", readOnly: false, domReadOnly: false,
+        automaticLayout: true,
+        quickSuggestions: { other: true, comments: false, strings: true },
+        suggestOnTriggerCharacters: true,
+        minimap: { enabled: false }
       });
       this.editors.body.onDidChangeModelContent(() => {
         if (this.isSyncingFromState) return;
@@ -533,6 +543,7 @@ export class GrpcHandler {
     return {
       serviceMethod: cleanedServiceMethod,
       protoFileName: tabBody?.grpc?.protoFileName || "",
+      tls: document.getElementById("grpcUseTls")?.checked === true,
       metadata: resolvedMetadata,
       data: parsedData,
       scripts: {
@@ -557,6 +568,7 @@ export class GrpcHandler {
       const response = await this.invokeTauri("grpc_request", {
         endpoint: endpoint,
         serviceMethod: payload.serviceMethod,
+        tls: payload.tls,
         metadata: payload.metadata, // Menyertakan metadata + auth
         payload: payload.data,
         scripts: payload.scripts   // Menyertakan pre/post script ke backend Rust

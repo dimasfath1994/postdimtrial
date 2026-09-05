@@ -23,7 +23,7 @@ export class RequestEngine {
   static async send({ method = "POST", url, body, headers = {}, bodyType = "json", grpcOptions = {} }) {
     url = EnvResolver.resolve(url);
     let finalBody;
-    let finalHeaders = { ...headers };
+    let finalHeaders = EnvResolver.resolveObject({ ...headers });
 
     // ================= 1. gRPC HANDLING (KHUSUS PROTOBUF/HTTP2) =================
     if (bodyType === "grpc") {
@@ -74,21 +74,54 @@ export class RequestEngine {
         }
       }
 
-      // A. Jika di lingkungan TAURI (Desktop Native gRPC)
+      grpcData = EnvResolver.resolveObject(grpcData);
+      service = EnvResolver.resolve(service);
+      grpcMethod = EnvResolver.resolve(grpcMethod);
+      const formattedMetadata = Object.entries(finalHeaders).map(([key, value]) => [key, value]);
+
+      const bridgeInvoke = typeof window.postdimBridge?.invoke === "function"
+        ? window.postdimBridge.invoke.bind(window.postdimBridge)
+        : null;
+
+      // A. Webview extension first, then desktop Tauri, then browser proxy.
+      if (bridgeInvoke) {
+        const res = await bridgeInvoke("grpc_request", {
+          endpoint: url,
+          service_method: `${service}/${grpcMethod}`,
+          payload: typeof grpcData === "string" ? JSON.parse(grpcData || "{}") : (grpcData || {}),
+          metadata: formattedMetadata || [],
+          tls: document.getElementById("grpcUseTls")?.checked === true
+        });
+
+        let responseData = res?.body;
+        try {
+          if (typeof responseData === "string") {
+            responseData = JSON.parse(responseData);
+          }
+        } catch (e) {
+          // Tetap string jika gagal parse
+        }
+
+        return {
+          status: res?.status || 200,
+          data: responseData,
+          headers: res?.headers || {},
+          cookies: []
+        };
+      }
+
       if (window.__TAURI_INTERNALS__ !== undefined) {
         const invoke = window.__TAURI__?.invoke || 
                        window.__TAURI__?.core?.invoke || 
                        window.__TAURI_INTERNALS__?.invoke || 
                        window.__TAURI_INTERNALS__?.core?.invoke;
 
-        // DIUPDATE: Menggunakan signature { endpoint, service_method, payload } agar sinkron dengan Rust
         const res = await invoke("grpc_request", {
           endpoint: url,
           service_method: `${service}/${grpcMethod}`,
           payload: typeof grpcData === "string" ? JSON.parse(grpcData || "{}") : (grpcData || {})
         });
 
-        // Parse response body dari backend
         let responseData = res.body;
         try {
           if (typeof responseData === "string") {
@@ -189,7 +222,8 @@ export class RequestEngine {
     // ================= 3. HTTP standard HANDLING (FLOW LAMA UTUH) =================
     else if (bodyType === "raw" || bodyType === "json") {
       finalHeaders["Content-Type"] = finalHeaders["Content-Type"] || "application/json";
-      finalBody = typeof body === "string" ? body : body ? JSON.stringify(body) : undefined;
+      const resolvedBody = EnvResolver.resolveObject(body);
+      finalBody = typeof resolvedBody === "string" ? resolvedBody : resolvedBody ? JSON.stringify(resolvedBody) : undefined;
     } 
     else if (bodyType === "form-data") {
       const formData = new FormData();
@@ -200,12 +234,13 @@ export class RequestEngine {
           if (!key) return;
           if (item && typeof item === "object" && "value" in item) {
             if (item.enabled === false) return;
-            const val = item.file || item.value || "";
+            const val = item.file || EnvResolver.resolve(item.value || "") || "";
             formData.append(key, val);
             multipartForTauri.push({ key, value: String(val), type: item.type || "text" });
           } else {
-            formData.append(key, item ?? "");
-            multipartForTauri.push({ key, value: String(item ?? ""), type: "text" });
+            const resolvedValue = EnvResolver.resolve(item ?? "");
+            formData.append(key, resolvedValue);
+            multipartForTauri.push({ key, value: String(resolvedValue), type: "text" });
           }
         });
       }
@@ -220,9 +255,9 @@ export class RequestEngine {
           if (!key) return;
           if (item && typeof item === "object" && "value" in item) {
             if (item.enabled === false) return;
-            params.append(key, item.value ?? "");
+            params.append(key, EnvResolver.resolve(item.value ?? ""));
           } else {
-            params.append(key, item ?? "");
+            params.append(key, EnvResolver.resolve(item ?? ""));
           }
         });
       }

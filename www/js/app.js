@@ -2,6 +2,7 @@ import { Tabs } from "./ui/tabs.js";
 import { RequestEngine } from "./core/request-engine.js";
 import { CollectionManager } from "./core/collection.js";
 import { Environment } from "./core/environment.js";
+import { EnvResolver } from "./core/env-resolver.js";
 import { ContextMenu } from "./ui/context-menu.js";
 import { Globals } from "./core/globals.js";
 import { createVariables } from "./core/variables.js";
@@ -14,13 +15,14 @@ import { GraphqlHandler } from './ui/graphql-handler.js';
 import { GrpcHandler } from './ui/grpc-handler.js';
 
 const isTauri = window.__TAURI_INTERNALS__ !== undefined;
+const isVsCodeWebview = window.__POSTDIM_VSCODE__ === true;
 
-if (isTauri) {
+if (isTauri || isVsCodeWebview) {
     // Sembunyikan tombol jika user sudah pakai versi desktop
-    document.getElementById('downloadAppBtn').style.display = 'none';
+    document.getElementById('downloadAppBtn')?.style.setProperty('display', 'none');
 } else {
     // Jika di browser, arahkan ke GitHub Releases
-    document.getElementById('downloadAppBtn').addEventListener('click', () => {
+    document.getElementById('downloadAppBtn')?.addEventListener('click', () => {
         window.open('https://github.com/dimasfath1994/postdimtrial/releases/latest/download/app.exe', '_blank');
     });
 }
@@ -136,7 +138,11 @@ document.getElementById("collabModeBtn").onclick = () => {
   APP_STATE.collabMode = true;
 
   // sementara: arahkan ke login page
-  window.location.href = "login.html";
+  if (window.postdimBridge?.navigate) {
+    window.postdimBridge.navigate("login.html");
+  } else {
+    window.location.href = "login.html";
+  }
 };
 
 function applyRemoteState(data) {
@@ -1059,7 +1065,7 @@ ui.send.onclick = async () => {
     tabs.syncTab();
     tabs.save();
 
-    const runtimeVariables = createVariables();
+    runtimeVariables = createVariables();
 
     // ================= PREPARE CONTEXT =================
     const preCtx = createContext(tab, null, runtimeVariables);
@@ -1202,7 +1208,9 @@ ui.send.onclick = async () => {
     console.error(err);
     
     if (executingTabId && tabs.activeId === executingTabId) {
-      ui.response.textContent = err.message;
+      const errorResponse = { error: true, message: err.message || String(err) };
+      renderStatus(errorResponse, 0);
+      renderResponse(errorResponse, 0);
     }
   } finally {
     // Kembalikan status loading tab terkait ke false
@@ -1519,7 +1527,7 @@ function importWorkspace(file) {
                     name: tab.name || "Untitled",
                     method: tab.method || "GET",
                     url: tab.url || "",
-                    body: tab.body || "",
+                    body: tab.body || { mode: "none" },
                     history: Array.isArray(tab.history) ? tab.history : [],
                     pinned: tab.pinned || false,
 
@@ -2065,7 +2073,9 @@ function runScript(code, context) {
   if (!code || !code.trim()) return;
 
   try {
-    const fn = new Function("pm", `"use strict";\n${code}`);
+    const runtimeValues = context?.pm?.variables?.all?.() || {};
+    const resolvedCode = EnvResolver.resolve(code, runtimeValues);
+    const fn = new Function("pm", `"use strict";\n${resolvedCode}`);
     fn(context.pm);
   } catch (err) {
     console.error("Script error:", err);
@@ -2151,22 +2161,14 @@ row.querySelector(".v").oninput = (e) => {
 }
 
 function resolveVars(str) {
-  if (!str) return str;
-
-  return str.replace(/{{(.*?)}}/g, (_, key) => {
-    key = key.trim();
-
-    const sources = [
-        Environment.get.bind(Environment),
-        Globals.get.bind(Globals),
-        (k) => runtimeVariables?.get?.(k)
-    ];
-
-    for (const get of sources) {
-        const val = get?.(key);
-        if (val !== undefined && val !== null) return val;
-    }
-    return "";
+  const activeTab = tabs.getActive?.();
+  const collectionVars = activeTab?.collectionVars?.getAll?.()
+    || activeTab?.collectionVars?.all?.()
+    || activeTab?.collectionVars
+    || {};
+  return EnvResolver.resolve(str, {
+    ...collectionVars,
+    ...(runtimeVariables?.all?.() || {})
   });
 }
 
@@ -2216,23 +2218,59 @@ document.getElementById("closeEnvPanel")?.addEventListener("click", () => {
 
 
 function initMonaco() {
-  require.config({ paths: { vs: "./lib/js/monaco-editor/min/vs" } });
+  const showEditorFallbacks = () => {
+    document.getElementById("preScript")?.classList.remove("hidden");
+    document.getElementById("postScript")?.classList.remove("hidden");
+    document.getElementById("graphqlQuery")?.classList.remove("hidden");
+    document.getElementById("graphqlVariables")?.classList.remove("hidden");
+    document.getElementById("grpcBody")?.classList.remove("hidden");
+  };
 
-  require(["vs/editor/editor.main"], function () {
+  const amdRequire = window.require;
+  if (typeof amdRequire !== "function") {
+    console.error("[Monaco] AMD loader tidak tersedia di VS Code Webview.");
+    showEditorFallbacks();
+    return;
+  }
+
+  amdRequire.config({
+    paths: {
+      vs: window.__POSTDIM_MONACO_BASE__ || "./lib/js/monaco-editor/min/vs"
+    }
+  });
+
+  const createEditors = () => {
+    if (!window.monaco?.editor) {
+      console.error("[Monaco] API editor tidak tersedia setelah loader selesai.");
+      showEditorFallbacks();
+      return;
+    }
 
         preEditor = monaco.editor.create(document.getElementById("preEditor"), {
             value: "",
-            language: "javascript",
+          language: "javascript",
             theme: "vs-dark",
+            readOnly: false,
+            domReadOnly: false,
             automaticLayout: true,
+          quickSuggestions: { other: true, comments: false, strings: true },
+          suggestOnTriggerCharacters: true,
+          wordBasedSuggestions: "allDocuments",
+          suggest: { showWords: true, showMethods: true, showFunctions: true, showVariables: true },
             minimap: { enabled: false }
         });
 
         postEditor = monaco.editor.create(document.getElementById("postEditor"), {
             value: "",
-            language: "javascript",
+          language: "javascript",
             theme: "vs-dark",
+            readOnly: false,
+            domReadOnly: false,
             automaticLayout: true,
+            quickSuggestions: { other: true, comments: false, strings: true },
+            suggestOnTriggerCharacters: true,
+            wordBasedSuggestions: "allDocuments",
+            suggest: { showWords: true, showMethods: true, showFunctions: true, showVariables: true },
             minimap: { enabled: false }
         });
 
@@ -2248,7 +2286,12 @@ function initMonaco() {
             preEditor.setValue(tab.scripts.pre || "");
             postEditor.setValue(tab.scripts.post || "");
         }
-    });
+  };
+
+  amdRequire(["vs/editor/editor.main"], createEditors, function (error) {
+      console.error("[Monaco] Gagal memuat editor:", error);
+      showEditorFallbacks();
+  });
 }
 window.__syncMonacoFromTab = () => {
   const tab = tabs.getActive();
@@ -2261,10 +2304,15 @@ window.__syncMonacoFromTab = () => {
 
 function setupPMIntellisense() {
   monaco.languages.registerCompletionItemProvider("javascript", {
-    provideCompletionItems: () => {
+    triggerCharacters: [".", "$", "{", "(", "_"],
+    provideCompletionItems: (model, position) => {
 
       const envKeys = Object.keys(Environment.getAll?.() || {});
       const globalsKeys = Object.keys(Globals.getAll?.() || {});
+      const collectionVars = tabs.getActive?.()?.collectionVars?.getAll?.()
+        || tabs.getActive?.()?.collectionVars?.all?.()
+        || tabs.getActive?.()?.collectionVars
+        || {};
 
       const envSuggestions = envKeys.map(k => ({
         label: `env.${k}`,
@@ -2278,7 +2326,128 @@ function setupPMIntellisense() {
         insertText: `pm.globals.get("${k}")`
       }));
 
+      const variableSuggestions = [...new Set([
+        ...Object.keys(collectionVars),
+        ...envKeys,
+        ...globalsKeys
+      ])].map((key) => ({
+        label: `{{${key}}}`,
+        kind: monaco.languages.CompletionItemKind.Variable,
+        insertText: `{{${key}}}`,
+        filterText: key,
+        detail: "Postdim variable"
+      }));
+
+      const apiSuggestions = [
+        ["pm.variables.get", "pm.variables.get('${1:key}')", "Postman variable"],
+        ["pm.variables.set", "pm.variables.set('${1:key}', ${2:value})", "Postman variable"],
+        ["pm.variables.unset", "pm.variables.unset('${1:key}')", "Postman variable"],
+        ["pm.collectionVariables.get", "pm.collectionVariables.get('${1:key}')", "Collection variable"],
+        ["pm.collectionVariables.set", "pm.collectionVariables.set('${1:key}', ${2:value})", "Collection variable"],
+        ["pm.request.url", "pm.request.url", "Request"],
+        ["pm.request.method", "pm.request.method", "Request"],
+        ["pm.request.headers", "pm.request.headers", "Request"],
+        ["pm.response.json", "pm.response.json()", "Response"],
+        ["pm.response.text", "pm.response.text()", "Response"],
+        ["pm.response.code", "pm.response.code", "Response"],
+        ["pm.test", "pm.test('${1:name}', () => {\n\t${2:}\n});", "Postman test"],
+        ["pm.expect", "pm.expect(${1:value})", "Postman assertion"],
+        ["pm.sendRequest", "pm.sendRequest(${1:request}, ${2:callback})", "Postman request"],
+        ["pm.environment.unset", "pm.environment.unset('${1:key}')", "Environment"],
+        ["console.log", "console.log(${1:value})", "Console"],
+        ["console.error", "console.error(${1:error})", "Console"]
+      ].map(([label, insertText, detail]) => ({
+        label,
+        kind: monaco.languages.CompletionItemKind.Function,
+        insertText,
+        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        detail
+      }));
+
+      const javascriptSuggestions = [
+        ["matchMedia", "matchMedia(${1:query})"], ["fetch", "fetch(${1:url})"],
+        ["XMLHttpRequest", "XMLHttpRequest"], ["WebSocket", "WebSocket"],
+        ["URL", "URL"], ["URLSearchParams", "URLSearchParams"], ["FormData", "FormData"],
+        ["Headers", "Headers"], ["Request", "Request"], ["Response", "Response"],
+        ["Blob", "Blob"], ["File", "File"], ["FileReader", "FileReader"],
+        ["JSON", "JSON"], ["Object", "Object"], ["Array", "Array"], ["String", "String"],
+        ["Number", "Number"], ["BigInt", "BigInt"], ["Boolean", "Boolean"],
+        ["Date", "Date"], ["RegExp", "RegExp"], ["Error", "Error"],
+        ["Map", "Map"], ["Set", "Set"], ["WeakMap", "WeakMap"], ["WeakSet", "WeakSet"],
+        ["Promise", "Promise"], ["Symbol", "Symbol"], ["Proxy", "Proxy"], ["Reflect", "Reflect"],
+        ["Math", "Math"], ["Intl", "Intl"], ["console", "console"],
+        ["setTimeout", "setTimeout(${1:callback}, ${2:delay})"],
+        ["setInterval", "setInterval(${1:callback}, ${2:delay})"],
+        ["clearTimeout", "clearTimeout(${1:id})"], ["clearInterval", "clearInterval(${1:id})"],
+        ["queueMicrotask", "queueMicrotask(${1:callback})"], ["structuredClone", "structuredClone(${1:value})"],
+        ["JSON.stringify", "JSON.stringify(${1:value}, null, 2)"], ["JSON.parse", "JSON.parse(${1:value})"],
+        ["Object.keys", "Object.keys(${1:value})"], ["Object.values", "Object.values(${1:value})"],
+        ["Object.entries", "Object.entries(${1:value})"], ["Object.fromEntries", "Object.fromEntries(${1:entries})"],
+        ["Array.isArray", "Array.isArray(${1:value})"], ["Array.from", "Array.from(${1:iterable})"],
+        ["Math.max", "Math.max(${1:value})"], ["Math.min", "Math.min(${1:value})"],
+        ["Math.round", "Math.round(${1:value})"], ["Math.floor", "Math.floor(${1:value})"],
+        ["Math.ceil", "Math.ceil(${1:value})"], ["Math.random", "Math.random()"],
+        ["Date.now", "Date.now()"], ["crypto.randomUUID", "crypto.randomUUID()"],
+        ["Promise.all", "Promise.all(${1:promises})"], ["Promise.allSettled", "Promise.allSettled(${1:promises})"],
+        ["Promise.race", "Promise.race(${1:promises})"], ["Promise.resolve", "Promise.resolve(${1:value})"],
+        ["parseInt", "parseInt(${1:value}, 10)"], ["parseFloat", "parseFloat(${1:value})"],
+        ["encodeURIComponent", "encodeURIComponent(${1:value})"], ["decodeURIComponent", "decodeURIComponent(${1:value})"],
+        ["btoa", "btoa(${1:value})"], ["atob", "atob(${1:value})"],
+        ["console.log", "console.log(${1:value})"], ["console.warn", "console.warn(${1:value})"],
+        ["console.error", "console.error(${1:error})"],
+        ["console.table", "console.table(${1:value})"],
+        ["const", "const ${1:name} = ${2:value}"], ["let", "let ${1:name} = ${2:value}"],
+        ["var", "var ${1:name} = ${2:value}"], ["function", "function ${1:name}(${2:args}) {\n\t${3:}\n}"],
+        ["if", "if (${1:condition}) {\n\t${2:}\n}"], ["else", "else {\n\t${1:}\n}"],
+        ["for", "for (const ${1:item} of ${2:items}) {\n\t${3:}\n}"],
+        ["forEach", "${1:items}.forEach((${2:item}) => {\n\t${3:}\n});"],
+        ["map", "${1:items}.map((${2:item}) => ${3:item});"],
+        ["filter", "${1:items}.filter((${2:item}) => ${3:condition});"],
+        ["find", "${1:items}.find((${2:item}) => ${3:condition});"],
+        ["reduce", "${1:items}.reduce((${2:total}, ${3:item}) => ${4:total}, ${5:initial});"],
+        ["try", "try {\n\t${1:}\n} catch (error) {\n\t${2:}\n}"],
+        ["async", "async"], ["await", "await ${1:expression}"], ["return", "return ${1:value}"],
+        ["throw", "throw new Error(${1:message})"]
+      ].map(([label, insertText]) => ({
+        label,
+        kind: monaco.languages.CompletionItemKind.Function,
+        insertText,
+        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        detail: "JavaScript"
+      }));
+
+      const methodSuggestions = [
+        ["toString", "toString()"], ["valueOf", "valueOf()"], ["toUpperCase", "toUpperCase()"],
+        ["toLowerCase", "toLowerCase()"], ["trim", "trim()"], ["trimStart", "trimStart()"],
+        ["trimEnd", "trimEnd()"], ["includes", "includes(${1:value})"], ["startsWith", "startsWith(${1:value})"],
+        ["endsWith", "endsWith(${1:value})"], ["indexOf", "indexOf(${1:value})"], ["lastIndexOf", "lastIndexOf(${1:value})"],
+        ["substring", "substring(${1:start}, ${2:end})"], ["slice", "slice(${1:start}, ${2:end})"],
+        ["split", "split(${1:separator})"], ["replace", "replace(${1:search}, ${2:replacement})"],
+        ["replaceAll", "replaceAll(${1:search}, ${2:replacement})"], ["match", "match(${1:pattern})"],
+        ["concat", "concat(${1:value})"], ["charAt", "charAt(${1:index})"], ["padStart", "padStart(${1:length}, ${2:fill})"],
+        ["push", "push(${1:value})"], ["pop", "pop()"], ["shift", "shift()"], ["unshift", "unshift(${1:value})"],
+        ["join", "join(${1:separator})"], ["concat", "concat(${1:items})"], ["sort", "sort(${1:compareFn})"],
+        ["reverse", "reverse()"], ["slice", "slice(${1:start}, ${2:end})"], ["splice", "splice(${1:start}, ${2:deleteCount})"],
+        ["map", "map((${1:item}) => ${2:item})"], ["filter", "filter((${1:item}) => ${2:true})"],
+        ["find", "find((${1:item}) => ${2:true})"], ["findIndex", "findIndex((${1:item}) => ${2:true})"],
+        ["some", "some((${1:item}) => ${2:true})"], ["every", "every((${1:item}) => ${2:true})"],
+        ["reduce", "reduce((${1:total}, ${2:item}) => ${3:total}, ${4:initial})"],
+        ["forEach", "forEach((${1:item}) => {\n\t${2:}\n})"], ["flat", "flat(${1:depth})"],
+        ["flatMap", "flatMap((${1:item}) => ${2:item})"], ["keys", "keys()"], ["values", "values()"],
+        ["entries", "entries()"], ["hasOwnProperty", "hasOwnProperty('${1:key}')"],
+        ["toFixed", "toFixed(${1:digits})"], ["toLocaleString", "toLocaleString()"],
+        ["then", "then((${1:value}) => ${2:value})"], ["catch", "catch((error) => {\n\t${1:}\n})"],
+        ["finally", "finally(() => {\n\t${1:}\n})"]
+      ].map(([label, insertText]) => ({
+        label,
+        kind: monaco.languages.CompletionItemKind.Method,
+        insertText,
+        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        detail: "JavaScript method"
+      }));
+
       return {
+        incomplete: false,
         suggestions: [
           {
             label: "pm.environment.get",
@@ -2298,7 +2467,8 @@ function setupPMIntellisense() {
             insertText: "pm.response.json()"
           },
           ...envSuggestions,
-          ...globalSuggestions
+          ...globalSuggestions,
+          ...variableSuggestions
         ]
       };
     }
@@ -2348,6 +2518,8 @@ function pushSync() {
     environment: Environment.getAll()
   });
 }
+
+window.__pushSync = pushSync;
 
 function downloadJSON(data, filename) {
 

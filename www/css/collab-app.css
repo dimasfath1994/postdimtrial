@@ -462,13 +462,18 @@ pre {
 
 /* ================= MONACO ================= */
 
-.monaco-editor {
+.monaco-container {
+  position: relative;
   height: 180px;
+  min-height: 180px;
 
   border: 1px solid #2a2a2a;
   border-radius: 6px;
 
   overflow: hidden;
+  pointer-events: auto;
+  user-select: text;
+  z-index: 1;
 }
 
 .script-section {
@@ -1145,4 +1150,8 @@ input:focus {
 #actionDropdown button:hover {
   background: #2a2a2a;
   color: #fff;
+}
+
+.monaco-container .monaco-editor {
+  height: 100%;
 }

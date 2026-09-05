@@ -11,6 +11,10 @@ export const AuthStore = {
   logout() {
     localStorage.removeItem("token");
     localStorage.setItem("app_mode", "local");
-    window.location.href = "/login.html";
+    if (window.postdimBridge?.navigate) {
+      window.postdimBridge.navigate("login.html");
+    } else {
+      window.location.href = "/login.html";
+    }
   }
 };

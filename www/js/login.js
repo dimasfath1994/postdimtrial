@@ -79,7 +79,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // ================= SAFE REDIRECT =================
       setTimeout(() => {
-        window.location.replace("collaboration.html");
+        if (window.postdimBridge?.navigate) {
+          window.postdimBridge.navigate("collaboration.html");
+        } else {
+          window.location.replace("collaboration.html");
+        }
       }, 50);
 
     } catch (err) {
@@ -132,7 +136,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       setTimeout(() => {
-        window.location.replace("collaboration.html");
+        if (window.postdimBridge?.navigate) {
+          window.postdimBridge.navigate("collaboration.html");
+        } else {
+          window.location.replace("collaboration.html");
+        }
       }, 50);
 
     } catch (err) {
