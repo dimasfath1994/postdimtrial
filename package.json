@@ -1,0 +1,34 @@
+{
+  "name": "postdim-vscode",
+  "displayName": "Postdim API Client",
+  "description": "API development client for Visual Studio Code.",
+  "version": "0.1.0",
+  "publisher": "dimasfath1994",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dimasfath1994/postdimtrial"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "postdim.open",
+        "title": "Postdim: Open API Client"
+      }
+    ]
+  },
+  "scripts": {
+    "package": "vsce package",
+    "prepublishOnly": "npm run package"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.2"
+  }
+}
