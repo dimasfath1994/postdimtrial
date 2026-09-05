@@ -285,7 +285,21 @@ export class RequestEngine {
       : (bodyType === "form-data" ? finalBody.formData : finalBody);
 
     const options = { method, headers: finalHeaders, body: bodyForFetch };
-    const res = useProxy ? await proxysendRequest(url, options, true) : await fetch(url, options);
+    let res;
+    if (window.postdimBridge && !useProxy) {
+      const bridgeResponse = await window.postdimBridge.request({
+        method,
+        url,
+        headers: finalHeaders,
+        body: bodyForFetch
+      });
+      res = new Response(bridgeResponse.body, {
+        status: bridgeResponse.status,
+        headers: bridgeResponse.headers
+      });
+    } else {
+      res = useProxy ? await proxysendRequest(url, options, true) : await fetch(url, options);
+    }
     
     const rawHeaders = Object.fromEntries(res.headers.entries());
     const rawSetCookie = res.headers.get("set-cookie") || res.headers.get("Set-Cookie");

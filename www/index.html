@@ -280,6 +280,42 @@
 </div>
 
 <script>
+  (() => {
+    if (typeof acquireVsCodeApi !== "function") return;
+
+    const vscode = acquireVsCodeApi();
+    const pending = new Map();
+    let nextRequestId = 0;
+
+    window.addEventListener("message", (event) => {
+      const message = event.data;
+      if (message?.type !== "postdim.response") return;
+
+      const request = pending.get(message.requestId);
+      if (!request) return;
+      pending.delete(message.requestId);
+      if (message.error) request.reject(new Error(message.error));
+      else request.resolve(message.response);
+    });
+
+    window.postdimBridge = {
+      request({ method, url, headers, body }) {
+        return new Promise((resolve, reject) => {
+          const requestId = String(++nextRequestId);
+          pending.set(requestId, { resolve, reject });
+          vscode.postMessage({
+            type: "postdim.request",
+            requestId,
+            method,
+            url,
+            headers,
+            body
+          });
+        });
+      }
+    };
+  })();
+
   window.MonacoEnvironment = {
     getWorkerUrl: function () {
       return "./lib/js/monaco-editor/min/vs/base/worker/workerMain.js";

@@ -127,9 +127,23 @@ export class RequestDispatcher {
             }
             // --- 4. EKSEKUSI WEB (FETCH) ---
             const startTime = performance.now();
-            const response = useProxy 
-                ? await proxysendRequest(finalUrl, config, true)
-                : await fetch(finalUrl, config);
+            let response;
+            if (window.postdimBridge && !useProxy) {
+                const bridgeResponse = await window.postdimBridge.request({
+                    method,
+                    url: finalUrl,
+                    headers: config.headers,
+                    body: config.body
+                });
+                response = new Response(bridgeResponse.body, {
+                    status: bridgeResponse.status,
+                    headers: bridgeResponse.headers
+                });
+            } else {
+                response = useProxy
+                    ? await proxysendRequest(finalUrl, config, true)
+                    : await fetch(finalUrl, config);
+            }
             const endTime = performance.now();
 
             const duration = Math.round(endTime - startTime);
