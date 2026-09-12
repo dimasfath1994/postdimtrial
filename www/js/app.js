@@ -418,8 +418,8 @@ function renderCollections() {
       ctx.show(e.clientX, e.clientY, [
         {
           label: "Rename",
-          action: () => {
-            const name = prompt("Collection name:");
+          action: async () => {
+            const name = await window.customPrompt("Collection name:", col.name);
             if (name) {
               collections.renameCollection(col.id, name);
               renderCollections();
@@ -454,8 +454,8 @@ function renderCollections() {
        // ... di dalam div.oncontextmenu (header collection)
 { 
   label: "Add Folder", 
-  action: () => {
-    const name = prompt("New folder name:");
+  action: async () => {
+    const name = await window.customPrompt("New folder name:");
     if (name) {
       // Gunakan col.id (karena ini header collection)
       // ParentId adalah null karena ini folder di root collection
@@ -566,9 +566,9 @@ if (expanded) {
             ctx.show(e.clientX, e.clientY, [
               {
                 label: "Rename",
-                action: () => {
-                  //INI SIDEBAR
-                  const name = prompt("Rename tab:");
+                action: async () => {
+                  // INI SIDEBAR
+                  const name = await window.customPrompt("Rename tab:", tab.name || "");
 
                   if (name) {
                     const tabe = tabs.tabs.find(t => t.id === tab.id);
@@ -658,24 +658,25 @@ function renderFolderTree(folder, container, colId, depth = 1) {
     e.stopPropagation();
     ctx.show(e.clientX, e.clientY, [
       { 
-        label: "Add Folder", action: () => {
-          const name = prompt("New folder name:");
+        label: "Add Folder", 
+        action: async () => {
+          const name = await window.customPrompt("New folder name:");
           if (name) {
             collections.addFolder(colId, name, folder.id);
             renderCollections();
           }
-      }
-    },
-    {
-        label: "Rename",
-        action: () => {
-            const newName = prompt("Rename folder:", folder.name);
-            if (newName) {
-                collections.renameFolder(colId, folder.id, newName);
-                renderCollections();
-            }
         }
-    },
+      },
+      {
+        label: "Rename",
+        action: async () => {
+          const newName = await window.customPrompt("Rename folder:", folder.name);
+          if (newName) {
+            collections.renameFolder(colId, folder.id, newName);
+            renderCollections();
+          }
+        }
+      },
     {
         label: "Delete",
         action: () => {
@@ -738,16 +739,16 @@ folder.requests?.forEach(req => {
       e.stopPropagation();
       ctx.show(e.clientX, e.clientY, [
           {
-              label: "Rename",
-              action: () => {
-                  const name = prompt("Rename tab:");
-                  if (name) {
-                      //tabs.rename(req, name); // Pastikan fungsi rename ada di tabs/manager
-                      tabs.renameById(req.id, name, colId, req.folderId);
-                      saveActiveCollectionState();
-                      renderCollections();
-                  }
+            label: "Rename",
+            action: async () => {
+              const name = await window.customPrompt("Rename tab:", req.name || "");
+              if (name) {
+                //tabs.rename(req, name); // Pastikan fungsi rename ada di tabs/manager
+                tabs.renameById(req.id, name, colId, req.folderId);
+                saveActiveCollectionState();
+                renderCollections();
               }
+            }
           },
           {
               label: "Duplicate",
@@ -1237,19 +1238,19 @@ ui.tabsEl?.addEventListener("contextmenu", (e) => {
   const tab = tabs.tabs.find(t => t.id === id);
   if (!tab) return;
 
-  ctx.show(e.clientX, e.clientY, [
+    ctx.show(e.clientX, e.clientY, [
     {
       label: "Rename",
-        action: () => {
-            const name = prompt("Rename tab");
-            if (name) {
-                tabs.rename(tab, name);
-                //tabs.render();
-                saveActiveCollectionState();
-                renderCollections();
-                //INI TAB
-            }
+      action: async () => {
+        const name = await window.customPrompt("Rename tab:", tab.name || "");
+        if (name) {
+          tabs.rename(tab, name);
+          //tabs.render();
+          saveActiveCollectionState();
+          renderCollections();
+          //INI TAB
         }
+      }
     },
     {
       label: "Duplicate",

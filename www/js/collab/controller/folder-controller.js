@@ -167,17 +167,17 @@ export class FolderController {
         console.log(`[DEBUG] Render folderId ${folderId}. Ditemukan: ${subFolders.length} Folders, ${requests.length} Requests.`);
         
         try {
-            renderFolderChildren(parentElement, subFolders, requests, {
-                onOpenMenu: (e, folder) => showFolderContextMenu(e, folder, {
-                    onRename: (id) => { 
-                        const name = prompt("New name:", folder.name); 
-                        if (name) this.renameFolder(id, name); 
-                    },
-                    onDelete: (id) => this.deleteFolder(id),
-                    onAddFolder: (parentId) => { 
-                        const name = prompt("Folder name:"); 
-                        if (name) this.createFolder(this.State.workspaceId, this.collectionId, parentId, name); 
-                    },
+          renderFolderChildren(parentElement, subFolders, requests, {
+            onOpenMenu: (e, folder) => showFolderContextMenu(e, folder, {
+                onRename: async (id) => { 
+                    const name = await window.customPrompt("New name:", folder.name); 
+                    if (name) this.renameFolder(id, name); 
+                },
+                onDelete: (id) => this.deleteFolder(id),
+                onAddFolder: async (parentId) => { 
+                    const name = await window.customPrompt("Folder name:"); 
+                    if (name) this.createFolder(this.State.workspaceId, this.collectionId, parentId, name); 
+                },
                     onAddRequest: async (fId, cId) => {
                         if (this.requestCtrl) {
                             // 1. Buat request
@@ -232,30 +232,30 @@ export class FolderController {
             : [];
         
         // 2. Definisi Handler
-        const folderHandlers = {
-            onRename: (id) => {
-                const name = prompt("New name:", this.State.folders.find(f => f.id === id)?.name);
-                if(name) this.renameFolder(id, name);
-            },
-            onDelete: (id) => this.deleteFolder(id),
-            onExpand: (id, el) => this.refreshFolderView(id, el),
-            onAddFolder: (parentId) => {
-                const name = prompt("Folder name:");
-                if(name) this.createFolder(this.workspaceId, this.collectionId, parentId, name);
-            },
-            onAddRequest: (fId, cId) => {
-                const targetColId = cId || this.collectionId;
-                const wsId = this.workspaceId || (this.State && this.State.workspaceId);
-                
-                if (this.requestCtrl) {
-                    this.requestCtrl.createRequest({
-                        workspace_id: wsId,
-                        collection_id: targetColId,
-                        folder_id: fId
-                    });
-                }
+      const folderHandlers = {
+        onRename: async (id) => {
+            const name = await window.customPrompt("New name:", this.State.folders.find(f => f.id === id)?.name);
+            if(name) this.renameFolder(id, name);
+        },
+        onDelete: (id) => this.deleteFolder(id),
+        onExpand: (id, el) => this.refreshFolderView(id, el),
+        onAddFolder: async (parentId) => {
+            const name = await window.customPrompt("Folder name:");
+            if(name) this.createFolder(this.workspaceId, this.collectionId, parentId, name);
+        },
+        onAddRequest: (fId, cId) => {
+            const targetColId = cId || this.collectionId;
+            const wsId = this.workspaceId || (this.State && this.State.workspaceId);
+            
+            if (this.requestCtrl) {
+                this.requestCtrl.createRequest({
+                    workspace_id: wsId,
+                    collection_id: targetColId,
+                    folder_id: fId
+                });
             }
-        };
+        }
+    };
         
         // 3. Render Struktur Folder (Child List)
         renderFolderChildren(itemElement, subFolders, requests, {
@@ -343,7 +343,8 @@ export class FolderController {
     }
 
     async deleteFolder(id) {
-        if (!confirm("Delete this folder?")) return;
+        const isConfirmed = await window.customConfirm("Delete this folder?");
+        if (!isConfirmed) return;
         
         // Simpan info parent sebelum dihapus dari state
         const folder = this.State.folders.find(f => f.id === id);

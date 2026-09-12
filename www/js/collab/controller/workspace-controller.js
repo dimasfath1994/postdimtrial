@@ -152,7 +152,7 @@ async silentSwitch(id) {
 
     // Tambahkan wrapper untuk UI
     async handleRenameRequest(currentName) {
-        const newName = prompt("New name:", currentName);
+        const newName = await window.customPrompt("New name:", currentName);
         
         // Jika user menekan Cancel atau input kosong, jangan lanjut
         if (!newName || newName.trim() === currentName || newName.trim() === "") {
@@ -175,7 +175,8 @@ async silentSwitch(id) {
     }
 
     async handleDeleteRequest() {
-        if (!confirm("Delete this workspace?")) return;
+       const isConfirmed = await window.customConfirm("Delete this workspace?");
+        if (!isConfirmed) return;
         
         try {
             const idToDelete = this.State.workspaceId;
@@ -268,7 +269,7 @@ resetWorkspaceUI() {
 
 
 async createNewWorkspace() {
-    const name = prompt("Workspace name?");
+    const name = await window.customPrompt("Workspace name?");
     if (!name) return;
     
     try {
@@ -336,14 +337,17 @@ async createNewWorkspace() {
             this.menu.style.left = `${e.clientX}px`; this.menu.style.top = `${e.clientY}px`; this.menu.style.display = "block";
             
             document.getElementById("renameWS").onclick = async () => {
-                const name = prompt("New name:", el.textContent);
+                const name = await window.customPrompt("New name:", el.textContent);
                 if (name) {
                     await this.updateName(this.State.workspaceId, name);
                 }
             };
             document.getElementById("deleteWS").onclick = async () => {
-                if (confirm("Delete?")) await WorkspaceService.deleteWorkspace(this.State.workspaceId);
-                await this.loadFlow();
+                const isConfirmed = await window.customConfirm("Are you sure you want to delete this workspace?");
+                if (isConfirmed) {
+                    await WorkspaceService.deleteWorkspace(this.State.workspaceId);
+                    await this.loadFlow();
+                }
             };
         };
         document.onclick = () => this.menu.style.display = "none";

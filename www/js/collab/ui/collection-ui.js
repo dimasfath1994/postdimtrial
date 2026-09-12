@@ -72,7 +72,7 @@ export function setupCollectionActions(ctrl) {
     
     if (btn) {
         btn.onclick = async () => {
-            const name = prompt("Enter collection name:");
+           const name = await window.customPrompt("Enter collection name:");
             if (name) {
                 await ctrl.createCollection(name);
             }

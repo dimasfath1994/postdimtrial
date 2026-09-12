@@ -73,6 +73,40 @@ async function invokeExtensionCommand(command, payload = {}) {
     ? require("./grpc-client")
     : null;
 
+  if (command === "show_alert") {
+    vscode.window.showInformationMessage(payload.message);
+    return { success: true };
+  }
+  if (command === "show_prompt") {
+    const result = await vscode.window.showInputBox({
+      prompt: payload.title || "Masukkan nilai:",
+      value: payload.defaultText || ""
+    });
+    return { value: result ?? null };
+  }
+  if (command === "show_confirm") {
+    const answer = await vscode.window.showWarningMessage(
+      payload.message || "Apakah Anda yakin?",
+      { modal: true },
+      "Ya"
+    );
+    return { confirm: answer === "Ya" };
+  }
+
+  // === FITUR CONFIG VS CODE SETTINGS ===
+  if (command === "get_config") {
+    const config = vscode.workspace.getConfiguration("postdim");
+    return {
+      apiBaseUrl: config.get("apiBaseUrl"),
+      wsBaseUrl: config.get("wsBaseUrl")
+    };
+  }
+  if (command === "open_settings") {
+    vscode.commands.executeCommand("workbench.action.openSettings", "postdim");
+    return { success: true };
+  }
+  // ====================================
+
   if (command === "load_local_proto") {
     return grpcClient.loadLocalProto(payload);
   }
@@ -155,37 +189,100 @@ function getWebviewContent(webview, extensionUri, page = "index.html") {
   const nonce = getNonce();
   let html = fs.readFileSync(htmlPath, "utf8");
 
+  html = html.replace(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, "");
+
+  const cspString = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; connect-src https: wss:; worker-src blob: ${webview.cspSource}; font-src ${webview.cspSource} data:;">`;
+
+  const injectionPayload = `${cspString}\n<script nonce="${nonce}">${getBridgeScript(monacoBaseUri, workerUri)}</script>`;
+
+  if (html.includes("<head>")) {
+    html = html.replace("<head>", `<head>\n${injectionPayload}`);
+  } else if (html.includes("<html>")) {
+    html = html.replace("<html>", `<html>\n<head>\n${injectionPayload}\n</head>`);
+  } else {
+    html = `${injectionPayload}\n${html}`;
+  }
+
   html = html
     .replace(/(src|href)="\.\//g, `$1="${wwwUri}/`)
-    .replace(
-      'return "./lib/js/monaco-editor/min/vs/base/worker/workerMain.js"',
-      `return "${workerUri}"`
-    )
-    .replace(
-      'return "./lib/js/monaco-editor/min/vs/workers-DcJshg-q.js"',
-      `return "${workerUri}"`
-    )
-    .replace(/<script(\s|>)/g, `<script nonce="${nonce}"$1`)
-    .replace(
-      "</head>",
-      `<script nonce="${nonce}">${getBridgeScript(monacoBaseUri, workerUri)}</script>\n</head>`
-    )
-    .replace(
-      "</head>",
-      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; connect-src https: wss:; worker-src blob: ${webview.cspSource};">\n</head>`
-    );
+    .replace('return "./lib/js/monaco-editor/min/vs/base/worker/workerMain.js"', `return "${workerUri}"`)
+    .replace('return "./lib/js/monaco-editor/min/vs/workers-DcJshg-q.js"', `return "${workerUri}"`)
+    .replace(/<script(\s|>)/g, `<script nonce="${nonce}"$1`);
 
   return html;
 }
 
 function getBridgeScript(monacoBaseUri, workerUri) {
   return `(() => {
+    window.__POSTDIM_VSCODE__ = true;
     window.__POSTDIM_MONACO_BASE__ = ${JSON.stringify(String(monacoBaseUri))};
     window.__POSTDIM_MONACO_WORKER__ = ${JSON.stringify(String(workerUri))};
+
+    // Replace fungsi alert, prompt, confirm di bridge script
+    window.alert = function(msg) {
+      console.log("[Alert]:", msg);
+      if (window.postdimBridge && window.postdimBridge.invoke) {
+        window.postdimBridge.invoke("show_alert", { message: String(msg) }).catch(() => {});
+      }
+    };
+
+    window.customPrompt = async function(title, defaultText = "") {
+      if (window.postdimBridge && window.postdimBridge.invoke) {
+        const res = await window.postdimBridge.invoke("show_prompt", { title, defaultText });
+        return res ? res.value : null;
+      }
+      return prompt(title, defaultText);
+    };
+
+    window.customConfirm = async function(message) {
+      if (window.postdimBridge && window.postdimBridge.invoke) {
+        const res = await window.postdimBridge.invoke("show_confirm", { message: String(message) });
+        return res ? res.confirm : false;
+      }
+      return confirm(message);
+    };
+
+    // Fallback aman untuk prompt & confirm bawaan browser
+    window.prompt = function(title, defaultText) {
+      console.warn("[Prompt Blocked]: Webview VS Code memblokir synchronous prompt dialog.", title);
+      return null;
+    };
+
+    window.confirm = function(message) {
+      console.warn("[Confirm Blocked]: Webview VS Code memblokir synchronous confirm dialog.", message);
+      return false;
+    };
+
+    // Konfigurasi Environment Monaco Editor
+    window.MonacoEnvironment = window.MonacoEnvironment || {};
+    window.MonacoEnvironment.getWorkerUrl = function (_moduleId, label) {
+      return window.__POSTDIM_MONACO_WORKER__;
+    };
+    window.MonacoEnvironment.getWorker = function (_moduleId, label) {
+      const blobCode = "importScripts(" + JSON.stringify(window.__POSTDIM_MONACO_WORKER__) + ");";
+      const blob = new Blob([blobCode], { type: "application/javascript" });
+      return new Worker(URL.createObjectURL(blob), { name: label });
+    };
+
+    const originalRequire = window.require;
+    if (typeof originalRequire === "function" && originalRequire.config) {
+      originalRequire.config({
+        paths: { "vs": window.__POSTDIM_MONACO_BASE__ }
+      });
+    } else {
+      window.require = window.require || {};
+      window.require.config = window.require.config || function(conf) {
+        if (conf && conf.paths) {
+          conf.paths.vs = window.__POSTDIM_MONACO_BASE__;
+        }
+      };
+    }
+
     if (typeof acquireVsCodeApi !== "function" || window.postdimBridge) return;
     const vscode = acquireVsCodeApi();
     const pending = new Map();
     let nextRequestId = 0;
+
     window.addEventListener("message", (event) => {
       const message = event.data;
       if (message?.type !== "postdim.response") return;
@@ -195,18 +292,13 @@ function getBridgeScript(monacoBaseUri, workerUri) {
       if (message.error) request.reject(new Error(message.error));
       else request.resolve(message.response);
     });
+
     const send = (message) => new Promise((resolve, reject) => {
       const requestId = String(++nextRequestId);
       pending.set(requestId, { resolve, reject });
       vscode.postMessage({ ...message, requestId });
     });
-    window.__POSTDIM_VSCODE__ = true;
-    window.MonacoEnvironment = window.MonacoEnvironment || {};
-    window.MonacoEnvironment.getWorkerUrl = () => window.__POSTDIM_MONACO_WORKER__;
-    window.MonacoEnvironment.getWorker = (_moduleId, label) => new Worker(
-      window.__POSTDIM_MONACO_WORKER__,
-      { type: "module", name: label }
-    );
+
     const serializeBody = async (body) => {
       if (body instanceof FormData) {
         const entries = [];
@@ -226,16 +318,19 @@ function getBridgeScript(monacoBaseUri, workerUri) {
       if (body instanceof URLSearchParams) return body.toString();
       return body;
     };
+
     const bridgeRequest = async (payload) => send({
       type: "postdim.request",
       ...payload,
       body: await serializeBody(payload.body)
     });
+
     window.postdimBridge = {
       request: bridgeRequest,
       invoke: (command, payload = {}) => send({ type: "postdim.invoke", command, payload }),
       navigate: (page) => vscode.postMessage({ type: "postdim.navigate", page })
     };
+
     const nativeFetch = window.fetch.bind(window);
     window.fetch = async (input, init = {}) => {
       const requestUrl = typeof input === "string" ? input : input?.url;

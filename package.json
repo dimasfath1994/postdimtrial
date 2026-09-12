@@ -2,7 +2,7 @@
   "name": "postdim-api-client-dimasfath94",
   "displayName": "Postdim API Client by Dimasfath94",
   "description": "API development client for Visual Studio Code.",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "publisher": "dimasfath94",
   "license": "MIT",
   "repository": {
@@ -29,6 +29,21 @@
           "command": "postdim.open"
         }
       ]
+    },
+    "configuration": {
+      "title": "Postdim",
+      "properties": {
+        "postdim.apiBaseUrl": {
+          "type": "string",
+          "default": "https://deaths-markers-man-implications.trycloudflare.com/api",
+          "description": "Base URL for REST API Postdim"
+        },
+        "postdim.wsBaseUrl": {
+          "type": "string",
+          "default": "wss://deaths-markers-man-implications.trycloudflare.com/api",
+          "description": "Base URL for WebSocket Postdim"
+        }
+      }
     }
   },
   "scripts": {

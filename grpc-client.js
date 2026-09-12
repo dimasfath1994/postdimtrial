@@ -9,9 +9,10 @@ const serviceCache = new Map();
 const reflectionCache = new Map();
 const protoDirectory = path.join(os.tmpdir(), "postdim-vscode-protos");
 
-const reflectionProto = `
+// === PROTO SPEC FOR REFLECTION V1 & V1ALPHA ===
+const reflectionProtoV1 = `
 syntax = "proto3";
-package grpc.reflection.v1alpha;
+package grpc.reflection.v1;
 
 service ServerReflection {
   rpc ServerReflectionInfo(stream ServerReflectionRequest) returns (stream ServerReflectionResponse);
@@ -20,7 +21,10 @@ service ServerReflection {
 message ServerReflectionRequest {
   string host = 1;
   oneof message_request {
+    string file_by_filename = 3;
     string file_containing_symbol = 4;
+    string file_containing_extension = 5;
+    string all_extension_numbers_of_type = 6;
     string list_services = 7;
   }
 }
@@ -30,6 +34,7 @@ message ServerReflectionResponse {
   ServerReflectionRequest original_request = 2;
   oneof message_response {
     FileDescriptorResponse file_descriptor_response = 4;
+    ExtensionNumberResponse all_extension_numbers_response = 5;
     ListServiceResponse list_services_response = 6;
     ErrorResponse error_response = 7;
   }
@@ -39,20 +44,57 @@ message FileDescriptorResponse { repeated bytes file_descriptor_proto = 1; }
 message ListServiceResponse { repeated ServiceResponse service = 1; }
 message ServiceResponse { string name = 1; }
 message ErrorResponse { int32 error_code = 1; string error_message = 2; }
+message ExtensionNumberResponse { string base_type_name = 1; repeated int32 extension_number = 2; }
 `;
+
+const reflectionProtoV1Alpha = reflectionProtoV1.replace(
+  "package grpc.reflection.v1;",
+  "package grpc.reflection.v1alpha;"
+);
 
 function ensureDirectory() {
   fs.mkdirSync(protoDirectory, { recursive: true });
 }
 
-function normalizeEndpoint(endpoint) {
-  const value = String(endpoint || "").trim();
+function normalizeEndpoint(endpoint, tls = false) {
+  let value = String(endpoint || "").trim();
   if (!value) throw new Error("gRPC endpoint belum diisi.");
-  return value.replace(/^[a-z]+:\/\//i, "").replace(/\/$/, "");
+
+  const isHttps = value.startsWith("https://");
+  value = value.replace(/^[a-z]+:\/\//i, "").replace(/\/$/, "");
+
+  if (!value.includes(":")) {
+    const defaultPort = (tls || isHttps) ? "443" : "80";
+    value = `${value}:${defaultPort}`;
+  }
+
+  return value;
 }
 
-function credentialsFor(tls) {
-  return tls ? grpc.credentials.createSsl() : grpc.credentials.createInsecure();
+function credentialsFor(endpoint, tls) {
+  const ep = String(endpoint || "").trim().toLowerCase();
+  const isHttps = ep.startsWith("https://");
+  const isStandardTlsPort = ep.endsWith(":443") || ep.endsWith(":9001");
+
+  if (isHttps || isStandardTlsPort) {
+    return grpc.credentials.createSsl();
+  }
+
+  if (typeof tls === "boolean") {
+    return tls ? grpc.credentials.createSsl() : grpc.credentials.createInsecure();
+  }
+
+  return grpc.credentials.createInsecure();
+}
+
+function getChannelOptions(endpoint) {
+  const cleanEp = String(endpoint || "").replace(/^[a-z]+:\/\//i, "").split("/")[0];
+  const hostname = cleanEp.split(":")[0];
+  
+  return {
+    'grpc.ssl_target_name_override': hostname,
+    'grpc.default_authority': hostname
+  };
 }
 
 function isServiceConstructor(value) {
@@ -137,28 +179,37 @@ async function loadLocalProto({ content, filename = "postdim.proto" }) {
   return { services };
 }
 
-function reflectionDefinition() {
+function reflectionDefinition(version = "v1") {
   ensureDirectory();
-  const filePath = path.join(protoDirectory, "grpc-reflection.proto");
-  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, reflectionProto, "utf8");
+  const filename = version === "v1" ? "grpc-reflection-v1.proto" : "grpc-reflection-v1alpha.proto";
+  const filePath = path.join(protoDirectory, filename);
+  const content = version === "v1" ? reflectionProtoV1 : reflectionProtoV1Alpha;
+  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, content, "utf8");
   return protoLoader.loadSync(filePath, protoOptions());
 }
 
-function reflectionClient(endpoint, tls) {
-  const loaded = grpc.loadPackageDefinition(reflectionDefinition());
-  const service = loaded.grpc.reflection.v1alpha.ServerReflection;
-  return new service(normalizeEndpoint(endpoint), credentialsFor(tls));
+function reflectionClient(endpoint, tls, version = "v1") {
+  const loaded = grpc.loadPackageDefinition(reflectionDefinition(version));
+  const ServiceConstructor = version === "v1"
+    ? loaded.grpc.reflection.v1.ServerReflection
+    : loaded.grpc.reflection.v1alpha.ServerReflection;
+  
+  const target = normalizeEndpoint(endpoint, tls);
+  const creds = credentialsFor(endpoint, tls);
+  const options = getChannelOptions(endpoint);
+
+  return new ServiceConstructor(target, creds, options);
 }
 
-function reflectionCall(endpoint, tls, request) {
+function reflectionCallSingle(endpoint, tls, request, version = "v1") {
   return new Promise((resolve, reject) => {
-    const client = reflectionClient(endpoint, tls);
+    const client = reflectionClient(endpoint, tls, version);
     const call = client.serverReflectionInfo(createMetadata());
     const responses = [];
     call.on("data", (response) => responses.push(response));
     call.on("error", (error) => {
       client.close();
-      reject(new Error(`gRPC reflection ${error.code}: ${error.details || error.message}`));
+      reject(error);
     });
     call.on("end", () => {
       client.close();
@@ -169,26 +220,103 @@ function reflectionCall(endpoint, tls, request) {
   });
 }
 
-async function loadReflectionServices(endpoint, tls = false) {
-  const cacheKey = `${normalizeEndpoint(endpoint)}|${Boolean(tls)}`;
-  const namesResponse = await reflectionCall(endpoint, tls, { list_services: "" });
-  const names = namesResponse
-    .flatMap((response) => response.list_services_response?.service || [])
-    .map((service) => service.name)
-    .filter(Boolean);
-
-  if (!names.length) throw new Error("Server reflection tidak mengembalikan service.");
-  const allServices = [];
-  for (const serviceName of names) {
-    const descriptorResponses = await reflectionCall(endpoint, tls, { file_containing_symbol: serviceName });
-    const descriptorBytes = descriptorResponses.flatMap((response) =>
-      response.file_descriptor_response?.file_descriptor_proto || []
-    );
-    if (!descriptorBytes.length) continue;
-    const descriptorSet = Buffer.concat(descriptorBytes.map((value) => Buffer.from(value)));
-    const definition = protoLoader.loadFileDescriptorSetFromBuffer(descriptorSet, protoOptions());
-    allServices.push(...registerServices(definition, `reflection:${cacheKey}`));
+async function reflectionCall(endpoint, tls, request) {
+  let errV1, errV1Alpha;
+  
+  try {
+    return await reflectionCallSingle(endpoint, tls, request, "v1");
+  } catch (err) {
+    errV1 = err;
   }
+
+  try {
+    return await reflectionCallSingle(endpoint, tls, request, "v1alpha");
+  } catch (err) {
+    errV1Alpha = err;
+  }
+
+  throw new Error(`gRPC Reflection Failed. V1: ${errV1?.message || 'N/A'} | V1Alpha: ${errV1Alpha?.message || 'N/A'}`);
+}
+
+function checkReflectionErrors(responses) {
+  for (const response of responses) {
+    const err = response.error_response || response.errorResponse;
+    if (err) {
+      throw new Error(`Server Reflection Error [Code ${err.error_code || err.errorCode}]: ${err.error_message || err.errorMessage}`);
+    }
+  }
+}
+
+function encodeVarint(value) {
+  const bytes = [];
+  let val = value >>> 0;
+  while (val > 0x7f) {
+    bytes.push((val & 0x7f) | 0x80);
+    val >>>= 7;
+  }
+  bytes.push(val & 0x7f);
+  return Buffer.from(bytes);
+}
+
+function buildFileDescriptorSet(descriptorBytes) {
+  const buffers = [];
+  for (const rawBytes of descriptorBytes) {
+    const buf = Buffer.isBuffer(rawBytes) ? rawBytes : Buffer.from(rawBytes);
+    if (!buf.length) continue;
+    const tag = Buffer.from([0x0a]);
+    const len = encodeVarint(buf.length);
+    buffers.push(tag, len, buf);
+  }
+  return Buffer.concat(buffers);
+}
+
+async function loadReflectionServices(endpoint, tls = false) {
+  const normalizedEp = normalizeEndpoint(endpoint, tls);
+  const hostValue = normalizedEp.split(":")[0];
+  const cacheKey = `${normalizedEp}|${Boolean(tls)}`;
+  
+  const namesResponse = await reflectionCall(endpoint, tls, { host: hostValue, list_services: "" });
+  checkReflectionErrors(namesResponse);
+  
+  const names = namesResponse
+    .flatMap((response) => {
+      const resp = response.list_services_response || response.listServicesResponse;
+      return resp?.service || [];
+    })
+    .map((service) => service.name)
+    .filter((name) => Boolean(name) && !name.startsWith("grpc.reflection"));
+
+  if (!names.length) throw new Error("Server reflection tidak mengembalikan service apa pun.");
+  
+  const allServices = [];
+  const processedDescriptors = new Set();
+  const descriptorBytesAccumulator = [];
+
+  for (const serviceName of names) {
+    const descriptorResponses = await reflectionCall(endpoint, tls, { host: hostValue, file_containing_symbol: serviceName });
+    checkReflectionErrors(descriptorResponses);
+    
+    for (const response of descriptorResponses) {
+      const fileResp = response.file_descriptor_response || response.fileDescriptorResponse;
+      const protos = fileResp?.file_descriptor_proto || fileResp?.fileDescriptorProto || [];
+      
+      for (const protoByte of protos) {
+        const bufKey = Buffer.from(protoByte).toString("base64");
+        if (!processedDescriptors.has(bufKey)) {
+          processedDescriptors.add(bufKey);
+          descriptorBytesAccumulator.push(protoByte);
+        }
+      }
+    }
+  }
+
+  if (!descriptorBytesAccumulator.length) {
+    throw new Error("Gagal mengekstrak File Descriptor dari respon reflection.");
+  }
+
+  const descriptorSet = buildFileDescriptorSet(descriptorBytesAccumulator);
+  const definition = protoLoader.loadFileDescriptorSetFromBuffer(descriptorSet, protoOptions());
+  allServices.push(...registerServices(definition, `reflection:${cacheKey}`));
 
   reflectionCache.set(cacheKey, allServices);
   return allServices;
@@ -246,7 +374,12 @@ async function request({ endpoint, serviceMethod, payload = {}, metadata = {}, t
   const methodEntry = findMethod(service.definition, methodName);
   if (!methodEntry) throw new Error(`Method '${methodName}' tidak ditemukan pada service '${service.name}'.`);
   const [runtimeMethod, method] = methodEntry;
-  const client = new service.constructor(normalizeEndpoint(endpoint), credentialsFor(tls));
+  
+  const target = normalizeEndpoint(endpoint, tls);
+  const creds = credentialsFor(endpoint, tls);
+  const options = getChannelOptions(endpoint);
+  const client = new service.constructor(target, creds, options);
+  
   const requestPayload = normalizePayload(payload);
   const requestItems = Array.isArray(requestPayload) ? requestPayload : [requestPayload];
   const call = client[runtimeMethod] || client[method.originalName];

@@ -645,7 +645,8 @@ async duplicateRequest(req) {
 
 
     async deleteRequest(id) {
-        if (!confirm("Are you sure you want to delete this request?")) return;
+        const isConfirmed = await window.customConfirm("Are you sure you want to delete this request?");
+        if (!isConfirmed) return;
 
         try {
             await RequestService.delete(id);

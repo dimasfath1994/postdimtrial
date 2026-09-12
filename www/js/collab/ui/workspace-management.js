@@ -43,8 +43,8 @@ export async function showWorkspaceModal(workspaceId) {
     container.innerHTML = 'Loading members...';
 
     // Fungsi untuk menghapus member
-    window.removeMember = async (memberId) => {
-        if (confirm("Are you sure you want to remove this member?")) {
+   window.removeMember = async (memberId) => {
+        if (await window.customConfirm("Are you sure you want to remove this member?")) {
             try {
                 await WorkspaceMemberService.removeMember(memberId);
                 showWorkspaceModal(workspaceId);

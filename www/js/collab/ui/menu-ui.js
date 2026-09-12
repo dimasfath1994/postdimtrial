@@ -42,14 +42,14 @@ export class MenuUI {
         `;
 
         // 4. Event Delegation untuk action (Re-useable!)
-        menu.onclick = (ev) => {
+        menu.onclick = async (ev) => {
             const action = ev.target.dataset.action;
             if (!action) return;
 
             // Eksekusi fungsi dari handlers
             switch(action) {
                 case 'rename': 
-                    const newName = prompt("New Name:", item.name);
+                    const newName = await window.customPrompt("New Name:", item.name);
                     if (newName) handlers.onRename(item.id, newName);
                     break;
                 case 'duplicate': 

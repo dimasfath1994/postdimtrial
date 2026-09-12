@@ -184,9 +184,9 @@ showContextMenu(e, col) {
 
     document.body.appendChild(menu);
 
-    // 3. Event Handling (Menggunakan metode internal class ini)
-    menu.querySelector('#ctx-rename').onclick = () => {
-        const newName = prompt("Rename collection to:", col.name);
+// 3. Event Handling (Menggunakan metode internal class ini)
+    menu.querySelector('#ctx-rename').onclick = async () => {
+        const newName = await window.customPrompt("Rename collection to:", col.name);
         if (newName && newName !== col.name) {
             this.renameCollection(col.id, newName);
         }
@@ -265,7 +265,8 @@ showContextMenu(e, col) {
     }
 
     async deleteCollection(id) {
-        if (!confirm("Are you sure you want to delete this collection?")) return;
+        const isConfirmed = await window.customConfirm("Are you sure you want to delete this collection?");
+        if (!isConfirmed) return;
     
         try {
             // 1. Panggil API backend (Axum)
@@ -297,7 +298,7 @@ showContextMenu(e, col) {
 
     async addFolder(collectionId) {
         // 1. Minta nama folder ke user
-        const folderName = prompt("Enter folder name:");
+        const folderName = await window.customPrompt("Enter folder name:");
         if (!folderName) return;
 
         // 2. Tentukan parentId

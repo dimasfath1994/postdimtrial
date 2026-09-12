@@ -131,7 +131,7 @@ export class TabController {
         const isDraft = String(id).startsWith('draft_');
 
         if (isDraft) {
-            const wantsToSave = confirm("You have unsaved changes in this draft. Do you want to save it before closing?");
+            const wantsToSave = await window.customConfirm("You have unsaved changes in this draft. Do you want to save it before closing?");
             
             if (wantsToSave) {
                 //console.log("[TabController] Membuka picker untuk:", id);
