@@ -418,12 +418,10 @@
 <!-- ================= MONACO & CONTROLLER SWITCHER ================= -->
 <script>
   window.MonacoEnvironment = {
-    getWorker: function (_moduleId, label) {
-      const workerUrl = window.__POSTDIM_MONACO_WORKER__ || "./lib/js/monaco-editor/min/vs/workers-DcJshg-q.js";
-      return new Worker(workerUrl, { type: "module", name: label });
-    },
-    getWorkerUrl: function () {
-      return window.__POSTDIM_MONACO_WORKER__ || "./lib/js/monaco-editor/min/vs/workers-DcJshg-q.js";
+    getWorker: function () {
+      // Bypass pembuatan Web Worker agar tidak diblokir oleh VS Code Webview CSP.
+      // Ini akan memaksa Monaco Editor menggunakan Main Thread dengan aman.
+      throw new Error("Bypass worker to force main thread");
     }
   };
 

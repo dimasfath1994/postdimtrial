@@ -57,25 +57,20 @@ import { GrpcController } from "./controller/grpc-controller.js";
 import { RequestModeController } from './controller/request-mode-controller.js';
 
 const isTauri = window.__TAURI_INTERNALS__ !== undefined;
-const isVsCodeWebview = window.__POSTDIM_VSCODE__ === true;
 
-if (isTauri || isVsCodeWebview) {
+if (isTauri) {
     // Sembunyikan tombol jika user sudah pakai versi desktop
-    document.getElementById('downloadAppBtn')?.style.setProperty('display', 'none');
+    document.getElementById('downloadAppBtn').style.display = 'none';
 } else {
     // Jika di browser, arahkan ke GitHub Releases
-    document.getElementById('downloadAppBtn')?.addEventListener('click', () => {
+    document.getElementById('downloadAppBtn').addEventListener('click', () => {
         window.open('https://github.com/dimasfath1994/postdimtrial/releases/latest/download/app.exe', '_blank');
     });
 }
 
 ImportController.initUIListeners(() => {
     console.log("Import selesai, UI akan di-refresh...");
-    if (window.postdimBridge?.navigate) {
-        window.postdimBridge.navigate("collaboration.html");
-    } else {
-        location.reload();
-    }
+    location.reload(); 
 });
 
 
@@ -114,7 +109,6 @@ const State = {
  window.COLLAB_STATE = State;
 
 const dispatcher = new SocketDispatcher();
-window.dispatcher = dispatcher;
 
 
 
@@ -354,27 +348,54 @@ function connectSocket(id) {
     }
 }
 
+let isInitializing = false;
+
 document.addEventListener("DOMContentLoaded", async () => {
-    //initBodyTabs(bodyParamCtrl, tabCtrl);
+    if (isInitializing) return;
+    isInitializing = true;
+
     initWorkspaceUI(workspaceCtrl);
     const allowed = await guardCollaborationAccess();
-    if (allowed)
-    {
-         await workspaceCtrl.loadFlow();
+    
+    if (allowed) {
+        try {
+            // Pastikan hanya meload workspace aktif yang valid (ID 77, abaikan sisa state sampah)
+            const activeWs = await workspaceCtrl.loadFlow();
+            const wsId = activeWs?.id || State.workspaceId;
 
-         const wsId = State.workspaceId; // Pastikan ID workspace tersedia
-        RequestModeController.init();
-        await envCtrl.init(null, wsId); // Pass null karena kita tidak butuh render ke UI dulu
-        await globalCtrl.init(null);
+            if (!wsId) {
+                console.error("Workspace ID utama tidak ditemukan!");
+                isInitializing = false;
+                return;
+            }
 
-        const inviteBtn = document.getElementById('inviteBtn');
-        if (inviteBtn) {
-            initInviteModal(); // Ganti 1 dengan ID workspace yang benar
-        } else {
-            console.error("Tombol inviteBtn tidak ditemukan di HTML!");
+            // Bersihkan atau pastikan state koleksi sesuai dengan workspace aktif
+            const collections = await window.CollectionService.getByWorkspace(wsId);
+            State.collections = collections;
+            State.workspaceId = wsId;
+
+            // Inisialisasi request controller dengan aman
+            if (requestCtrl && typeof requestCtrl.init === 'function') {
+                await requestCtrl.init(wsId);
+            }
+
+            RequestModeController.init();
+            await envCtrl.init(null, wsId); 
+            await globalCtrl.init(null);
+
+            const inviteBtn = document.getElementById('inviteBtn');
+            if (inviteBtn) {
+                initInviteModal(); 
+            }
+
+            initWorkspaceModal();
+        } catch (err) {
+            console.error("Error pada inisialisasi aplikasi:", err);
+        } finally {
+            isInitializing = false;
         }
-
-        initWorkspaceModal();
+    } else {
+        isInitializing = false;
     }
 });
 
@@ -440,7 +461,7 @@ window.addEventListener('request-tab-switched', async (e) => {
         headerCtrl ? headerCtrl.init(requestId, document.getElementById('headersBox'), isDraft) : Promise.resolve(),
         paramCtrl ? paramCtrl.init(requestId, document.getElementById('paramsBox'), isDraft) : Promise.resolve(),
         graphqlCtrl ? graphqlCtrl.init(requestId, document.getElementById('graphqlBox'), isDraft) : Promise.resolve(),
-        grpcCtrl ? grpcCtrl.init(requestId, document.getElementById('grpcPanelsContainer'), isDraft) : Promise.resolve()
+        grpcCtrl ? grpcCtrl.init(requestId, document.getElementById('grpcBox'), isDraft) : Promise.resolve()
     ]);
     
     console.log(`[SYNC] Semua data untuk ${requestId} berhasil dimuat ke State.`);
@@ -555,17 +576,9 @@ document.getElementById('send').addEventListener('click', async () => {
 
         // 3. Resolve variabel environment/global
         const resolvedData = VariableResolver.resolveRequest(finalData, State);
-
-        if (resolvedData.pre_script?.trim()) {
-            await PMSandbox.execute(resolvedData.pre_script, null, State, envCtrl);
-        }
-
-        const requestData = VariableResolver.resolveRequest(resolvedData, State);
-
-        // 4. Kirim Request ke target, using the native gRPC controller for gRPC tabs.
-        const response = String(requestData.method).toUpperCase() === 'GRPC'
-            ? await grpcCtrl.invokeGrpc()
-            : await RequestDispatcher.send(requestData);
+        
+        // 4. Kirim Request ke Server API Target
+        const response = await RequestDispatcher.send(resolvedData);
         
         // 5. Simpan hasil response ke RAM milik tab ini
         State.requestStates[activeId].response = response;
@@ -659,11 +672,7 @@ document.getElementById('newTab').addEventListener('click', async () => {
 
 function logout() {
   Auth.logout?.();
-    if (window.postdimBridge?.navigate) {
-        window.postdimBridge.navigate("index.html");
-    } else {
-        window.location.replace("./");
-    }
+  window.location.replace("./");
 }
 
 document.getElementById("collabLogoutBtn")

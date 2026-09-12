@@ -47,36 +47,26 @@ export class RequestController {
         };
     }
 
-    async init(workspaceId) {
-        console.log("DEBUG: Mengambil request untuk workspace:", workspaceId);
-        
-        // Pastikan kita menunggu data koleksi jika belum ada
-        // Anda mungkin perlu memanggil fungsi fetch collections jika masih kosong
-        const collections = this.State.collections || [];
-        
-        if (collections.length === 0) {
-            console.warn("DEBUG: Koleksi masih kosong, mencoba ambil dari service...");
-            // Jika Anda punya akses ke service koleksi, panggil di sini
-            // await CollectionService.getAll(workspaceId); 
-        }
-    
-        // Gunakan Promise.all agar fetch berjalan paralel (lebih cepat)
-        const promises = collections.map(col => RequestService.getByCollection(col.id));
-        
-        try {
-            const results = await Promise.all(promises);
-            // Gabungkan semua hasil array
-            const allRequests = results.flat(); 
-            
-            this.State.requests = allRequests;
-            if (this.onUpdateUI) {
-                this.onUpdateUI(allRequests);
+   async init(workspaceId) {
+    const collections = this.State.collections || [];
+    if (collections.length === 0) return;
+
+    try {
+        const allRequests = [];
+        for (const col of collections) {
+            try {
+                const reqs = await RequestService.getByCollection(col.id);
+                if (Array.isArray(reqs)) allRequests.push(...reqs);
+            } catch (innerErr) {
+                console.warn(`Gagal mengambil request untuk koleksi ID ${col.id}:`, innerErr);
             }
-            console.log("DEBUG: Total request terkumpul:", allRequests.length);
-        } catch (err) {
-            console.error("DEBUG: Gagal mengumpulkan request:", err);
         }
+        this.State.requests = allRequests;
+        if (this.onUpdateUI) this.onUpdateUI(allRequests);
+    } catch (err) {
+        console.error("Gagal mengumpulkan request:", err);
     }
+}
 
     setupBroadcastListener() {
         this.bc.onmessage = (event) => {
@@ -411,38 +401,27 @@ export class RequestController {
     }
     // --- CRUD ACTIONS ---
 
-    async createRequest(context) {
+   async createRequest(context) {
     try {
         const newReq = await RequestService.create({
             ...context,
-            name: "New Request",
-            method: "GET"
+            name: context.name || "New Request",
+            method: context.method || "GET"
         });
 
-        // 1. Update State lokal
-        console.log("apa isi is context folder_id?: ", context.folder_id);
-        // 2. SMART UI UPDATE:
         if (context.folder_id) {
-            // Jika ada folder_id, minta FolderController render ulang folder tsb
             if (window.folderCtrl) {
-               // if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
                 const folderEl = document.querySelector(`.folder-item[data-id="${context.folder_id}"]`);
                 if (folderEl) window.folderCtrl.renderFolder(context.folder_id, folderEl);
-               
             }
         } else {
-            // Jika folder_id null/undefined, kita di Root (di luar folder)
-            // Cukup panggil render() milik RequestController
             const isExists = this.State.requests.find(r => r.id === newReq.id);
             if (!isExists) {
                 this.State.requests.push(newReq);
                 if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
             }
-    
-            //this.render(); 
         }
 
-        // 3. Broadcast & Tab
         this.bc.postMessage({ type: 'REQUEST_CREATED', data: newReq });
         if (this.tabCtrl) this.tabCtrl.openTab(newReq);
             
@@ -452,47 +431,6 @@ export class RequestController {
         alert("Gagal membuat request");
     }
 }
-
-async createRequestToServer(context) {
-    try {
-        const newReq = await RequestService.create({
-            ...context
-        });
-
-        // 1. Update State lokal
-        console.log("apa isi is context folder_id?: ", context.folder_id);
-        // 2. SMART UI UPDATE:
-        if (context.folder_id) {
-            // Jika ada folder_id, minta FolderController render ulang folder tsb
-            if (window.folderCtrl) {
-               // if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
-                const folderEl = document.querySelector(`.folder-item[data-id="${context.folder_id}"]`);
-                if (folderEl) window.folderCtrl.renderFolder(context.folder_id, folderEl);
-               
-            }
-        } else {
-            // Jika folder_id null/undefined, kita di Root (di luar folder)
-            // Cukup panggil render() milik RequestController
-            const isExists = this.State.requests.find(r => r.id === newReq.id);
-            if (!isExists) {
-                this.State.requests.push(newReq);
-                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
-            }
-    
-            //this.render(); 
-        }
-
-        // 3. Broadcast & Tab
-        this.bc.postMessage({ type: 'REQUEST_CREATED', data: newReq });
-        if (this.tabCtrl) this.tabCtrl.openTab(newReq);
-            
-        return newReq;
-    } catch (err) {
-        console.error("Gagal buat request:", err);
-        alert("Gagal membuat request");
-    }
-}
-
 
 
 async migrateBodyParamsToRequest(reqId, bodyParams) {

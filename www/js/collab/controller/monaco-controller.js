@@ -13,6 +13,18 @@ export class MonacoController {
             return;
         }
 
+        // TAMBAHKAN BLOK INI UNTUK MENCEGAH WEB WORKER ERROR DI VS CODE WEBVIEW
+        window.MonacoEnvironment = {
+            getWorker: function (workerId, label) {
+                return {
+                    postMessage: function () {},
+                    addEventListener: function () {},
+                    removeEventListener: function () {},
+                    terminate: function () {}
+                };
+            }
+        };
+
         amdRequire.config({
             paths: {
                 vs: window.__POSTDIM_MONACO_BASE__ || "./lib/js/monaco-editor/min/vs"

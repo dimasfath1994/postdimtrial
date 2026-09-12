@@ -21,7 +21,7 @@ export class RequestService {
     if (folderId) {
       url += `&folder_id=${Number(folderId)}`;
     }
-
+console.log("[DEBUG URL REQUEST]", url);
     const res = await fetch(url, { headers: this.headers() });
     const text = await res.text();
 
