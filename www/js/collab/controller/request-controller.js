@@ -48,21 +48,55 @@ export class RequestController {
     }
 
    async init(workspaceId) {
+    console.log(`[RequestController] init dipanggil untuk workspaceId:`, workspaceId);
     const collections = this.State.collections || [];
-    if (collections.length === 0) return;
+    console.log(`[RequestController] Jumlah koleksi yang akan diproses:`, collections.length, collections);
+
+    if (collections.length === 0) {
+        console.warn(`[RequestController] Koleksi kosong, inisialisasi dibatalkan.`);
+        return;
+    }
 
     try {
         const allRequests = [];
         for (const col of collections) {
             try {
+                console.log(`[RequestController] Mengambil request untuk koleksi ID: ${col.id} (${col.name})`);
                 const reqs = await RequestService.getByCollection(col.id);
-                if (Array.isArray(reqs)) allRequests.push(...reqs);
+                console.log(`[RequestController] Hasil data request untuk koleksi ID ${col.id}:`, reqs);
+
+                if (Array.isArray(reqs)) {
+                    allRequests.push(...reqs);
+                } else {
+                    console.warn(`[RequestController] Respons untuk koleksi ID ${col.id} bukan berupa array:`, reqs);
+                }
             } catch (innerErr) {
                 console.warn(`Gagal mengambil request untuk koleksi ID ${col.id}:`, innerErr);
             }
         }
+
+        console.log(`[RequestController] Total seluruh request yang terkumpul:`, allRequests.length, allRequests);
         this.State.requests = allRequests;
-        if (this.onUpdateUI) this.onUpdateUI(allRequests);
+
+        if (this.onUpdateUI) {
+            console.log(`[RequestController] Menjalankan fungsi onUpdateUI...`);
+            this.onUpdateUI(allRequests);
+        }
+
+        console.log(`[RequestController] Menjalankan fungsi render()...`);
+        this.render();
+
+        // Panggil inisialisasi folder untuk setiap koleksi agar folder ikut merender diri
+        if (window.folderControllers) {
+            for (const col of collections) {
+                if (window.folderControllers[col.id]) {
+                    window.folderControllers[col.id].init(col.id);
+                }
+            }
+        }
+
+        console.log(`[RequestController] Menjalankan fungsi render()...`);
+        this.render();
     } catch (err) {
         console.error("Gagal mengumpulkan request:", err);
     }
@@ -245,81 +279,66 @@ export class RequestController {
 
 
     async render() {
-        // 1. Ambil semua koleksi utama
-        const collectionItems = document.querySelectorAll('.collection-item');
-    
-        collectionItems.forEach(colEl => {
-            const colId = colEl.dataset.collectionId;
-            
-            // Cari child-list UTAMA milik koleksi ini (yang ada di bawah collection-body)
-            // Kita gunakan querySelector untuk mencari child-list yang levelnya langsung di bawah koleksi
-            const rootChildList = colEl.querySelector(':scope > .child-list'); 
-    
-            if (rootChildList) {
-                // 2. Filter: Hanya ambil request yang milik koleksi ini DAN tidak punya folder_id
-                const rootRequests = this.State.requests.filter(r => 
-                    String(r.collection_id) === String(colId) && !r.folder_id
-                );
-    
-                // 3. Bersihkan HANYA request-item yang ada di level root ini
-                // Kita tidak menyentuh .folder-item atau .child-list di dalamnya!
-                const existingRequests = rootChildList.querySelectorAll(':scope > .request-item');
-                existingRequests.forEach(el => el.remove());
-    
-                // 4. Render request root
-                rootRequests.forEach(req => {
-                    RequestUI.renderRequestItem(
-                        req, 
-                        rootChildList, 
-                        this.handlers, 
-                        (r) => this.tabCtrl.openTab(r)
-                    );
-                });
-            }
-        });
-    
-        console.log(`[DEBUG] Root render selesai tanpa mengganggu folder.`);
-    }
+    // Sinkronisasi DOM menggunakan data State yang sudah ada tanpa fetch ulang beruntun
+    const collectionItems = document.querySelectorAll('.collection-item');
 
+    collectionItems.forEach(colEl => {
+        // Sesuaikan selector dengan data-id yang dirender di collection-ui.js
+        const colId = colEl.dataset.id || colEl.dataset.collectionId;
+        if (!colId) return;
 
-    async loadRequestsByCollection(collectionId, folderId = null) {
-        try {
-            const newRequests = await RequestService.getByCollection(collectionId, folderId);
-            
-        
-            // 1. SMART MERGE: Jangan timpa seluruh State
-            // Hapus request lama yang berada di collection/folder yang sama, lalu masukkan yang baru
-            this.State.requests = this.State.requests.filter(r => 
-                !(String(r.collection_id) === String(collectionId) && String(r.folder_id || null) === String(folderId))
+        const rootChildList = colEl.querySelector(':scope > .collection-body .requests-list');
+
+        if (rootChildList) {
+            const rootRequests = this.State.requests.filter(r => 
+                String(r.collection_id) === String(colId) && !r.folder_id
             );
 
-            const existingIds = new Set(this.State.requests.map(r => r.id));
-        
-            // 3. Hanya masukkan request yang BELUM ada di state
-            const uniqueNewRequests = newRequests.filter(r => !existingIds.has(r.id));
-
-            this.State.requests.push(...uniqueNewRequests);
-            // 2. SMART TARGETING: Cari container berdasarkan folder/koleksi
-            // Jangan pakai ID statis yang kaku, gunakan selector yang dinamis
-            const container = folderId 
-                ? document.querySelector(`.folder-item[data-id="${folderId}"] > .child-list`)
-                : document.querySelector(`[data-collection-id="${collectionId}"] .requests-list`);
-    
-            if (container) {
-                container.innerHTML = ""; // Bersihkan hanya container yang spesifik ini
-                newRequests.forEach(req => 
-                    RequestUI.renderRequestItem(
-                        req, 
-                        container, 
-                        this.handlers, 
-                        (r) => this.tabCtrl.openTab(r)
-                    )
+            rootChildList.innerHTML = "";
+            rootRequests.forEach(req => {
+                RequestUI.renderRequestItem(
+                    req, 
+                    rootChildList, 
+                    this.handlers, 
+                    (r) => this.tabCtrl.openTab(r)
                 );
-            }
-        } catch (err) {
-            console.error("Gagal load requests:", err);
+            });
         }
+    });
+}
+
+async loadRequestsByCollection(collectionId, folderId = null) {
+    try {
+        const newRequests = await RequestService.getByCollection(collectionId, folderId);
+
+        this.State.requests = this.State.requests.filter(r => 
+            !(String(r.collection_id) === String(collectionId) && String(r.folder_id || null) === String(folderId))
+        );
+
+        const existingIds = new Set(this.State.requests.map(r => r.id));
+        const uniqueNewRequests = newRequests.filter(r => !existingIds.has(r.id));
+        this.State.requests.push(...uniqueNewRequests);
+
+        // Perbaikan Selector: Tangkap 'data-id' dan 'data-collection-id' sekaligus agar aman
+        const container = folderId 
+            ? document.querySelector(`.folder-item[data-id="${folderId}"] .child-list`)
+            : document.querySelector(`.collection-item[data-id="${collectionId}"] .requests-list, [data-collection-id="${collectionId}"] .requests-list`);
+
+        if (container) {
+            container.innerHTML = ""; 
+            newRequests.forEach(req => 
+                RequestUI.renderRequestItem(
+                    req, 
+                    container, 
+                    this.handlers, 
+                    (r) => this.tabCtrl.openTab(r)
+                )
+            );
+        }
+    } catch (err) {
+        console.error("Gagal load requests:", err);
     }
+}
 
 
     updateUrlFromParams(params) {

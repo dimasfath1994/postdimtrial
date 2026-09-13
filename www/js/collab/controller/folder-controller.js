@@ -41,7 +41,14 @@ export class FolderController {
         this.collectionId = collectionId;
         const folders = await FolderService.getByCollection(collectionId);
         this.State.folders = folders;
-        this.render(); 
+        
+        // Render root folders dan requests untuk collection ini secara langsung saat init
+        const colEl = document.querySelector(`[data-collection-id="${collectionId}"]`) || document.querySelector(`[data-id="${collectionId}"]`);
+        if (colEl) {
+            this.renderFolder(null, colEl);
+        } else {
+            this.render(); 
+        }
     }
 
     setupBroadcastListener() {

@@ -68,6 +68,14 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
                 <span class="folder-name" data-id="${folder.id}">📁 ${folder.name}</span>
             </div>
         `;
+        
+        // Pastikan ada container child-list kosong di dalam folder-item untuk sub-folder/request berikutnya
+        const subChildList = document.createElement('div');
+        subChildList.className = 'child-list';
+        subChildList.style.paddingLeft = '20px';
+        subChildList.style.display = 'none'; // Default tertutup sebelum di-expand
+        item.appendChild(subChildList);
+
         childList.appendChild(item);
     });
 

@@ -672,13 +672,21 @@ document.getElementById('newTab').addEventListener('click', async () => {
 
 function logout() {
   Auth.logout?.();
-  window.location.replace("./");
+  
+  // Gunakan postdimBridge jika berjalan di dalam VS Code Extension
+  if (window.postdimBridge && window.postdimBridge.navigate) {
+    window.postdimBridge.navigate("index.html"); // Sesuaikan dengan nama file halaman login
+  } else {
+    // Fallback jika dibuka di browser biasa (bukan webview VS Code)
+    window.location.replace("./");
+  }
 }
 
-document.getElementById("collabLogoutBtn")
-    ?.addEventListener("click", logout);
-
-
-    document.getElementById('manageWorkspaceBtn').addEventListener('click', () => {
-        showWorkspaceModal(State.workspaceId); // Ganti dengan variabel ID workspace yang aktif
-    });
+document.addEventListener('click', (e) => {
+    if (e.target.closest('#collabLogoutBtn')) {
+        logout();
+    }
+    if (e.target.closest('#manageWorkspaceBtn')) {
+        showWorkspaceModal(State.workspaceId);
+    }
+});

@@ -333,8 +333,21 @@ function getBridgeScript(monacoBaseUri, workerUri) {
 
     const nativeFetch = window.fetch.bind(window);
     window.fetch = async (input, init = {}) => {
-      const requestUrl = typeof input === "string" ? input : input?.url;
-      if (!/^https?:\\/\\//i.test(requestUrl || "")) return nativeFetch(input, init);
+      let requestUrl = typeof input === "string" ? input : input?.url;
+      if (!requestUrl) return nativeFetch(input, init);
+
+      if (!/^https?:\\/\\//i.test(requestUrl)) {
+        const config = await window.postdimBridge.invoke("get_config").catch(() => ({}));
+        const baseUrl = config && config.apiBaseUrl ? config.apiBaseUrl.replace(/\\/+$/, "") : "";
+        
+        if (!baseUrl) {
+          throw new Error("Postdim Error: apiBaseUrl belum diatur di Settings VS Code. Harap isi konfigurasi 'postdim.apiBaseUrl' terlebih dahulu.");
+        }
+
+        if (!requestUrl.startsWith("/")) requestUrl = "/" + requestUrl;
+        requestUrl = baseUrl + requestUrl;
+      }
+
       const method = String(init.method || (typeof input === "object" ? input.method : "GET")).toUpperCase();
       const headers = Object.fromEntries(new Headers(init.headers || (typeof input === "object" ? input.headers : undefined)).entries());
       const body = await serializeBody(init.body);
