@@ -1,5 +1,7 @@
 // js/ui/graphql-ui.js
 
+import { enableMonacoClipboard } from '../../ui/monaco-clipboard.js';
+
 export class GraphqlUI {
     static queryEditor = null;
     static variablesEditor = null;
@@ -109,6 +111,7 @@ export class GraphqlUI {
                     scrollBeyondLastLine: false,
                     tabSize: 2
                 });
+                enableMonacoClipboard(this.queryEditor);
 
                 this.queryEditor.onDidChangeModelContent(() => {
                     if (this.isUpdatingFromState) return;
@@ -137,6 +140,7 @@ export class GraphqlUI {
                     scrollBeyondLastLine: false,
                     tabSize: 2
                 });
+                enableMonacoClipboard(this.variablesEditor);
 
                 this.variablesEditor.onDidChangeModelContent(() => {
                     if (this.isUpdatingFromState) return;

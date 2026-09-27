@@ -18,7 +18,7 @@ export class EnvResolver {
     if (typeof input !== "string") return input;
     const values = this.values(extra);
 
-    return input.replace(/{{(.*?)}}/g, (match, key) => {
+    return input.replace(/\$?{{\s*(.*?)\s*}}/g, (match, key) => {
       const name = String(key).trim();
       const dynamic = this.dynamic(name);
       if (dynamic !== undefined) return dynamic;

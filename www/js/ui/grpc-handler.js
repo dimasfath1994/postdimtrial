@@ -1,3 +1,5 @@
+import { enableMonacoClipboard } from './monaco-clipboard.js';
+
 export class GrpcHandler {
   static editors = {
     body: null
@@ -410,6 +412,7 @@ export class GrpcHandler {
         suggestOnTriggerCharacters: true,
         minimap: { enabled: false }
       });
+      enableMonacoClipboard(this.editors.body);
       this.editors.body.onDidChangeModelContent(() => {
         if (this.isSyncingFromState) return;
         if (inputBody) inputBody.value = this.editors.body.getValue();

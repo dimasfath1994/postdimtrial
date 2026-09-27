@@ -40,6 +40,20 @@ body {
   margin-top: 10px;
   overflow: auto;
   flex: 1;
+  display: block;
+  min-height: 120px;
+}
+
+.collection-item {
+  display: block;
+}
+
+.collection-item .collection-body {
+  display: none;
+}
+
+.collection-item .collection-body[data-expanded="true"] {
+  display: block;
 }
 
 .collection {
@@ -510,9 +524,17 @@ pre {
 
     width: 100%;
     height: auto;
+    max-height: 48vh;
+    overflow-y: auto;
 
     border-right: none;
     border-bottom: 1px solid #222;
+  }
+
+  #collectionList {
+    flex: 0 1 28vh;
+    min-height: 120px;
+    max-height: 28vh;
   }
 
   .container {

@@ -35,9 +35,19 @@ export class EnvController {
         }, 'env');
     }
 
+    getValue(key) {
+        return this.State.environments?.find(item => item.env_key === key)?.env_value;
+    }
 
+    async unsetByName(key) {
+        const env = this.State.environments?.find(item => item.env_key === key);
+        if (!env) return false;
+        await this.delete(env.id);
+        return true;
+    }
 
     async updateByName(key, value) {
+        this.State.environments ||= [];
         // 1. Cari environment berdasarkan key
         const env = this.State.environments.find(e => e.env_key === key);
 
@@ -47,17 +57,23 @@ export class EnvController {
                 ...env,
                 env_value: String(value)
             };
+            Object.assign(env, payload);
             await this.update(env.id, payload);
             console.log(`[EnvController] Berhasil update ${key} ke ${value}`);
         } else {
             // Jika tidak ketemu, create baru
             console.log(`[EnvController] Key ${key} tidak ditemukan, membuat baru...`);
-            
+
+            const pendingEnv = { id: `pending_${Date.now()}`, env_key: key, env_value: String(value) };
+            this.State.environments.push(pendingEnv);
+
             try {
                 const newEnv = await EnvService.create(this.workspaceId, key, value);
                 
                 // Tambahkan ke state lokal agar UI update
-                this.State.environments.push(newEnv);
+                const idx = this.State.environments.findIndex(item => item.id === pendingEnv.id);
+                if (idx !== -1) this.State.environments[idx] = newEnv;
+                else if (!this.State.environments.some(item => item.env_key === key)) this.State.environments.push(newEnv);
                 
                 // Kirim notifikasi via broadcast agar tab lain terupdate
                 this.bc.postMessage({ type: 'ENV_CREATED', data: newEnv });
@@ -67,7 +83,9 @@ export class EnvController {
                 
                 console.log(`[EnvController] Berhasil create ${key} dengan value ${value}`);
             } catch (err) {
+                this.State.environments = this.State.environments.filter(item => item.id !== pendingEnv.id);
                 console.error("[EnvController] Gagal create environment:", err);
+                throw err;
             }
         }
     }

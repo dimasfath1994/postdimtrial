@@ -61,6 +61,17 @@ export const ImportSequenceInserter = {
         if (!collection || !collection.id) {
             throw new Error("[CREATE COLLECTION FAILED] Hasil create null");
         }
+
+        const collectionVariables = {
+            ...(colData.environment || {}),
+            ...(colData.collectionVariables || {})
+        };
+        if (Object.keys(collectionVariables).length) {
+            await CollectionService.update(collection.id, {
+                name: collection.name,
+                environment: collectionVariables
+            });
+        }
     
         bccol.postMessage({ type: 'COLLECTION_CREATED', data: collection });
         bccol.close();

@@ -5,6 +5,8 @@ import { WorkspaceService } from "./workspace-service.js";
  * MAIN GUARD ENTRY (FIXED VERSION)
  */
 export async function guardCollaborationAccess() {
+  const isVsCodeExtension = Boolean(window.postdimBridge?.navigate);
+
   try {
     // ================= 1. TOKEN CHECK (HARD REQUIREMENT) =================
     const token = Auth.getToken();
@@ -15,8 +17,11 @@ export async function guardCollaborationAccess() {
     // ================= 2. USER CHECK =================
     const user = Auth.getUser?.();
     if (!user?.email) {
-      Auth.logout?.();
-      return block("NO_USER");
+      if (!isVsCodeExtension) {
+        Auth.logout?.();
+        return block("NO_USER");
+      }
+      console.warn("[COLLAB USER MISSING - KEEPING VSCODE SESSION]");
     }
 
     // ================= 3. WORKSPACE CHECK (STRICT MODE) =================
@@ -34,6 +39,10 @@ export async function guardCollaborationAccess() {
 
   } catch (err) {
     console.error("[COLLAB GUARD ERROR]", err);
+    if (isVsCodeExtension && Auth.getToken()) {
+      console.warn("[COLLAB GUARD ERROR - KEEPING VSCODE SESSION]");
+      return true;
+    }
     Auth.logout?.();
     return block("GUARD_EXCEPTION");
   }

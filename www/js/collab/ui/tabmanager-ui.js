@@ -2,7 +2,7 @@
 
 export const TabManagerUI = {
     init(tabCtrl) { // Terima instance tabCtrl
-        const tabs = document.querySelectorAll('.req-tab');
+        const tabs = document.querySelectorAll('#reqTabs .req-tab[data-tab]');
         const panels = document.querySelectorAll('.tab-panel');
 
         tabs.forEach(tab => {

@@ -1,49 +1,111 @@
 // services/pm-sandbox.js
+import { DataBridge } from '../controller/bridge.js';
+
 export class PMSandbox {
-    /**
-     * @param {string} script - Kode JS dari editor
-     * @param {object} response - Data response dari request
-     * @param {object} state - Referensi state global
-     * @param {object} envCtrl - Instance dari EnvController
-     */
-    static async execute(script, response, state, envCtrl) {
-        
-        // Objek PM yang akan disuntikkan ke dalam script
+    static async execute(script, response, state, envCtrl, options = {}) {
+        if (!script || !script.trim()) return;
+
+        const collectionId = options.collectionId;
+        const requestId = options.requestId;
+        const draftId = String(requestId || '').startsWith('draft_') ? requestId : null;
+        const collectionKey = draftId
+            ? `${collectionId ?? 'default'}:draft:${draftId}`
+            : String(collectionId ?? 'default');
+        const collection = state.collections?.find(item => String(item.id) === collectionKey);
+        const collectionVariables = {
+            ...((draftId ? DataBridge.load(draftId, 'collectionVariables') : null)
+                || state.collectionVariablesById?.[collectionKey]
+                || collection?.environment
+                || {})
+        };
+        state.collectionVariablesById ||= {};
+        state.collectionVariablesById[collectionKey] = collectionVariables;
+        const pendingWrites = [];
+
+        const persistCollectionVariables = () => {
+            const next = { ...collectionVariables };
+            state.collectionVariablesById[collectionKey] = next;
+            if (collection && !draftId) collection.environment = next;
+            if (draftId) DataBridge.save(draftId, 'collectionVariables', next);
+            if (options.onCollectionVariablesChange) {
+                pendingWrites.push(Promise.resolve(
+                    options.onCollectionVariablesChange(collectionId, next)
+                ));
+            }
+        };
+
+        const responseBody = response?.body ?? response?.data;
         const pm = {
             variables: {
-                get: (key) => state.runtimeVariables?.[key],
+                get: key => state.runtimeVariables?.[key],
                 set: (key, value) => {
                     state.runtimeVariables ||= {};
                     state.runtimeVariables[key] = value;
                 },
-                unset: (key) => {
+                unset: key => {
                     if (state.runtimeVariables) delete state.runtimeVariables[key];
                 },
                 all: () => ({ ...(state.runtimeVariables || {}) })
             },
-            response: {
-                json: () => {
-                    try { return response?.body ? JSON.parse(response.body) : null; } 
-                    catch (e) { return null; }
+            collectionVariables: {
+                get: key => collectionVariables[key],
+                set: (key, value) => {
+                    if (!key) return;
+                    collectionVariables[key] = value;
+                    persistCollectionVariables();
                 },
-                text: () => response?.body || ""
+                unset: key => {
+                    if (!key || !(key in collectionVariables)) return;
+                    delete collectionVariables[key];
+                    persistCollectionVariables();
+                },
+                all: () => ({ ...collectionVariables })
             },
             environment: {
-                // Mengambil nilai dari State melalui controller
-                get: (key) => envCtrl.getValue(key),
-                
-                // Menyimpan/Update nilai (Persistent & Sinkron) melalui controller
-                set: (key, value) => envCtrl.updateByName(key, value)
-            }
+                get: key => envCtrl?.getValue(key),
+                set: (key, value) => {
+                    if (envCtrl) pendingWrites.push(Promise.resolve(envCtrl.updateByName(key, value)));
+                },
+                unset: key => {
+                    if (envCtrl) pendingWrites.push(Promise.resolve(envCtrl.unsetByName(key)));
+                }
+            },
+            response: {
+                json: () => {
+                    if (responseBody && typeof responseBody === 'object') return responseBody;
+                    try { return responseBody ? JSON.parse(responseBody) : null; }
+                    catch { return null; }
+                },
+                text: () => typeof responseBody === 'string'
+                    ? responseBody
+                    : JSON.stringify(responseBody ?? ''),
+                code: response?.status,
+                responseTime: response?.time
+            },
+            request: options.request || {},
+            test: (_name, callback) => callback?.(),
+            expect: value => ({
+                to: {
+                    equal: expected => {
+                        if (value !== expected) throw new Error(`Expected ${value} to equal ${expected}`);
+                    },
+                    be: {
+                        ok: () => {
+                            if (!value) throw new Error('Expected value to be truthy');
+                        }
+                    }
+                }
+            }),
+            console
         };
 
-        // Eksekusi script di dalam sandbox
         try {
-            const func = new Function('pm', script);
-            func(pm);
-            console.log("[PMSandbox] Script selesai dijalankan.");
-        } catch (e) {
-            console.error("[Script Error]", e);
+            const execute = new Function('pm', script);
+            await execute(pm);
+            if (pendingWrites.length) await Promise.all(pendingWrites);
+            console.log('[PMSandbox] Script selesai dijalankan.');
+        } catch (error) {
+            console.error('[Script Error]', error);
         }
     }
 }

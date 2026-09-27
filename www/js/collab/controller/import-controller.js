@@ -1,5 +1,6 @@
 import { ImportSequenceInserter } from "../services/import-sequence-inserter.js";
 import { ImportPostmanInserter } from "../services/import-postman-inserter.js";
+import { openJsonFile } from "../../core/file-transfer.js";
 
 export const ImportController = {
     
@@ -64,6 +65,20 @@ export const ImportController = {
         const modeSelect = document.getElementById('importMode');
 
         if (!fileInput) return;
+
+        const importLabel = document.querySelector('label[for="importFile"]');
+        if (importLabel) {
+            importLabel.addEventListener('click', async (event) => {
+                if (!window.__POSTDIM_VSCODE__) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const file = await openJsonFile();
+                if (!file) return;
+                const mode = modeSelect ? modeSelect.value : 'collection';
+                await this.handleImport(file, mode, window.COLLAB_STATE?.workspaceId, window.USER_ID);
+                if (callback) callback();
+            });
+        }
 
         fileInput.addEventListener('change', async (e) => {
             if (e.target.files.length === 0) return;

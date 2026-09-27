@@ -3,6 +3,7 @@
  * Menangani logika ekspor workspace ke JSON
  */
 import { WorkspaceAggregator } from "../services/workspace-aggregator.js";
+import { saveJsonFile } from "../../core/file-transfer.js";
 
 document.addEventListener("DOMContentLoaded", () => {
     const exportBtn = document.getElementById("exportBtn");
@@ -32,19 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await WorkspaceAggregator.getFullWorkspaceData(workspaceId);
 
             // Membuat Blob untuk file JSON
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            
-            // Trigger download otomatis
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `workspace-${workspaceId}-${new Date().getTime()}.json`;
-            document.body.appendChild(a); // Append ke body untuk kompatibilitas browser
-            a.click();
-            
-            // Cleanup
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await saveJsonFile(data, `workspace-${workspaceId}-${Date.now()}.json`);
             
             console.log("[Export] Berhasil mengunduh workspace.");
         } catch (err) {

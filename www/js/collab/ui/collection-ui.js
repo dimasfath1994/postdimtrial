@@ -8,11 +8,15 @@
  */
 
 export function renderCollectionSidebar(container, collections, handlers) {
+    if (!container) return;
+
+    container.style.display = 'block';
     container.innerHTML = ''; 
     
     collections.forEach(col => {
         const item = document.createElement('div');
         item.className = 'collection-item';
+        item.style.display = 'block';
         item.dataset.id = col.id;
         
         item.innerHTML = `
@@ -43,29 +47,21 @@ export function renderCollectionSidebar(container, collections, handlers) {
 function toggleExpand(item, col, handlers) {
     const icon = item.querySelector('.toggle-icon');
     const body = item.querySelector(`#collection-body-${col.id}`);
-    const isCurrentlyExpanded = body.style.display === 'block';
+    const isCurrentlyExpanded = body && body.dataset.expanded === 'true';
 
     if (isCurrentlyExpanded) {
-        // COLLAPSE
         icon.textContent = '▶';
         body.style.display = 'none';
-
-        // --- INI KUNCINYA ---
-        // Kita paksa cari SEMUA elemen yang merupakan anak dari item
-        // DAN buang semuanya, tidak peduli dia ada di dalam body atau "bocor" keluar
-        const allChildren = item.querySelectorAll(':scope > .collection-body, :scope > .child-list');
-        allChildren.forEach(el => {
-            // Hapus isi di dalamnya
-            el.innerHTML = '';
-        });
-    } else {
-        // EXPAND
-        icon.textContent = '▼';
-        body.style.display = 'block';
-        
-        if (handlers.requestCtrl) handlers.requestCtrl.loadRequestsByCollection(col.id);
-        if (handlers.onExpand) handlers.onExpand(col.id, item);
+        body.dataset.expanded = 'false';
+        return;
     }
+
+    icon.textContent = '▼';
+    body.style.display = 'block';
+    body.dataset.expanded = 'true';
+
+    if (handlers.requestCtrl) handlers.requestCtrl.loadRequestsByCollection(col.id);
+    if (handlers.onExpand) handlers.onExpand(col.id, item);
 }
 export function setupCollectionActions(ctrl) {
     const btn = document.getElementById('newCollection');

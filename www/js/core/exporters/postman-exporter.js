@@ -276,6 +276,9 @@ export function exportPostmanCollection(collection) {
           schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
       },
       item: finalItems,
-      variable: mapEnvironment(collection.environment || {})
+      variable: mapEnvironment({
+        ...(collection.environment || {}),
+        ...(collection.collectionVariables || {})
+      })
   };
 }

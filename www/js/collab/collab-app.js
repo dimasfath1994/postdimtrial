@@ -6,6 +6,7 @@ import { setupGlobalSocket } from '../ws/request-socket.js';
 import { SocketDispatcher } from "../ws/socket-dispatcher.js";
 
 import { CollectionController } from "./controller/collection-controller.js";
+import { CollectionService } from "./collection-service.js";
 import { renderCollectionSidebar, setupCollectionActions } from "./ui/collection-ui.js";
 
 import { FolderController } from "./controller/folder-controller.js";
@@ -369,9 +370,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // Bersihkan atau pastikan state koleksi sesuai dengan workspace aktif
-            const collections = await window.CollectionService.getByWorkspace(wsId);
-            State.collections = collections;
+            // loadFlow sudah memuat koleksi melalui CollectionController.
+            // Jangan mengambilnya lagi lewat global service yang tidak tersedia di webview.
             State.workspaceId = wsId;
 
             // Inisialisasi request controller dengan aman
@@ -564,21 +564,79 @@ document.getElementById('send').addEventListener('click', async () => {
         State.requestStates[activeId].isSending = true;
         tabCtrl.updateSendButtonUI(); 
 
-        // 2. Kumpulkan data dari UI
-        const rawData = await RequestFormatter.collectFromUI(State);
-        const scripts = monacoCtrl.getValues(); 
-        
-        const finalData = {
-            ...rawData,
-            pre_script: scripts.pre_script,
-            post_script: scripts.post_script
+        const isGrpc = document.getElementById('method').value.toUpperCase() === 'GRPC';
+        const scripts = monacoCtrl.getValues();
+        const requestData = tabCtrl.tabs.find(request => String(request.id) === String(activeId))
+            || State.requests.find(request => String(request.id) === String(activeId))
+            || {};
+        let collectionVariableWrite = Promise.resolve();
+        const scriptOptions = {
+            requestId: activeId,
+            collectionId: requestData.collection_id ?? requestData.collectionId,
+            request: {
+                method: requestData.method || document.getElementById('method').value,
+                url: requestData.url || document.getElementById('url').value
+            },
+            onCollectionVariablesChange: async (collectionId, environment) => {
+                if (String(activeId).startsWith('draft_') || collectionId == null) return;
+                const collection = State.collections.find(item => String(item.id) === String(collectionId));
+                collectionVariableWrite = collectionVariableWrite
+                    .catch(() => {})
+                    .then(() => CollectionService.update(collectionId, {
+                        ...(collection?.name ? { name: collection.name } : {}),
+                        environment
+                    }));
+                await collectionVariableWrite;
+                if (collection) collection.environment = environment;
+            }
         };
 
-        // 3. Resolve variabel environment/global
-        const resolvedData = VariableResolver.resolveRequest(finalData, State);
-        
-        // 4. Kirim Request ke Server API Target
-        const response = await RequestDispatcher.send(resolvedData);
+        if (scripts.pre_script?.trim()) {
+            await PMSandbox.execute(scripts.pre_script, null, State, envCtrl, scriptOptions);
+        }
+
+        let resolvedData = null;
+        let response;
+
+        if (isGrpc) {
+            const grpcResult = await grpcCtrl.invokeGrpc(activeId);
+            const responseBody = grpcResult?.body;
+            const bodyText = typeof responseBody === 'string'
+                ? responseBody
+                : JSON.stringify(responseBody ?? {}, null, 2);
+            const responseHeaders = Array.isArray(grpcResult?.headers)
+                ? Object.fromEntries(grpcResult.headers)
+                : (grpcResult?.headers || {});
+
+            response = {
+                ...grpcResult,
+                body: bodyText,
+                headers: responseHeaders,
+                status: grpcResult?.status ?? 500,
+                statusText: grpcResult?.statusText || (grpcResult?.error ? 'gRPC Error' : 'OK'),
+                time: grpcResult?.time ?? 0,
+                size: grpcResult?.size ?? new Blob([bodyText]).size
+            };
+        } else {
+            // 2. Kumpulkan data dari UI untuk HTTP dan GraphQL body mode
+            const rawData = await RequestFormatter.collectFromUI(State);
+            const scripts = monacoCtrl.getValues();
+
+            const finalData = {
+                ...rawData,
+                id: activeId,
+                collection_id: scriptOptions.collectionId,
+                collectionId: scriptOptions.collectionId,
+                pre_script: scripts.pre_script,
+                post_script: scripts.post_script
+            };
+
+            // 3. Resolve variabel environment/global
+            resolvedData = VariableResolver.resolveRequest(finalData, State);
+
+            // 4. Kirim request HTTP/GraphQL
+            response = await RequestDispatcher.send(resolvedData);
+        }
         
         // 5. Simpan hasil response ke RAM milik tab ini
         State.requestStates[activeId].response = response;
@@ -591,13 +649,14 @@ document.getElementById('send').addEventListener('click', async () => {
         }
 
         // 6. Eksekusi Post-Script (Jika ada)
-        if (resolvedData.post_script && resolvedData.post_script.trim().length > 0) {
-            console.log("[PMSandbox] Ditemukan script, menjalankan...");
+        if (scripts.post_script?.trim()) {
+            console.log("[PMSandbox] Menjalankan post-response script...");
             await PMSandbox.execute(
-                resolvedData.post_script, 
+                scripts.post_script,
                 response, 
                 State, 
-                envCtrl
+                envCtrl,
+                scriptOptions
             );
         } else {
             console.log("[PMSandbox] Tidak ada post-script, dilewati.");
@@ -675,10 +734,10 @@ function logout() {
   
   // Gunakan postdimBridge jika berjalan di dalam VS Code Extension
   if (window.postdimBridge && window.postdimBridge.navigate) {
-    window.postdimBridge.navigate("index.html"); // Sesuaikan dengan nama file halaman login
+        window.postdimBridge.navigate("login.html");
   } else {
     // Fallback jika dibuka di browser biasa (bukan webview VS Code)
-    window.location.replace("./");
+        window.location.replace("./login.html");
   }
 }
 

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const vscode = require("vscode");
 
 function activate(context) {
@@ -92,6 +93,37 @@ async function invokeExtensionCommand(command, payload = {}) {
     );
     return { confirm: answer === "Ya" };
   }
+  if (command === "clipboard_read") {
+    return { text: await vscode.env.clipboard.readText() };
+  }
+  if (command === "clipboard_write") {
+    await vscode.env.clipboard.writeText(String(payload.text || ""));
+    return { success: true };
+  }
+  if (command === "read_json_file") {
+    const selected = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      openLabel: "Import JSON",
+      filters: { "JSON files": ["json"], "All files": ["*"] }
+    });
+    if (!selected?.length) return { canceled: true };
+    return {
+      canceled: false,
+      fileName: path.basename(selected[0].fsPath),
+      contents: await fs.promises.readFile(selected[0].fsPath, "utf8")
+    };
+  }
+  if (command === "write_json_file") {
+    const defaultName = path.basename(String(payload.fileName || "postdim-export.json"));
+    const target = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultName)),
+      saveLabel: "Export JSON",
+      filters: { "JSON files": ["json"] }
+    });
+    if (!target) return { canceled: true };
+    await fs.promises.writeFile(target.fsPath, String(payload.contents || ""), "utf8");
+    return { canceled: false, fileName: path.basename(target.fsPath) };
+  }
 
   // === FITUR CONFIG VS CODE SETTINGS ===
   if (command === "get_config") {
@@ -178,6 +210,11 @@ function deserializeRequestBody(body, headers = {}) {
 
 function getWebviewContent(webview, extensionUri, page = "index.html") {
   const safePage = ["index.html", "login.html", "collaboration.html"].includes(page) ? page : "index.html";
+  const postdimSettings = vscode.workspace.getConfiguration("postdim");
+  const postdimConfig = {
+    apiBaseUrl: postdimSettings.get("apiBaseUrl"),
+    wsBaseUrl: postdimSettings.get("wsBaseUrl")
+  };
   const htmlPath = path.join(extensionUri.fsPath, "www", safePage);
   const wwwUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "www"));
   const workerUri = webview.asWebviewUri(
@@ -191,9 +228,9 @@ function getWebviewContent(webview, extensionUri, page = "index.html") {
 
   html = html.replace(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, "");
 
-  const cspString = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; connect-src https: wss:; worker-src blob: ${webview.cspSource}; font-src ${webview.cspSource} data:;">`;
+  const cspString = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; connect-src http: https: ws: wss:; worker-src blob: ${webview.cspSource}; font-src ${webview.cspSource} data:;">`;
 
-  const injectionPayload = `${cspString}\n<script nonce="${nonce}">${getBridgeScript(monacoBaseUri, workerUri)}</script>`;
+  const injectionPayload = `${cspString}\n<script nonce="${nonce}">${getBridgeScript(monacoBaseUri, workerUri, postdimConfig)}</script>`;
 
   if (html.includes("<head>")) {
     html = html.replace("<head>", `<head>\n${injectionPayload}`);
@@ -212,9 +249,10 @@ function getWebviewContent(webview, extensionUri, page = "index.html") {
   return html;
 }
 
-function getBridgeScript(monacoBaseUri, workerUri) {
+function getBridgeScript(monacoBaseUri, workerUri, postdimConfig) {
   return `(() => {
     window.__POSTDIM_VSCODE__ = true;
+    window.__POSTDIM_CONFIG__ = ${JSON.stringify(postdimConfig).replace(/</g, "\\u003c")};
     window.__POSTDIM_MONACO_BASE__ = ${JSON.stringify(String(monacoBaseUri))};
     window.__POSTDIM_MONACO_WORKER__ = ${JSON.stringify(String(workerUri))};
 

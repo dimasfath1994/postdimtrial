@@ -7,6 +7,21 @@ const API = API_BASE_URL;
 
 document.addEventListener("DOMContentLoaded", () => {
 
+  const isVsCodeExtension = Boolean(window.postdimBridge?.navigate);
+  const returnLocalBtn = document.getElementById("returnLocalBtn");
+
+  if (isVsCodeExtension) {
+    returnLocalBtn.style.display = "block";
+    returnLocalBtn.onclick = () => window.postdimBridge.navigate("index.html");
+
+    // VS Code webview sessions persist in localStorage. Resume the existing
+    // collaboration session instead of showing login again after reopening.
+    if (Auth.isLoggedIn()) {
+      window.postdimBridge.navigate("collaboration.html");
+      return;
+    }
+  }
+
   const loginBtn = document.getElementById("loginBtn");
   const registerBtn = document.getElementById("registerBtn");
 

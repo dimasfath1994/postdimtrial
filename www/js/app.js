@@ -13,6 +13,8 @@ import { importPostmanCollection } from "./core/importers/postman-importer.js";
 
 import { GraphqlHandler } from './ui/graphql-handler.js';
 import { GrpcHandler } from './ui/grpc-handler.js';
+import { enableMonacoClipboard } from './ui/monaco-clipboard.js';
+import { openJsonFile, saveJsonFile } from './core/file-transfer.js';
 
 const isTauri = window.__TAURI_INTERNALS__ !== undefined;
 const isVsCodeWebview = window.__POSTDIM_VSCODE__ === true;
@@ -1480,7 +1482,7 @@ document.addEventListener("keydown", (e) => {
 
 
 // ================= EXPORT =================
-function exportWorkspace() {
+async function exportWorkspace() {
   try {
     syncScriptToTab();
     tabs.syncTab(); //  ini penting banget
@@ -1490,19 +1492,7 @@ function exportWorkspace() {
       environment: Environment.getAll()
     };
 
-    const blob = new Blob(
-      [JSON.stringify(data, null, 2)],
-      { type: "application/json" }
-    );
-
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "postdim-workspace.json";
-    a.click();
-
-    URL.revokeObjectURL(url);
+    await saveJsonFile(data, "postdim-workspace.json");
 
     console.log("[Export] success");
   } catch (err) {
@@ -1579,6 +1569,14 @@ ui.exportBtn?.addEventListener("click", exportWorkspace);
 
 ui.importFile?.addEventListener("change", (e) => {
   importUniversal(e.target.files[0]);
+});
+
+ui.importFile?.addEventListener("click", async (e) => {
+  if (!isVsCodeWebview) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const file = await openJsonFile();
+  if (file) await importUniversal(file);
 });
 
 
@@ -2075,7 +2073,10 @@ function runScript(code, context) {
 
   try {
     const runtimeValues = context?.pm?.variables?.all?.() || {};
-    const resolvedCode = EnvResolver.resolve(code, runtimeValues);
+    const resolvedCode = EnvResolver.resolve(code, {
+      ...(context?.pm?.collectionVariables?.all?.() || {}),
+      ...runtimeValues
+    });
     const fn = new Function("pm", `"use strict";\n${resolvedCode}`);
     fn(context.pm);
   } catch (err) {
@@ -2093,7 +2094,7 @@ function createContext(tab, res = null, runtimeVars) {
       env: Environment,
       globals: Globals,
 
-      collectionVars: tab?.collectionVars,
+      collectionVars: createCollectionVariableStore(tab),
       runtimeVars: runtimeVars,
 
       request: {
@@ -2105,6 +2106,38 @@ function createContext(tab, res = null, runtimeVars) {
 
       response: res
     })
+  };
+}
+
+function getCollectionVariables(tab) {
+  if (!tab) return {};
+  const collection = collections.getCollections().find(item =>
+    String(item.id) === String(tab.collectionId)
+  );
+  if (!collection) return tab.collectionVars || {};
+  collection.collectionVariables ||= tab.collectionVars?.getAll?.()
+    || tab.collectionVars?.all?.()
+    || tab.collectionVars
+    || {};
+  return collection.collectionVariables;
+}
+
+function createCollectionVariableStore(tab) {
+  const getAll = () => getCollectionVariables(tab);
+  return {
+    get: key => getAll()[key],
+    set: (key, value) => {
+      if (!key) return;
+      getAll()[key] = value;
+      collections.save();
+    },
+    unset: key => {
+      if (!key) return;
+      delete getAll()[key];
+      collections.save();
+    },
+    all: () => ({ ...getAll() }),
+    getAll: () => ({ ...getAll() })
   };
 }
 
@@ -2163,10 +2196,7 @@ row.querySelector(".v").oninput = (e) => {
 
 function resolveVars(str) {
   const activeTab = tabs.getActive?.();
-  const collectionVars = activeTab?.collectionVars?.getAll?.()
-    || activeTab?.collectionVars?.all?.()
-    || activeTab?.collectionVars
-    || {};
+  const collectionVars = getCollectionVariables(activeTab);
   return EnvResolver.resolve(str, {
     ...collectionVars,
     ...(runtimeVariables?.all?.() || {})
@@ -2275,6 +2305,8 @@ function initMonaco() {
             minimap: { enabled: false }
         });
 
+          enableMonacoClipboard(preEditor);
+          enableMonacoClipboard(postEditor);
         setupPMIntellisense();
         bindMonacoAutoSave(); // 🔥 TAMBAH INI
 

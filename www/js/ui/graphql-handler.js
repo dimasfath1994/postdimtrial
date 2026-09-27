@@ -1,3 +1,5 @@
+import { enableMonacoClipboard } from './monaco-clipboard.js';
+
 export class GraphqlHandler {
   static editors = {
     query: null,
@@ -76,6 +78,7 @@ export class GraphqlHandler {
         suggestOnTriggerCharacters: true,
         minimap: { enabled: false }
       });
+      enableMonacoClipboard(this.editors.query);
       this.editors.query.onDidChangeModelContent(() => {
         if (ui.graphqlQuery) ui.graphqlQuery.value = this.editors.query.getValue();
         this.syncToState(tabs.getActive(), ui);
@@ -95,6 +98,7 @@ export class GraphqlHandler {
         suggestOnTriggerCharacters: true,
         minimap: { enabled: false }
       });
+      enableMonacoClipboard(this.editors.variables);
       this.editors.variables.onDidChangeModelContent(() => {
         if (ui.graphqlVariables) ui.graphqlVariables.value = this.editors.variables.getValue();
         this.syncToState(tabs.getActive(), ui);

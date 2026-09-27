@@ -300,7 +300,8 @@
     </div>
 
     <!-- gRPC MAIN PANELS CONTAINER -->
-    <div id="grpcPanelsContainer" class="hidden">
+    <div id="grpcBox">
+      <div id="grpcPanelsContainer" class="hidden">
       
       <!-- UNIFIED gRPC HEADER -->
       <div id="grpcHeaderControls" style="background: #181818; padding: 12px; border: 1px solid #333; border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;">
@@ -331,8 +332,8 @@
         <div style="display: flex; flex-direction: column; gap: 12px;">
           <div>
             <div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #ccc;">Compose Message (JSON)</div>
-            <div id="grpcMessageEditor" class="monaco-container" style="height: 180px; border: 1px solid #333;"></div>
-            <textarea id="grpcBody" class="hidden" placeholder='{ "name": "World" }'></textarea>
+            <div id="grpcMessageEditor" class="monaco-container" style="display: none; height: 180px; border: 1px solid #333;"></div>
+            <textarea id="grpcBody" placeholder='{ "name": "World" }' style="display: block; width: 100%; height: 180px; font-family: monospace;"></textarea>
           </div>
         </div>
       </div>
@@ -362,6 +363,7 @@
         <label style="display: block; margin-top: 8px; font-size: 12px;"><input type="checkbox" id="grpcUseTls"> Use TLS / SSL</label>
       </div>
 
+      </div>
     </div>
 
   </div>

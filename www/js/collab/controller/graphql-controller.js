@@ -3,10 +3,14 @@
 import { GraphqlService } from "../graphql-service.js";
 import { GraphqlUI } from "../ui/graphql-ui.js";
 import { DataBridge } from './bridge.js';
+import { RequestFormatter } from '../services/request-formatter.js';
+import { RequestDispatcher } from '../services/request-dispatcher.js';
+import { VariableResolver } from '../services/variable-resolver.js';
 
 export class GraphqlController {
     constructor(State) {
         this.State = State;
+        this.State.graphqlByRequest ||= {};
         this.container = null;
         this.currentRequestId = null;
         this.isReceiving = false;
@@ -30,9 +34,10 @@ export class GraphqlController {
 
         if (forceIsDraft) {
             console.log(`[GUARD] Mode Draft aktif untuk GraphQL ${requestId}. Membatalkan API call.`);
-            const localData = DataBridge.load(requestId, 'graphql') || { query: '', variables: '{}', operationName: '' };
+            const localData = DataBridge.load(requestId, 'graphql') || this.State.graphqlByRequest[String(requestId)] || { query: '', variables: '{}', operationName: '' };
             this.State.graphql = { ...localData, request_id: requestId };
-            this.renderGraphQL(this.State.graphql);
+            this.State.graphqlByRequest[String(requestId)] = this.State.graphql;
+            this.renderGraphQL(this.State.graphql, requestId);
             return;
         }
 
@@ -46,19 +51,20 @@ export class GraphqlController {
             ...graphqlData, 
             request_id: numericReqId 
         };
+        this.State.graphqlByRequest[String(requestId)] = this.State.graphql;
 
-        this.renderGraphQL(this.State.graphql);
+        this.renderGraphQL(this.State.graphql, requestId);
     }
 
-    renderGraphQL(data) {
+    renderGraphQL(data, requestId = this.currentRequestId) {
         const targetContainer = this.container || document.getElementById('graphqlBox');
         if (!targetContainer) return;
 
         GraphqlUI.render(data, targetContainer, {
-            onQueryChange: (query) => this.syncGraphQLUpdate({ query }),
-            onVariablesChange: (variables) => this.syncGraphQLUpdate({ variables }),
-            onOperationNameChange: (operationName) => this.syncGraphQLUpdate({ operationName }),
-            onSend: () => this.executeGraphQL()
+            onQueryChange: (query) => this.syncGraphQLUpdate({ query }, requestId),
+            onVariablesChange: (variables) => this.syncGraphQLUpdate({ variables }, requestId),
+            onOperationNameChange: (operationName) => this.syncGraphQLUpdate({ operationName }, requestId),
+            onSend: () => this.executeGraphQL(requestId)
         });
 
         this.updateDOMFields(data);
@@ -79,39 +85,44 @@ export class GraphqlController {
         }
     }
 
-    syncStateFromDOM() {
+    syncStateFromDOM(requestId = this.activeId) {
         const targetContainer = this.container || document.getElementById('graphqlBox');
         if (!targetContainer) return;
+
+        const current = this.State.graphqlByRequest[String(requestId)] || this.State.graphql || {};
 
         const queryInput = targetContainer.querySelector('.graphql-query-input') || document.getElementById('graphqlQuery');
         const varsInput = targetContainer.querySelector('.graphql-variables-input') || document.getElementById('graphqlVariables');
         const opInput = targetContainer.querySelector('.graphql-operation-input');
 
-        const query = queryInput ? queryInput.value : (this.State.graphql?.query || '');
-        const variables = varsInput ? varsInput.value : (this.State.graphql?.variables || '{}');
-        const operationName = opInput ? opInput.value : (this.State.graphql?.operationName || '');
+        const query = queryInput ? queryInput.value : (current.query || '');
+        const variables = varsInput ? varsInput.value : (current.variables || '{}');
+        const operationName = opInput ? opInput.value : (current.operationName || '');
 
         this.State.graphql = { 
-            ...this.State.graphql, 
+            ...current, 
             query, 
             variables, 
             operationName,
-            request_id: Number(this.currentRequestId) || this.currentRequestId
+            request_id: Number(requestId) || requestId
         };
+        this.State.graphqlByRequest[String(requestId)] = this.State.graphql;
     }
 
-    async syncGraphQLUpdate(newData) {
+    async syncGraphQLUpdate(newData, requestId = this.activeId) {
         if (this.isReceiving) return;
 
-        const activeId = this.activeId;
-        const numericReqId = Number(this.currentRequestId || activeId) || activeId;
+        const activeId = requestId;
+        const numericReqId = Number(requestId) || requestId;
+        const current = this.State.graphqlByRequest[String(activeId)] || {};
         
         // Update local state dengan menyertakan request_id
         this.State.graphql = { 
-            ...(this.State.graphql || {}), 
+            ...current, 
             ...newData,
             request_id: numericReqId
         };
+        this.State.graphqlByRequest[String(activeId)] = this.State.graphql;
 
         if (String(activeId).startsWith('draft_')) {
             console.log(`[SYNC] Updating draft GraphQL data for ${activeId}`);
@@ -119,32 +130,36 @@ export class GraphqlController {
             return;
         }
 
-        clearTimeout(this.debounceTimer);
-        this.debounceTimer = setTimeout(async () => {
+        this.debounceTimers ||= new Map();
+        clearTimeout(this.debounceTimers.get(String(activeId)));
+        const timer = setTimeout(async () => {
             let updated = null;
-            const recordId = this.State.graphql?.id;
+            const requestData = this.State.graphqlByRequest[String(activeId)];
+            const recordId = requestData?.id;
 
             // 1. Jika record sudah punya ID di DB, coba UPDATE
             if (recordId) {
-                updated = await GraphqlService.update(recordId, this.State.graphql);
+                updated = await GraphqlService.update(recordId, requestData);
             }
 
             // 2. Jika belum ada ID atau UPDATE menghasilkan 404, lakukan CREATE
             if (!updated) {
-                updated = await GraphqlService.create(this.State.graphql);
+                updated = await GraphqlService.create(requestData);
             }
 
             if (updated && typeof updated === 'object') {
-                this.State.graphql = { ...this.State.graphql, ...updated };
-                this.broadcastMessage('GRAPHQL_UPDATED', this.State.graphql);
+                this.State.graphqlByRequest[String(activeId)] = { ...requestData, ...updated };
+                if (String(activeId) === String(this.activeId)) this.State.graphql = this.State.graphqlByRequest[String(activeId)];
+                this.broadcastMessage('GRAPHQL_UPDATED', this.State.graphqlByRequest[String(activeId)], activeId);
             }
         }, 300);
+        this.debounceTimers.set(String(activeId), timer);
     }
 
-    broadcastMessage(type, data) {
+    broadcastMessage(type, data, requestId = this.currentRequestId) {
         const messagePayload = {
             type,
-            requestId: this.currentRequestId,
+            requestId,
             workspaceId: this.State?.workspaceId,
             data
         };
@@ -162,8 +177,9 @@ export class GraphqlController {
     handleSocketMessage(payload) {
         if (!payload || !payload.type) return;
         const { type, data, requestId } = payload;
+        const targetRequestId = requestId || this.currentRequestId;
 
-        if (requestId && requestId !== this.currentRequestId && requestId !== this.activeId) {
+        if (requestId && String(requestId) !== String(this.currentRequestId) && String(requestId) !== String(this.activeId)) {
             return;
         }
 
@@ -172,9 +188,15 @@ export class GraphqlController {
         try {
             switch (type) {
                 case 'GRAPHQL_UPDATED':
-                    this.State.graphql = { ...this.State.graphql, ...data };
-                    GraphqlUI.updateFields(data);
-                    this.updateDOMFields(data);
+                    this.State.graphqlByRequest[String(targetRequestId)] = {
+                        ...(this.State.graphqlByRequest[String(targetRequestId)] || {}),
+                        ...data
+                    };
+                    if (String(targetRequestId) === String(this.activeId)) {
+                        this.State.graphql = this.State.graphqlByRequest[String(targetRequestId)];
+                        GraphqlUI.updateFields(data);
+                        this.updateDOMFields(data);
+                    }
                     break;
             }
         } finally {
@@ -182,20 +204,11 @@ export class GraphqlController {
         }
     }
 
-    async executeGraphQL() {
-        this.syncStateFromDOM();
-        const activeId = this.activeId;
-        const payload = this.State.graphql;
-
-        if (String(activeId).startsWith('draft_')) {
-            console.log(`[EXECUTE] Executing draft GraphQL for ${activeId}`);
-            const result = await GraphqlService.executeDraft(payload);
-            GraphqlUI.renderResponse(result);
-            return;
-        }
-
-        const result = await GraphqlService.execute(this.currentRequestId, payload);
-        GraphqlUI.renderResponse(result);
+    async executeGraphQL(requestId = this.activeId) {
+        this.syncStateFromDOM(requestId);
+        const rawRequest = await RequestFormatter.collectFromUI(this.State);
+        const resolvedRequest = VariableResolver.resolveRequest(rawRequest, this.State);
+        return await RequestDispatcher.send(resolvedRequest);
     }
 
     setupBroadcastListener() {
@@ -205,6 +218,7 @@ export class GraphqlController {
     }
 
     render() {
-        this.renderGraphQL(this.State.graphql || { query: '', variables: '{}', operationName: '' });
+        const requestId = this.activeId;
+        this.renderGraphQL(this.State.graphqlByRequest[String(requestId)] || this.State.graphql || { query: '', variables: '{}', operationName: '' }, requestId);
     }
 }

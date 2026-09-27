@@ -1,3 +1,5 @@
+import { enableMonacoClipboard } from '../../ui/monaco-clipboard.js';
+
 export class MonacoController {
     constructor(onScriptChange, tabCtrl) {
         this.preEditor = null;
@@ -60,6 +62,8 @@ export class MonacoController {
                 minimap: { enabled: false }
             });
 
+            enableMonacoClipboard(this.preEditor);
+            enableMonacoClipboard(this.postEditor);
             this.setupIntellisense();
             this.bindEvents();
         });

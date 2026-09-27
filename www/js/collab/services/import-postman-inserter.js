@@ -30,6 +30,17 @@ export const ImportPostmanInserter = {
             const collection = await CollectionService.create(wsId, data.info?.name || "Postman Collection");
             if (!collection || !collection.id) throw new Error("Gagal membuat koleksi");
 
+            const collectionVariables = (data.variable || []).reduce((variables, item) => {
+                if (item?.key && item.disabled !== true) variables[item.key] = item.value ?? '';
+                return variables;
+            }, {});
+            if (Object.keys(collectionVariables).length) {
+                await CollectionService.update(collection.id, {
+                    name: collection.name,
+                    environment: collectionVariables
+                });
+            }
+
             // 3. Traversal Rekursif (khas Postman)
             await this.traverseItems(data.item, collection.id, wsId, null);
             
@@ -56,7 +67,9 @@ export const ImportPostmanInserter = {
                     body: item.request.body?.raw || "",
                     body_mode: item.request.body?.mode || "none",
                     auth_type: item.request.auth?.type || "",
-                    auth_value: item.request.auth?.value || ""
+                    auth_value: item.request.auth?.value || "",
+                    pre_script: item.event?.find(event => event.listen === 'prerequest')?.script?.exec?.join('\n') || "",
+                    post_script: item.event?.find(event => event.listen === 'test')?.script?.exec?.join('\n') || ""
                 });
 
                 if (request && request.id) {

@@ -196,7 +196,8 @@ function mapVariables(vars = []) {
   vars.forEach(v => {
     if (!v.key) return;
 
-    result[v.key] = v.value || "";
+    if (v.disabled) return;
+    result[v.key] = v.value ?? "";
   });
 
   return result;
@@ -316,6 +317,7 @@ export function importPostmanCollection(json) {
               folders: finalFolders,
               tabs: allTabs, // Duplikat semua tab di sini sesuai strukturmu
               environment: {},
+              collectionVariables: mapVariables(data.variable || []),
               activeTabId: allTabs[0]?.id || null
           }
       ],

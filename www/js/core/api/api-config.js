@@ -1,8 +1,8 @@
 const DEFAULT_API_URL = "https://deaths-markers-man-implications.trycloudflare.com/api";
 const DEFAULT_WS_URL = "wss://deaths-markers-man-implications.trycloudflare.com/api";
 
-let _apiBaseUrl = DEFAULT_API_URL;
-let _wsBaseUrl = DEFAULT_WS_URL;
+let _apiBaseUrl = window.__POSTDIM_CONFIG__?.apiBaseUrl || DEFAULT_API_URL;
+let _wsBaseUrl = window.__POSTDIM_CONFIG__?.wsBaseUrl || DEFAULT_WS_URL;
 
 // Simpan Promise inisialisasi agar bisa ditunggu jika diperlukan
 let isConfigLoaded = false;

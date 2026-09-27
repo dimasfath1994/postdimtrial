@@ -1,6 +1,7 @@
 import { CollectionService } from "../collection-service.js";
 import { exportPostmanCollection } from "../../core/exporters/postman-exporter-collab.js";
 import { CollectionAggregator } from "../services/collection-aggregator.js";
+import { saveJsonFile } from "../../core/file-transfer.js";
 
 export class CollectionController {
     constructor(ui, State, { onUpdateUI, folderCtrl, requestCtrl }) {
@@ -131,7 +132,7 @@ export class CollectionController {
             const data = exportPostmanCollection(fullData);
     
             // 5. Trigger download
-            this.downloadJSON(data, `${collection.name}.postman_collection.json`);
+            await this.downloadJSON(data, `${collection.name}.postman_collection.json`);
             
         } catch (error) {
             console.error("[Export Error]", error);
@@ -140,17 +141,8 @@ export class CollectionController {
     }
     
     // Tambahkan helper download di dalam class ini agar tidak mengotori file lain
-    downloadJSON(data, filename) {
-        const blob = new Blob(
-            [JSON.stringify(data, null, 2)],
-            { type: "application/json" }
-        );
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
+    async downloadJSON(data, filename) {
+        return saveJsonFile(data, filename);
     }
 
 
@@ -226,12 +218,15 @@ showContextMenu(e, col) {
         if (!name) return;
         try {
             const newCol = await CollectionService.create(this.State.workspaceId, name);
+
+            if (newCol && !this.State.collections.some(col => String(col.id) === String(newCol.id))) {
+                this.State.collections.push(newCol);
+            }
             
             // Broadcast ke tab lain
             this.bc.postMessage({ type: 'COLLECTION_CREATED', data: newCol });
             
             // Update lokal
-            //this.State.collections.push(newCol);
             this.render();
         } catch (err) {
             console.error("Gagal buat koleksi:", err);

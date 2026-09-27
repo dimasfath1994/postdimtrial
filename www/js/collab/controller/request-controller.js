@@ -428,17 +428,19 @@ async loadRequestsByCollection(collectionId, folderId = null) {
             method: context.method || "GET"
         });
 
+        const isExists = this.State.requests.find(r => String(r.id) === String(newReq.id));
+        if (!isExists) {
+            this.State.requests.push(newReq);
+        }
+        if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
+
         if (context.folder_id) {
             if (window.folderCtrl) {
                 const folderEl = document.querySelector(`.folder-item[data-id="${context.folder_id}"]`);
                 if (folderEl) window.folderCtrl.renderFolder(context.folder_id, folderEl);
             }
         } else {
-            const isExists = this.State.requests.find(r => r.id === newReq.id);
-            if (!isExists) {
-                this.State.requests.push(newReq);
-                if (this.onUpdateUI) this.onUpdateUI(this.State.requests);
-            }
+            await this.render();
         }
 
         this.bc.postMessage({ type: 'REQUEST_CREATED', data: newReq });

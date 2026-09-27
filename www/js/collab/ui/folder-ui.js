@@ -12,8 +12,13 @@ import { RequestUI } from './request-ui.js';
 
 
 export function renderFolderChildren(parentElement, folders, requests, handlers) {
-    // 1. Cari container child-list di scope parentElement
-    let childList = parentElement.querySelector(':scope > .child-list');
+    const isCollection = parentElement.classList.contains('collection-item');
+    const childContainer = isCollection
+        ? parentElement.querySelector(':scope > .collection-body')
+        : parentElement;
+    let childList = isCollection
+        ? childContainer?.querySelector(':scope > .child-list')
+        : parentElement.querySelector(':scope > .child-list');
     
     // 2. Logika Toggle (Jika sudah ada, cukup tampilkan/sembunyikan)
 
@@ -22,7 +27,7 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
         childList.className = 'child-list';
         childList.style.paddingLeft = '20px';
         childList.style.display = 'block';
-        parentElement.appendChild(childList);
+        childContainer?.appendChild(childList);
     } else {
         // Jika sudah ada, cukup bersihkan isinya
         childList.innerHTML = '';
@@ -37,23 +42,14 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
     // 4. Buat container childList baru
 
 
-    // 5. Render Requests (Muncul di dalam folder/level saat ini)
-    if (requests && requests.length > 0) {
+    // Root requests already have their own list in the collection body.
+    if (!isCollection && requests && requests.length > 0) {
         requests.forEach(req => {
-            const reqItem = document.createElement('div');
-            reqItem.className = 'request-item';
-            reqItem.dataset.id = req.id;
-            
-            // Perbaikan Defensif: Mengecek apakah fungsi ada sebelum memanggil
             if (typeof RequestUI.renderRequestItem === 'function') {
-                RequestUI.renderRequestItem(req, reqItem, handlers.requestHandlers, handlers.onOpenTab);
+                RequestUI.renderRequestItem(req, childList, handlers.requestHandlers, handlers.onOpenTab);
             } else {
-                // Fallback jika fungsi renderRequestItem tidak ditemukan
                 console.error("Fungsi RequestUI.renderRequestItem tidak ditemukan!");
-                reqItem.innerHTML = `<span style="padding: 5px; color: #555;">${req.name || 'Unnamed Request'}</span>`;
             }
-            
-            childList.appendChild(reqItem);
         });
     }
 

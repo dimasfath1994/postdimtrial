@@ -13,6 +13,7 @@ export class GrpcController {
         this.currentRequestId = null;
         this.isReceiving = false; // Flag cegah infinite loop saat menerima update remote
         this.debounceTimer = null;
+        this.senderId = globalThis.crypto?.randomUUID?.() || `grpc-${Date.now()}-${Math.random()}`;
         this.bc = new BroadcastChannel('grpc_channel');
         this.setupBroadcastListener();
     }
@@ -20,6 +21,18 @@ export class GrpcController {
     // --- Getter untuk mendeteksi active tab / request ID ---
     get activeId() {
         return window.tabCtrl?.activeTabId || this.currentRequestId;
+    }
+
+    getState(requestId = this.activeId) {
+        this.State.grpcByRequest ||= {};
+        return this.State.grpcByRequest[String(requestId)] || null;
+    }
+
+    setState(requestId, data) {
+        this.State.grpcByRequest ||= {};
+        this.State.grpcByRequest[String(requestId)] = data;
+        this.State.grpc = data;
+        return data;
     }
 
     /**
@@ -44,76 +57,114 @@ export class GrpcController {
                 useReflection: true,
                 discoveredServices: null
             };
-            this.State.grpc = localData;
-            this.renderGrpc(localData);
+            this.setState(requestId, localData);
+            this.renderGrpc(localData, requestId);
             return;
         }
 
         console.log("DEBUG: init gRPC dipanggil untuk ID:", requestId);
-        this.container.innerHTML = '';
 
-        const [grpcData, metadataList] = await Promise.all([
-            GrpcService.getByRequest(requestId),
-            RequestGrpcMetadataService.getByRequest(requestId)
-        ]);
-
-        const resolvedData = {
-            endpoint: grpcData?.endpoint || '',
-            service_method: grpcData?.service_method || '',
-            metadata: metadataList || grpcData?.metadata || [],
-            payload: grpcData?.payload || '{}',
-            useReflection: grpcData?.useReflection ?? true,
-            discoveredServices: grpcData?.discoveredServices || null
+        const generation = (this.initGeneration || 0) + 1;
+        this.initGeneration = generation;
+        const initialState = this.getState(requestId) || {
+            endpoint: '',
+            service_method: '',
+            protoFileName: '',
+            metadata: [],
+            payload: '{}',
+            useReflection: true,
+            discoveredServices: null
         };
-        this.State.grpc = resolvedData;
+        this.setState(requestId, initialState);
+        this.renderGrpc(initialState, requestId);
 
-        this.renderGrpc(resolvedData);
+        try {
+            const [grpcData, metadataList] = await Promise.all([
+                GrpcService.getByRequest(requestId),
+                RequestGrpcMetadataService.getByRequest(requestId)
+            ]);
+
+            if (generation !== this.initGeneration || String(requestId) !== String(this.currentRequestId)) return;
+
+            const grpcRecord = Array.isArray(grpcData) ? grpcData[0] : grpcData;
+
+            const localState = this.getState(requestId);
+            const hasLocalChanges = localState !== initialState;
+            const resolvedData = {
+                ...initialState,
+                ...grpcRecord,
+                id: grpcRecord?.id,
+                endpoint: grpcRecord?.endpoint || initialState.endpoint || '',
+                service_method: grpcRecord?.service_method || initialState.service_method || '',
+                protoFileName: grpcRecord?.proto_file_name || initialState.protoFileName || '',
+                metadata: metadataList || grpcRecord?.metadata || initialState.metadata || [],
+                payload: grpcRecord?.body ?? grpcRecord?.payload ?? initialState.payload ?? '{}',
+                useReflection: grpcRecord?.useReflection ?? initialState.useReflection ?? true,
+                discoveredServices: grpcRecord?.discoveredServices || initialState.discoveredServices || null
+            };
+            if (hasLocalChanges) {
+                Object.assign(resolvedData, localState);
+            }
+
+            this.setState(requestId, resolvedData);
+            this.renderGrpc(resolvedData, requestId);
+        } catch (error) {
+            console.error("[gRPC] Gagal memuat data request; editor lokal tetap aktif:", error);
+        }
     }
 
-    renderGrpc(data) {
+    renderGrpc(data, requestId = this.activeId) {
         GrpcUI.render(data, this.container, {
-            onFieldChange: (field, value) => this.syncGrpcUpdate({ [field]: value }),
-            onMetadataAdd: (item) => this.addMetadata(item),
-            onMetadataUpdate: (id, item) => this.updateMetadata(id, item),
-            onMetadataDelete: (id) => this.deleteMetadata(id),
-            onInvoke: () => this.invokeGrpc(),
-            onDiscover: (endpoint) => this.discoverServices(endpoint),
-            onLoadProto: (content, filename) => this.loadLocalProto(content, filename)
+            onFieldChange: (field, value) => this.syncGrpcUpdate({ [field]: value }, requestId),
+            onMetadataAdd: (item) => this.addMetadata(item, requestId),
+            onMetadataUpdate: (id, item) => this.updateMetadata(id, item, requestId),
+            onMetadataDelete: (id) => this.deleteMetadata(id, requestId),
+            onInvoke: () => this.invokeGrpc(requestId),
+            onDiscover: (endpoint) => this.discoverServices(endpoint, requestId),
+            onLoadProto: (content, filename) => this.loadLocalProto(content, filename, requestId)
         });
     }
 
-    syncStateFromDOM() {
-        if (!this.container) return;
-        
-        const endpoint = this.container.querySelector('.grpc-endpoint-input')?.value || '';
-        const service_method = this.container.querySelector('.grpc-method-input')?.value || '';
-        const payload = this.container.querySelector('.grpc-message-input')?.value || '{}';
-        
-        this.State.grpc = {
-            ...(this.State.grpc || {}),
-            endpoint,
+    syncStateFromDOM(requestId = this.activeId) {
+        const activeId = requestId || this.activeId;
+        const current = this.getState(activeId) || {};
+        const payload = document.getElementById('grpcBody')?.value || document.querySelector('.grpc-message-input')?.value || current.payload || '{}';
+        const service_method = document.getElementById('grpcServiceMethod')?.value || current.service_method || '';
+        const metadata = Array.from(document.querySelectorAll('#grpcMetadataBox .grpc-meta-key')).map((keyInput, index) => ({
+            id: current.metadata?.[index]?.id || `meta_${Date.now()}_${index}`,
+            key: keyInput.value,
+            value: document.querySelectorAll('#grpcMetadataBox .grpc-meta-value')[index]?.value || '',
+            enabled: document.querySelectorAll('#grpcMetadataBox .grpc-meta-enabled')[index]?.checked ?? true
+        }));
+
+        this.setState(activeId, {
+            ...current,
+            endpoint: document.getElementById('url')?.value || current.endpoint || '',
             service_method,
-            payload
-        };
+            payload,
+            metadata: metadata.length ? metadata : (current.metadata || [])
+        });
     }
 
     /**
      * Manajemen Metadata gRPC menggunakan RequestGrpcMetadataService
      */
-    async addMetadata(item) {
+    async addMetadata(item, requestId = this.activeId) {
         if (this.isReceiving) return;
-        const activeId = this.activeId;
+        const activeId = requestId;
+        const grpcState = this.getState(activeId) || {};
 
         if (String(activeId).startsWith('draft_')) {
-            this.State.grpc.metadata = this.State.grpc.metadata || [];
+            grpcState.metadata = grpcState.metadata || [];
             const tempItem = { id: 'temp_' + Date.now(), ...item };
-            this.State.grpc.metadata.push(tempItem);
-            DataBridge.save(activeId, 'grpc', this.State.grpc);
-            return;
+            grpcState.metadata.push(tempItem);
+            this.setState(activeId, grpcState);
+            DataBridge.save(activeId, 'grpc', grpcState);
+            return tempItem;
         }
 
         const payload = {
-            request_id: this.currentRequestId,
+            request_id: activeId,
             key: item.key ?? "",
             value: item.value ?? "",
             description: item.description ?? "",
@@ -123,24 +174,29 @@ export class GrpcController {
 
         const created = await RequestGrpcMetadataService.create(payload);
         if (created) {
-            this.State.grpc.metadata = this.State.grpc.metadata || [];
-            this.State.grpc.metadata.push(created);
-            this.broadcastMessage('GRPC_METADATA_ADDED', created);
+            grpcState.metadata = grpcState.metadata || [];
+            grpcState.metadata.push(created);
+            this.setState(activeId, grpcState);
+            this.broadcastMessage('GRPC_METADATA_ADDED', created, activeId);
         }
+        return created;
     }
 
-    async updateMetadata(id, item) {
+    async updateMetadata(id, item, requestId = this.activeId) {
         if (this.isReceiving) return;
-        const activeId = this.activeId;
+        const activeId = requestId;
+        const grpcState = this.getState(activeId) || {};
 
         if (String(activeId).startsWith('draft_') || String(id).startsWith('temp_')) {
-            this.State.grpc.metadata = (this.State.grpc.metadata || []).map(m => m.id === id ? { ...m, ...item } : m);
-            DataBridge.save(activeId, 'grpc', this.State.grpc);
+            if (!String(activeId).startsWith('draft_')) return;
+            grpcState.metadata = (grpcState.metadata || []).map(m => m.id === id ? { ...m, ...item } : m);
+            this.setState(activeId, grpcState);
+            DataBridge.save(activeId, 'grpc', grpcState);
             return;
         }
 
         const payload = {
-            request_id: this.currentRequestId,
+            request_id: activeId,
             key: item.key ?? "",
             value: item.value ?? "",
             description: item.description ?? "",
@@ -150,25 +206,31 @@ export class GrpcController {
 
         const updated = await RequestGrpcMetadataService.update(id, payload);
         if (updated) {
-            this.State.grpc.metadata = (this.State.grpc.metadata || []).map(m => m.id === id ? (typeof updated === 'object' ? updated : { id, ...payload }) : m);
-            this.broadcastMessage('GRPC_METADATA_UPDATED', { id, payload });
+            grpcState.metadata = (grpcState.metadata || []).map(m => m.id === id ? (typeof updated === 'object' ? updated : { id, ...payload }) : m);
+            this.setState(activeId, grpcState);
+            this.broadcastMessage('GRPC_METADATA_UPDATED', { id, payload }, activeId);
         }
     }
 
-    async deleteMetadata(id) {
+    async deleteMetadata(id, requestId = this.activeId) {
         if (this.isReceiving) return;
-        const activeId = this.activeId;
+        const activeId = requestId;
+        const grpcState = this.getState(activeId) || {};
 
-        if (String(activeId).startsWith('draft_') || String(id).startsWith('temp_')) {
-            this.State.grpc.metadata = (this.State.grpc.metadata || []).filter(m => m.id !== id);
-            DataBridge.save(activeId, 'grpc', this.State.grpc);
+        if (String(activeId).startsWith('draft_')) {
+            grpcState.metadata = (grpcState.metadata || []).filter(m => m.id !== id);
+            this.setState(activeId, grpcState);
+            DataBridge.save(activeId, 'grpc', grpcState);
             return;
         }
 
+        if (String(id).startsWith('temp_')) return;
+
         const success = await RequestGrpcMetadataService.delete(id);
         if (success) {
-            this.State.grpc.metadata = (this.State.grpc.metadata || []).filter(m => m.id !== id);
-            this.broadcastMessage('GRPC_METADATA_DELETED', { id });
+            grpcState.metadata = (grpcState.metadata || []).filter(m => m.id !== id);
+            this.setState(activeId, grpcState);
+            this.broadcastMessage('GRPC_METADATA_DELETED', { id }, activeId);
         }
     }
 
@@ -177,8 +239,12 @@ export class GrpcController {
      */
     handleSocketMessage(payload) {
         if (!payload || !payload.type) return;
+        if (payload.senderId === this.senderId) return;
 
         const { type, data, requestId } = payload;
+        const targetRequestId = requestId || this.currentRequestId;
+        const targetState = this.getState(targetRequestId) || {};
+        const isActiveRequest = String(targetRequestId) === String(this.activeId);
 
         // Abaikan jika update bukan untuk request yang sedang aktif
         if (requestId && requestId !== this.currentRequestId && requestId !== this.activeId) {
@@ -191,33 +257,37 @@ export class GrpcController {
         try {
             switch (type) {
                 case 'GRPC_UPDATED':
-                    this.State.grpc = { ...this.State.grpc, ...data };
-                    GrpcUI.updateFields(data);
+                    this.setState(targetRequestId, { ...targetState, ...data });
+                    if (isActiveRequest) this.renderGrpc(this.getState(targetRequestId), targetRequestId);
                     break;
 
                 case 'GRPC_METADATA_ADDED':
-                    this.State.grpc.metadata = this.State.grpc.metadata || [];
-                    if (!this.State.grpc.metadata.some(m => m.id === data.id)) {
-                        this.State.grpc.metadata.push(data);
-                        GrpcUI.updateFields(this.State.grpc);
+                    targetState.metadata = targetState.metadata || [];
+                    if (!targetState.metadata.some(m => m.id === data.id)) {
+                        targetState.metadata.push(data);
+                        this.setState(targetRequestId, targetState);
+                        if (isActiveRequest) this.renderGrpc(targetState, targetRequestId);
                     }
                     break;
 
                 case 'GRPC_METADATA_UPDATED':
-                    this.State.grpc.metadata = (this.State.grpc.metadata || []).map(m => 
+                    targetState.metadata = (targetState.metadata || []).map(m => 
                         m.id === data.id ? { ...m, ...data.payload } : m
                     );
-                    GrpcUI.updateFields(this.State.grpc);
+                    this.setState(targetRequestId, targetState);
+                    if (isActiveRequest) this.renderGrpc(targetState, targetRequestId);
                     break;
 
                 case 'GRPC_METADATA_DELETED':
-                    this.State.grpc.metadata = (this.State.grpc.metadata || []).filter(m => m.id !== data.id);
-                    GrpcUI.updateFields(this.State.grpc);
+                    targetState.metadata = (targetState.metadata || []).filter(m => m.id !== data.id);
+                    this.setState(targetRequestId, targetState);
+                    if (isActiveRequest) this.renderGrpc(targetState, targetRequestId);
                     break;
 
                 case 'GRPC_SERVICES_DISCOVERED':
-                    this.State.grpc.discoveredServices = data.services;
-                    if (GrpcUI.renderDiscoveredServices) {
+                    targetState.discoveredServices = data.services;
+                    this.setState(targetRequestId, targetState);
+                    if (isActiveRequest && GrpcUI.renderDiscoveredServices) {
                         GrpcUI.renderDiscoveredServices(data.services);
                     }
                     break;
@@ -230,25 +300,40 @@ export class GrpcController {
     /**
      * Sinkronisasi ke Server & Broadcast ke tab/peer lain (dengan Debounce)
      */
-    async syncGrpcUpdate(newData) {
+    async syncGrpcUpdate(newData, requestId = this.activeId) {
         if (this.isReceiving) return;
 
-        const activeId = this.activeId;
-        this.State.grpc = { ...(this.State.grpc || {}), ...newData };
+        const activeId = requestId;
+        const grpcState = { ...(this.getState(activeId) || {}), ...newData };
+        this.setState(activeId, grpcState);
 
         if (String(activeId).startsWith('draft_')) {
             console.log(`[SYNC] Updating draft gRPC data for ${activeId}`);
-            DataBridge.save(activeId, 'grpc', this.State.grpc);
+            DataBridge.save(activeId, 'grpc', grpcState);
             return;
         }
 
         // Debounce 500ms untuk mengurangi beban server dan spam WebSocket saat mengetik
         clearTimeout(this.debounceTimer);
         this.debounceTimer = setTimeout(async () => {
-            const updated = await GrpcService.update(this.currentRequestId, this.State.grpc);
-            if (updated) {
-                this.State.grpc = updated;
-                this.broadcastMessage('GRPC_UPDATED', updated);
+            const servicePayload = {
+                request_id: activeId,
+                service_method: grpcState.service_method || '',
+                proto_file_name: grpcState.protoFileName || grpcState.proto_file_name || '',
+                body: typeof grpcState.payload === 'string'
+                    ? grpcState.payload
+                    : JSON.stringify(grpcState.payload ?? {})
+            };
+
+            const saved = grpcState.id
+                ? await GrpcService.update(grpcState.id, servicePayload)
+                : await GrpcService.create(servicePayload);
+
+            if (saved) {
+                const savedRecord = typeof saved === 'object' ? saved : {};
+                const nextState = { ...grpcState, ...savedRecord, id: savedRecord.id || grpcState.id };
+                this.setState(activeId, nextState);
+                this.broadcastMessage('GRPC_UPDATED', nextState, activeId);
             }
         }, 500);
     }
@@ -256,10 +341,11 @@ export class GrpcController {
     /**
      * Mengirimkan pesan ke BroadcastChannel (Lokal Tab) & WebSocket Dispatcher (Kolaborasi)
      */
-    broadcastMessage(type, data) {
+    broadcastMessage(type, data, requestId = this.activeId) {
         const messagePayload = {
             type,
-            requestId: this.currentRequestId,
+            requestId,
+            senderId: this.senderId,
             workspaceId: this.State?.workspaceId,
             data
         };
@@ -279,9 +365,9 @@ export class GrpcController {
     /**
      * Eksekusi gRPC request langsung menghantam command Rust `grpc_request`
      */
-    async invokeGrpc() {
-        this.syncStateFromDOM();
-        const currentData = this.State.grpc || {};
+    async invokeGrpc(requestId = this.activeId) {
+        this.syncStateFromDOM(requestId);
+        const currentData = this.getState(requestId) || {};
         const resolvedData = VariableResolver.resolveValue(currentData, this.State);
 
         let parsedPayload = resolvedData.payload;
@@ -319,22 +405,20 @@ export class GrpcController {
                 : await window.__TAURI__?.core?.invoke('grpc_request', grpcPayload)
                     || await window.__TAURI__?.invoke('grpc_request', grpcPayload);
 
-            GrpcUI.renderResponse(result);
             return result;
         } catch (error) {
             console.error("[gRPC] Error saat invoke:", error);
-            const result = { status: 500, body: error, is_stream: false };
-            GrpcUI.renderResponse(result);
-            return result;
+            return { error: true, status: 500, message: error.message || String(error), body: error.message || String(error), is_stream: false };
         }
     }
 
     /**
      * Fitur tambahan untuk gRPC Discovery (`discover_grpc_services`)
      */
-    async discoverServices(endpoint) {
+    async discoverServices(endpoint, requestId = this.activeId) {
         try {
-            const tls = this.State?.grpc?.tls === true || document.getElementById('grpcUseTls')?.checked === true;
+            const grpcState = this.getState(requestId) || {};
+            const tls = grpcState.tls === true || document.getElementById('grpcUseTls')?.checked === true;
             const invokeBridge = typeof window.postdimBridge?.invoke === 'function'
                 ? window.postdimBridge.invoke.bind(window.postdimBridge)
                 : null;
@@ -344,20 +428,23 @@ export class GrpcController {
                 : await window.__TAURI__?.core?.invoke('discover_grpc_services', { endpoint, tls })
                     || await window.__TAURI__?.invoke('discover_grpc_services', { endpoint, tls });
 
-            this.State.grpc.discoveredServices = res;
-            GrpcUI.renderDiscoveredServices(res);
+            grpcState.discoveredServices = res;
+            this.setState(requestId, grpcState);
+            if (String(requestId) === String(this.activeId)) GrpcUI.renderDiscoveredServices(res);
 
-            this.broadcastMessage('GRPC_SERVICES_DISCOVERED', { services: res });
+            this.broadcastMessage('GRPC_SERVICES_DISCOVERED', { services: res }, requestId);
+            return res;
         } catch (err) {
             console.error("[gRPC Discovery Error]:", err);
             alert(`Discovery Gagal: ${err}`);
+            throw err;
         }
     }
 
     /**
      * Fitur tambahan untuk Load Local Proto (`load_local_proto`)
      */
-    async loadLocalProto(content, filename) {
+    async loadLocalProto(content, filename, requestId = this.activeId) {
         try {
             const invokeBridge = typeof window.postdimBridge?.invoke === 'function'
                 ? window.postdimBridge.invoke.bind(window.postdimBridge)
@@ -368,10 +455,20 @@ export class GrpcController {
                 : await window.__TAURI__?.core?.invoke('load_local_proto', { content, filename })
                     || await window.__TAURI__?.invoke('load_local_proto', { content, filename });
 
-            this.State.grpc.discoveredServices = res;
-            GrpcUI.renderLocalProtoServices(res);
+            const grpcState = this.getState(requestId) || {};
+            grpcState.discoveredServices = res;
+            grpcState.protoFileName = filename;
+            this.setState(requestId, grpcState);
+            const fileNameLabel = document.getElementById('protoFileName');
+            if (fileNameLabel) {
+                fileNameLabel.textContent = filename;
+                fileNameLabel.style.color = '#4caf50';
+            }
+            if (String(requestId) === String(this.activeId)) GrpcUI.renderLocalProtoServices(res);
 
-            this.broadcastMessage('GRPC_SERVICES_DISCOVERED', { services: res });
+            await this.syncGrpcUpdate({ protoFileName: filename }, requestId);
+
+            this.broadcastMessage('GRPC_SERVICES_DISCOVERED', { services: res }, requestId);
         } catch (err) {
             console.error("[gRPC Local Proto Error]:", err);
             alert(`Gagal memuat file .proto: ${err}`);
@@ -385,14 +482,9 @@ export class GrpcController {
     }
 
     render() {
-        GrpcUI.render(this.State.grpc || { endpoint: '', service_method: '', metadata: [], payload: '{}', useReflection: true }, this.container, {
-            onFieldChange: (field, value) => this.syncGrpcUpdate({ [field]: value }),
-            onMetadataAdd: (item) => this.addMetadata(item),
-            onMetadataUpdate: (id, item) => this.updateMetadata(id, item),
-            onMetadataDelete: (id) => this.deleteMetadata(id),
-            onInvoke: () => this.invokeGrpc(),
-            onDiscover: (endpoint) => this.discoverServices(endpoint),
-            onLoadProto: (content, filename) => this.loadLocalProto(content, filename)
-        });
+        const requestId = this.activeId;
+        this.renderGrpc(this.getState(requestId) || {
+            endpoint: '', service_method: '', metadata: [], payload: '{}', useReflection: true
+        }, requestId);
     }
 }

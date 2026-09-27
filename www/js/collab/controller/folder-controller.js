@@ -159,6 +159,10 @@ export class FolderController {
         
         // 4. Filter request dengan logika yang lebih fleksibel
         const requests = allRequests.filter(r => {
+            if (folderId === null && parentElement.classList.contains('collection-item')) {
+                return false;
+            }
+
             const reqFolderId = r.folder_id != null ? String(r.folder_id) : null;
             const targetFolderId = folderId != null ? String(folderId) : null;
             
@@ -306,12 +310,15 @@ export class FolderController {
     
         try {
             const newFolder = await FolderService.create(workspaceId, targetCollectionId, parentId, name);
+
+            if (newFolder && !this.State.folders.some(folder => String(folder.id) === String(newFolder.id))) {
+                this.State.folders.push(newFolder);
+            }
             
             // 2. Broadcast ke tab lain
             this.bc.postMessage({ type: 'FOLDER_CREATED', data: newFolder });
             
             // 3. Update Local State
-            //this.State.folders.push(newFolder);
             
             // 4. Targeted UI Update
             if (parentId) {
@@ -330,8 +337,16 @@ export class FolderController {
                     this.renderFolder(parentId, parentElement);
                 }
             } else {
-                // Jika root level, panggil render utama
-                this.render();
+                // Jika root level, render ulang collection yang sedang dibuka.
+                this.collectionId = targetCollectionId;
+                const collectionElement = document.querySelector(
+                    `.collection-item[data-id="${targetCollectionId}"], [data-collection-id="${targetCollectionId}"]`
+                );
+                if (collectionElement) {
+                    this.renderFolder(null, collectionElement);
+                } else {
+                    this.render();
+                }
             }
         } catch (error) {
             console.error("Gagal membuat folder:", error);
