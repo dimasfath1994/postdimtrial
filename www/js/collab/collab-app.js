@@ -58,8 +58,9 @@ import { GrpcController } from "./controller/grpc-controller.js";
 import { RequestModeController } from './controller/request-mode-controller.js';
 
 const isTauri = window.__TAURI_INTERNALS__ !== undefined;
+const isVsCodeExtension = window.__POSTDIM_VSCODE__ === true;
 
-if (isTauri) {
+if (isTauri || isVsCodeExtension) {
     // Sembunyikan tombol jika user sudah pakai versi desktop
     document.getElementById('downloadAppBtn').style.display = 'none';
 } else {

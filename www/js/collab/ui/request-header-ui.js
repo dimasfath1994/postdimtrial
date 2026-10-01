@@ -1,4 +1,5 @@
 // js/ui/request-header-ui.js
+import { escapeHtml } from './html-escape.js';
 
 export class RequestHeaderUI {
     static renderHeaders(headers, container, handlers) {
@@ -93,9 +94,9 @@ export class RequestHeaderUI {
         
         row.innerHTML = `
             <td style="text-align: center;"><input type="checkbox" ${header.enabled ? 'checked' : ''} class="header-enabled"></td>
-            <td><input type="text" value="${header.key || ''}" placeholder="Key" class="header-key" style="${inputStyle}"></td>
-            <td><input type="text" value="${header.value || ''}" placeholder="Value" class="header-value" style="${inputStyle}"></td>
-            <td><input type="text" value="${header.description || ''}" placeholder="Description" class="header-desc" style="${inputStyle}"></td>
+            <td><input type="text" value="${escapeHtml(header.key)}" placeholder="Key" class="header-key" style="${inputStyle}"></td>
+            <td><input type="text" value="${escapeHtml(header.value)}" placeholder="Value" class="header-value" style="${inputStyle}"></td>
+            <td><input type="text" value="${escapeHtml(header.description)}" placeholder="Description" class="header-desc" style="${inputStyle}"></td>
             <td style="text-align: center;">
                 <button class="header-delete" style="border:none; background:none; cursor:pointer; color:#ccc; font-size: 16px;">×</button>
             </td>

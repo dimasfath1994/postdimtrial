@@ -1,6 +1,7 @@
 // js/ui/graphql-ui.js
 
 import { enableMonacoClipboard } from '../../ui/monaco-clipboard.js';
+import { escapeHtml } from './html-escape.js';
 
 export class GraphqlUI {
     static queryEditor = null;
@@ -39,7 +40,7 @@ export class GraphqlUI {
                     <textarea id="graphqlQuery" class="graphql-query-input" 
                         placeholder="query { ... }"
                         style="flex: 1; min-height: 200px; width: 100%; background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; border-radius: 4px; padding: 10px; font-family: 'Fira Code', Consolas, Monaco, monospace; font-size: 13px; line-height: 1.5; resize: none; outline: none; box-sizing: border-box;"
-                    >${data.query || ''}</textarea>
+                    >${escapeHtml(data.query)}</textarea>
                 </div>
 
                 <!-- Variables Editor Section -->
@@ -51,7 +52,7 @@ export class GraphqlUI {
                     <textarea id="graphqlVariables" class="graphql-variables-input" 
                         placeholder="{}"
                         style="flex: 1; min-height: 200px; width: 100%; background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; border-radius: 4px; padding: 10px; font-family: 'Fira Code', Consolas, Monaco, monospace; font-size: 13px; line-height: 1.5; resize: none; outline: none; box-sizing: border-box;"
-                    >${typeof data.variables === 'string' ? data.variables : JSON.stringify(data.variables || {}, null, 2)}</textarea>
+                    >${escapeHtml(typeof data.variables === 'string' ? data.variables : JSON.stringify(data.variables || {}, null, 2))}</textarea>
                 </div>
             </div>
         `;

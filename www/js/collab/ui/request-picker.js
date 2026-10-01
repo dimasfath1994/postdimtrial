@@ -10,6 +10,7 @@ let _state = null;
 let _folderCtrl = null;
 
 // Elemen Modal
+import { escapeHtml } from './html-escape.js';
 const modal = document.getElementById('addRequestModal');
 const cancelRequestBtn = document.getElementById('cancelRequest');
 
@@ -59,15 +60,17 @@ async function showRequestPicker() {
         function renderFolderRecursive(allFolders, parentId, colId, padding) {
             let folderHtml = '';
             // Ambil folder yang parent-nya sesuai dengan parentId yang diminta
-            const children = allFolders.filter(f => f.parent_id === parentId);
+            const children = allFolders.filter(folder => parentId == null
+                ? folder.parent_id == null
+                : String(folder.parent_id) === String(parentId));
 
             children.forEach(folder => {
                 folderHtml += `
                     <div class="picker-item folder-item" 
-                         data-col-id="${colId}" 
-                         data-folder-id="${folder.id}" 
+                         data-col-id="${escapeHtml(colId)}" 
+                         data-folder-id="${escapeHtml(folder.id)}" 
                          style="padding-left: ${padding}px; cursor: pointer;">
-                         📁 ${folder.name}
+                         📁 ${escapeHtml(folder.name)}
                     </div>`;
                 
                 // Panggil diri sendiri untuk mencari folder anak (level lebih dalam)
@@ -79,8 +82,8 @@ async function showRequestPicker() {
         // Loop koleksi utama
         for (const col of collections) {
             html += `
-                <div class="picker-item col-head" data-col-id="${col.id}" style="font-weight: bold; cursor: pointer;">
-                    📂 ${col.name}
+                <div class="picker-item col-head" data-col-id="${escapeHtml(col.id)}" style="font-weight: bold; cursor: pointer;">
+                    📂 ${escapeHtml(col.name)}
                 </div>`;
             
             // Ambil daftar folder untuk koleksi ini

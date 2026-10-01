@@ -34,13 +34,13 @@ export const ImportController = {
 
             // 3. Success Feedback
             console.log("Import berhasil!", result);
-            alert("Import berhasil dilakukan!");
+            alert("Import completed successfully.");
             
             return result;
 
         } catch (error) {
             console.error("Gagal melakukan import:", error);
-            alert("Terjadi kesalahan saat mengimpor: " + error.message);
+            alert("An error occurred while importing: " + error.message);
             throw error;
         }
     },

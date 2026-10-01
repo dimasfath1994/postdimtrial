@@ -1,4 +1,5 @@
 // js/ui/request-body-param-ui.js
+import { escapeHtml } from './html-escape.js';
 
 export class RequestBodyParamUI {
     /**
@@ -54,17 +55,17 @@ export class RequestBodyParamUI {
         
         const valueField = isFile 
         ? `<div class="file-input-wrapper" style="padding: 6px;">
-             <span style="font-size: 11px; color: #888;">${param.file_name || 'No file'}</span>
+             <span style="font-size: 11px; color: #888;">${escapeHtml(param.file_name || 'No file')}</span>
              <input type="file" class="param-file-upload" style="display:none">
              <button type="button" class="btn-select-file" style="font-size:10px; cursor:pointer;">Select</button>
            </div>`
-        : `<textarea class="param-value" placeholder="Value" style="${inputStyle} height: 28px; padding: 4px 6px; resize: vertical; box-sizing: border-box;">${param.value || ''}</textarea>`;
+        : `<textarea class="param-value" placeholder="Value" style="${inputStyle} height: 28px; padding: 4px 6px; resize: vertical; box-sizing: border-box;">${escapeHtml(param.value)}</textarea>`;
     
     row.innerHTML = `
         <td style="text-align: center;"><input type="checkbox" ${param.enabled ? 'checked' : ''} class="param-enabled"></td>
-        <td><input type="text" value="${param.key || ''}" placeholder="Key" class="param-key" style="${inputStyle}"></td>
+        <td><input type="text" value="${escapeHtml(param.key)}" placeholder="Key" class="param-key" style="${inputStyle}"></td>
         <td>${valueField}</td>
-        <td><textarea class="param-desc" placeholder="Description" style="${inputStyle} height: 28px; padding: 4px 6px; resize: vertical; box-sizing: border-box;">${param.description || ''}</textarea></td>
+        <td><textarea class="param-desc" placeholder="Description" style="${inputStyle} height: 28px; padding: 4px 6px; resize: vertical; box-sizing: border-box;">${escapeHtml(param.description)}</textarea></td>
         <td style="text-align: center;">
             <button class="param-delete" style="border:none; background:none; cursor:pointer; color:#ccc; font-size: 16px;">×</button>
         </td>

@@ -49,6 +49,7 @@ export class DraftServerController {
             };
 
             const newRequest = await this.requestController.createRequestToServer(requestPayload);
+            if (!newRequest?.id) throw new Error("The server did not return the saved request.");
             const newId = newRequest.id;
 
             // 3. Sinkronisasi Data Turunan
@@ -60,6 +61,23 @@ export class DraftServerController {
                 this.saveGraphql(newId, draftData.graphql), // <-- Tambahan migrasi GraphQL
                 this.saveGrpc(newId, draftData.grpc)         // <-- Tambahan migrasi gRPC
             ]);
+
+            if (!this.State.requests.some(request => String(request.id) === String(newId))) {
+                this.State.requests.push(newRequest);
+            }
+            this.requestController.onUpdateUI?.(this.State.requests);
+            this.requestController.bc?.postMessage({ type: 'REQUEST_CREATED', data: newRequest });
+
+            if (targetLocation.folder_id) {
+                const folderElement = document.querySelector(`.folder-item[data-id="${targetLocation.folder_id}"]`);
+                if (folderElement && window.folderCtrl) {
+                    window.folderCtrl.renderFolder(targetLocation.folder_id, folderElement);
+                }
+            } else {
+                await this.requestController.render();
+            }
+
+            this.requestController.tabCtrl?.openTab(newRequest);
 
             return newId;
         } catch (error) {

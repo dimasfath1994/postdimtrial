@@ -1,5 +1,6 @@
 import { UserService } from "../user-service.js";
 import { WorkspaceMemberService } from "../workspace-member-service.js";
+import { escapeHtml } from '../ui/html-escape.js';
 
 export function initInviteModal() {
     let debounceTimer;
@@ -29,13 +30,13 @@ export function initInviteModal() {
             const email = emailInput ? emailInput.value.trim() : '';
             const role = roleInput ? roleInput.value : 'viewer';
             
-            if (!email) return alert("Email wajib diisi!");
+            if (!email) return alert("Email is required.");
 
             // AMBIL ID TERBARU DARI WINDOW GLOBAL ATAU DATASET
             const currentWorkspaceId = window.COLLAB_STATE?.workspaceId || document.body.dataset.currentWsId;
 
             if (!currentWorkspaceId) {
-                return alert("Workspace tidak ditemukan, silakan refresh halaman.");
+                return alert("Workspace not found. Please refresh the page.");
             }
 
             try {
@@ -46,17 +47,17 @@ export function initInviteModal() {
                     // Mengirim role ke backend
                     await WorkspaceMemberService.addMember(currentWorkspaceId, user.id, role);
                     
-                    alert(`Undangan berhasil dikirim ke ${user.name || 'user tersebut'} sebagai ${role}`);
+                    alert(`Invitation sent to ${user.name || 'the user'} as ${role}.`);
                     
                     if (modal) modal.classList.add('modal-hidden');
                     if (emailInput) emailInput.value = '';
                     if (roleInput) roleInput.value = 'viewer';
                 } else {
-                    alert("User tidak ditemukan.");
+                    alert("User not found.");
                 }
             } catch (err) {
                 console.error(err);
-                alert("Terjadi kesalahan saat mengundang.");
+                alert("An error occurred while sending the invitation.");
             }
         }
 
@@ -84,8 +85,8 @@ export function initInviteModal() {
                     const users = await UserService.searchUsers(email);
                     if (searchResult) {
                         searchResult.innerHTML = users.map(user => `
-                            <div class="user-item" data-email="${user.email}" style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;">
-                                ${user.name} (${user.email})
+                            <div class="user-item" data-email="${escapeHtml(user.email)}" style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;">
+                                ${escapeHtml(user.name)} (${escapeHtml(user.email)})
                             </div>
                         `).join('');
                     }

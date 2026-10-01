@@ -1,6 +1,7 @@
 // js/ui/env-ui.js
 import { EnvService } from "../env-service.js";
 import { GlobalService } from "../global-service.js";
+import { escapeHtml } from './html-escape.js';
 
 export class EnvUI {
     /**
@@ -46,10 +47,10 @@ export class EnvUI {
 
         row.innerHTML = `
             <td style="padding: 4px;">
-                <input type="text" value="${v[keyField] || ''}" class="v-key" style="${inputStyle}">
+                <input type="text" value="${escapeHtml(v[keyField])}" class="v-key" style="${inputStyle}">
             </td>
             <td style="padding: 4px;">
-                <input type="text" value="${v[valField] || ''}" class="v-val" style="${inputStyle}">
+                <input type="text" value="${escapeHtml(v[valField])}" class="v-val" style="${inputStyle}">
             </td>
             <td style="text-align: center;">
                 <button class="v-delete" style="border:none; background:none; cursor:pointer; color:#ff4d4f; font-size: 16px;">×</button>
@@ -94,7 +95,7 @@ export class EnvUI {
 
             try {
                 if (type === 'env') {
-                    if (!wsId) return alert("Pilih workspace terlebih dahulu!");
+                    if (!wsId) return alert("Select a workspace first.");
                     await EnvService.create(wsId, key, value);
                     await controllers.envCtrl.init(document.getElementById('envList-workspace'), wsId);
                 } else {
@@ -107,7 +108,7 @@ export class EnvUI {
                 document.getElementById('envValue').value = '';
             } catch (err) {
                 console.error("Gagal menambahkan variabel:", err);
-                alert("Gagal menambahkan variabel");
+                alert("Failed to add variable.");
             }
         };
     }

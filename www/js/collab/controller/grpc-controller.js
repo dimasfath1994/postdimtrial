@@ -436,7 +436,7 @@ export class GrpcController {
             return res;
         } catch (err) {
             console.error("[gRPC Discovery Error]:", err);
-            alert(`Discovery Gagal: ${err}`);
+            alert(`Could not discover gRPC services: ${err}`);
             throw err;
         }
     }
@@ -471,7 +471,7 @@ export class GrpcController {
             this.broadcastMessage('GRPC_SERVICES_DISCOVERED', { services: res }, requestId);
         } catch (err) {
             console.error("[gRPC Local Proto Error]:", err);
-            alert(`Gagal memuat file .proto: ${err}`);
+            alert(`Could not load the .proto file: ${err}`);
         }
     }
 

@@ -363,7 +363,7 @@ export class GrpcUI {
         container.innerHTML = `
             <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
                 <select id="grpcServiceMethod" style="flex: 1; padding: 6px 8px; background: #2b2b2b; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 13px; outline: none;">
-                    <option value="">-- Pilih Service / Method --</option>
+                    <option value="">-- Select a Service / Method --</option>
                 </select>
                 <button type="button" id="btnFetchReflection" style="background: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;">Fetch Reflection</button>
             </div>

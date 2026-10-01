@@ -157,7 +157,7 @@ export class GraphqlGrpcHandler {
       if (ui.grpcServiceMethod) ui.grpcServiceMethod.value = methodVal;
       
       const protoFileNameEl = document.getElementById("protoFileName");
-      if (protoFileNameEl) protoFileNameEl.textContent = protoName || "Pilih file .proto";
+      if (protoFileNameEl) protoFileNameEl.textContent = protoName || "Choose a .proto file";
     }
   }
 

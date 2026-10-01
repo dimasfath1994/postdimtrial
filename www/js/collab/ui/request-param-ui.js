@@ -1,4 +1,5 @@
 // js/ui/request-param-ui.js
+import { escapeHtml } from './html-escape.js';
 
 export class RequestParamUI {
     static renderParams(params, container, handlers) {
@@ -109,9 +110,9 @@ toggleBtn.onclick = () => {
         // Menggunakan || '' untuk memastikan jika data null/undefined, tidak muncul 'undefined' di UI
         row.innerHTML = `
             <td style="text-align: center;"><input type="checkbox" ${param.enabled ? 'checked' : ''} class="param-enabled"></td>
-            <td><input type="text" value="${param.key || ''}" placeholder="Key" class="param-key" style="${inputStyle}"></td>
-            <td><input type="text" value="${param.value || ''}" placeholder="Value" class="param-value" style="${inputStyle}"></td>
-            <td><input type="text" value="${param.description || ''}" placeholder="Description" class="param-desc" style="${inputStyle}"></td>
+            <td><input type="text" value="${escapeHtml(param.key)}" placeholder="Key" class="param-key" style="${inputStyle}"></td>
+            <td><input type="text" value="${escapeHtml(param.value)}" placeholder="Value" class="param-value" style="${inputStyle}"></td>
+            <td><input type="text" value="${escapeHtml(param.description)}" placeholder="Description" class="param-desc" style="${inputStyle}"></td>
             <td style="text-align: center;">
                 <button class="param-delete" style="border:none; background:none; cursor:pointer; color:#ccc; font-size: 16px;">×</button>
             </td>

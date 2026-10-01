@@ -1,5 +1,6 @@
 // js/ui/request-ui.js
 import { MenuUI } from "./menu-ui.js"; 
+import { escapeHtml } from './html-escape.js';
 
 export class RequestUI {
     /**
@@ -17,11 +18,11 @@ export class RequestUI {
         
         item.innerHTML = `
         <div class="request-row" style="display: flex; align-items: center; padding: 5px; cursor: pointer;">
-            <span class="method-badge ${request.method}" style="margin-right: 8px; font-weight: bold; font-size: 10px;">
-                ${request.method}
+            <span class="method-badge ${escapeHtml(request.method || 'GET')}" style="margin-right: 8px; font-weight: bold; font-size: 10px;">
+                ${escapeHtml(request.method || 'GET')}
             </span>
             <span class="name" style="font-size: 13px;">
-                ${request.name} ${isDraft ? '<small style="color: gray;">(Draft)</small>' : ''}
+                ${escapeHtml(request.name)} ${isDraft ? '<small style="color: gray;">(Draft)</small>' : ''}
             </span>
         </div>
     `;
@@ -51,7 +52,7 @@ export class RequestUI {
         tab.className = `tab-item ${isDraft ? 'tab-draft' : ''}`;
         tab.dataset.id = request.id;
         tab.innerHTML = `
-        <span class="tab-name">${request.name}</span>
+        <span class="tab-name">${escapeHtml(request.name)}</span>
         <button class="close-tab" title="${isDraft ? 'Hapus Draft' : 'Tutup'}">×</button>
     `;
     

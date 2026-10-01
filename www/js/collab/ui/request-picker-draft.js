@@ -1,6 +1,7 @@
 /**
  * request-picker-draft.js
  */
+import { escapeHtml } from './html-escape.js';
 
 let _draftServerCtrl = null;
 let _state = null;
@@ -57,20 +58,23 @@ export async function showDraftPicker(draftId) {
 
     try {
         const collections = _state.collections || [];
-        let html = '<div class="picker-header">Pilih lokasi:</div>';
+        let html = '<div class="picker-header">Choose a location:</div>';
 
         // ... (sisanya sama, gunakan fungsi renderFolderRecursive yang tadi)
         function renderFolderRecursive(allFolders, parentId, colId, padding) {
             let folderHtml = '';
-            allFolders.filter(f => f.parent_id === parentId).forEach(folder => {
-                folderHtml += `<div class="picker-item folder-item" data-col-id="${colId}" data-folder-id="${folder.id}" style="padding-left: ${padding}px; cursor: pointer;">📁 ${folder.name}</div>`;
+            const children = allFolders.filter(folder => parentId == null
+                ? folder.parent_id == null
+                : String(folder.parent_id) === String(parentId));
+            children.forEach(folder => {
+                folderHtml += `<div class="picker-item folder-item" data-col-id="${escapeHtml(colId)}" data-folder-id="${escapeHtml(folder.id)}" style="padding-left: ${padding}px; cursor: pointer;">📁 ${escapeHtml(folder.name)}</div>`;
                 folderHtml += renderFolderRecursive(allFolders, folder.id, colId, padding + 20);
             });
             return folderHtml;
         }
 
         for (const col of collections) {
-            html += `<div class="picker-item col-head" data-col-id="${col.id}" style="font-weight: bold; cursor: pointer;">📂 ${col.name}</div>`;
+            html += `<div class="picker-item col-head" data-col-id="${escapeHtml(col.id)}" style="font-weight: bold; cursor: pointer;">📂 ${escapeHtml(col.name)}</div>`;
             const allFolders = await _folderCtrl.getFoldersByCollection(col.id); 
             if (allFolders) html += renderFolderRecursive(allFolders, null, col.id, 30);
         }
@@ -79,14 +83,22 @@ export async function showDraftPicker(draftId) {
 
         container.querySelectorAll('.picker-item').forEach(item => {
             item.onclick = async () => {
-                await _draftServerCtrl.commitDraftToServer(_currentDraftId, {
-                    collection_id: item.dataset.colId,
-                    folder_id: item.dataset.folderId || null
-                });
-                modal.style.display = 'none';
-                
-                // Pastikan tab tertutup setelah berhasil save
-                if (window.tabCtrl) window.tabCtrl.forceCloseTab(_currentDraftId);
+                item.setAttribute('aria-busy', 'true');
+                try {
+                    await _draftServerCtrl.commitDraftToServer(_currentDraftId, {
+                        collection_id: item.dataset.colId,
+                        folder_id: item.dataset.folderId || null
+                    });
+                    modal.style.display = 'none';
+
+                    // Pastikan tab tertutup setelah berhasil save
+                    if (window.tabCtrl) window.tabCtrl.forceCloseTab(_currentDraftId);
+                } catch (error) {
+                    console.error("Gagal menyimpan draft:", error);
+                    alert(`Failed to save draft: ${error.message || String(error)}`);
+                } finally {
+                    item.removeAttribute('aria-busy');
+                }
             };
         });
     } catch (err) {

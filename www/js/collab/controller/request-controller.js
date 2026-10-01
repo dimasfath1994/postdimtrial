@@ -326,7 +326,10 @@ async loadRequestsByCollection(collectionId, folderId = null) {
 
         if (container) {
             container.innerHTML = ""; 
-            newRequests.forEach(req => 
+            const requestsForContainer = folderId
+                ? newRequests
+                : newRequests.filter(request => request.folder_id == null);
+            requestsForContainer.forEach(req =>
                 RequestUI.renderRequestItem(
                     req, 
                     container, 
@@ -388,7 +391,15 @@ async loadRequestsByCollection(collectionId, folderId = null) {
             name: newName // Ini sudah benar, ini akan menimpa field name yang lama
         };
         
-        await this.updateRequest(id, payload);
+        const didUpdate = await this.updateRequest(id, payload);
+        if (!didUpdate) {
+            alert("Failed to rename request.");
+            return;
+        }
+
+        const updatedRequest = this.State.requests.find(r => String(r.id) === String(id));
+        this.updateUIElements(id, { name: updatedRequest?.name || newName });
+        if (updatedRequest) this.tabCtrl?.updateTab(id, updatedRequest);
     }
 
 
@@ -449,9 +460,13 @@ async loadRequestsByCollection(collectionId, folderId = null) {
         return newReq;
     } catch (err) {
         console.error("Gagal buat request:", err);
-        alert("Gagal membuat request");
+        alert("Failed to create request.");
     }
 }
+
+    async createRequestToServer(payload) {
+        return RequestService.create(payload);
+    }
 
 
 async migrateBodyParamsToRequest(reqId, bodyParams) {
@@ -556,15 +571,17 @@ async duplicateRequest(req) {
         // Kita gunakan fungsi create yang sudah ada agar broadcast otomatis terkirim
         const newReq = await RequestService.create(duplicatePayload);
 
-        // 3. Update State Lokal (opsional jika broadcast sudah menangani, 
-        // tapi bagus untuk optimis UI)
-        if (!this.State.requests.find(r => r.id === newReq.id)) {
+        // 3. Update local state and render the copy beside its source.
+        if (!this.State.requests.some(r => String(r.id) === String(newReq.id))) {
             this.State.requests.push(newReq);
-            
-            // Render ke UI
-            const container = document.querySelector(`[data-collection-id="${newReq.collection_id}"] .requests-list`);
-            if (container) {
-                RequestUI.renderRequestItem(newReq, container, this.handlers, (r) => this.tabCtrl.openTab(r));
+
+            if (newReq.folder_id != null) {
+                const folderElement = document.querySelector(`.folder-item[data-id="${newReq.folder_id}"]`);
+                if (folderElement && window.folderCtrl) {
+                    window.folderCtrl.renderFolder(newReq.folder_id, folderElement);
+                }
+            } else {
+                await this.render();
             }
         }
 
@@ -598,7 +615,7 @@ async duplicateRequest(req) {
         
     } catch (err) {
         console.error("Gagal menduplikasi request:", err);
-        alert("Gagal melakukan duplikasi request.");
+        alert("Failed to duplicate request.");
     }
 }
 
@@ -614,10 +631,14 @@ async duplicateRequest(req) {
             this.bc.postMessage({ type: 'REQUEST_DELETED', request_id: id });
 
             // Update State
-            this.State.requests = this.State.requests.filter(r => r.id !== id);
+            this.State.requests = this.State.requests.filter(r => String(r.id) !== String(id));
+
+            RequestUI.removeRequestElement(id);
+            const matchingTab = this.tabCtrl?.tabs.find(tab => String(tab.id) === String(id));
+            if (matchingTab) this.tabCtrl.forceCloseTab(matchingTab.id);
         } catch (err) {
             //console.error("Gagal delete request:", err);
-            alert("Gagal menghapus request");
+            alert("Failed to delete request.");
         }
     }
 
@@ -641,8 +662,10 @@ async duplicateRequest(req) {
             }
 
             console.log(`[SYNC] Field ${Object.keys(payload)} berhasil disimpan.`);
+            return true;
         } catch (err) {
             console.error("Gagal update request:", err);
+            return null;
         }
     }
 
@@ -748,7 +771,7 @@ async duplicateRequest(req) {
             
         } catch (err) {
             console.error("Gagal update full request:", err);
-            alert("Gagal menyimpan perubahan.");
+            alert("Failed to save changes.");
         }
     }
 

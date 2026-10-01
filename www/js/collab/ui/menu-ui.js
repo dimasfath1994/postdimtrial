@@ -50,7 +50,7 @@ export class MenuUI {
             switch(action) {
                 case 'rename': 
                     const newName = await window.customPrompt("New Name:", item.name);
-                    if (newName) handlers.onRename(item.id, newName);
+                    if (newName) await handlers.onRename(item.id, newName);
                     break;
                 case 'duplicate': 
                     handlers.onDuplicate(item); 
@@ -59,7 +59,7 @@ export class MenuUI {
                     handlers.onPin(item.id, !item.pinned); 
                     break;
                 case 'delete': 
-                    handlers.onDelete(item.id); 
+                    await handlers.onDelete(item.id);
                     break;
                 case 'close': 
                     if (onCloseTab) onCloseTab(item.id); 

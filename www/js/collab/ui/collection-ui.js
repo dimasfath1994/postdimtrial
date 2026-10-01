@@ -1,4 +1,5 @@
 // collection-ui.js
+import { escapeHtml } from './html-escape.js';
 
 /**
  * Merender daftar koleksi ke dalam elemen container sidebar
@@ -22,11 +23,11 @@ export function renderCollectionSidebar(container, collections, handlers) {
         item.innerHTML = `
             <div class="col-header">
                 <span class="toggle-icon" style="display:inline-block; width: 15px; cursor: pointer;">▶</span>
-                <span class="col-name" style="cursor: pointer;">${col.name}</span>
+                <span class="col-name" style="cursor: pointer;">${escapeHtml(col.name)}</span>
             </div>
-            <div class="collection-body" id="collection-body-${col.id}" style="display:none;">
-                <div id="requests-container-${col.id}" class="requests-list" style="padding-left: 20px;"></div>
-                <div id="child-list-${col.id}" class="child-list" style="padding-left: 20px;"></div>
+            <div class="collection-body" id="collection-body-${escapeHtml(col.id)}" style="display:none;">
+                <div id="requests-container-${escapeHtml(col.id)}" class="requests-list" style="padding-left: 20px;"></div>
+                <div id="child-list-${escapeHtml(col.id)}" class="child-list" style="padding-left: 20px;"></div>
             </div>
         `;
 

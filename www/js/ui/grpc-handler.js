@@ -38,7 +38,7 @@ export class GrpcHandler {
 
     // Pastikan dropdown di-reset sebelum memulai fetch baru
     if (selectElement) {
-      selectElement.innerHTML = '<option value="">-- Pilih Service / Method --</option>';
+      selectElement.innerHTML = '<option value="">-- Choose Service / Method --</option>';
     }
 
     try {
@@ -86,7 +86,7 @@ export class GrpcHandler {
     } catch (err) {
       if (statusBtn) statusBtn.textContent = "❌ Reflection Failed";
       if (selectElement) {
-        selectElement.innerHTML = '<option value="">-- Gagal memuat reflection --</option>';
+        selectElement.innerHTML = '<option value="">-- Failed to load reflection --</option>';
       }
       console.error("Gagal melakukan gRPC discovery:", err);
     } finally {
@@ -247,7 +247,7 @@ export class GrpcHandler {
         // Otomatis isi dropdown grpcServiceMethod dari result.services
         const selectElement = document.getElementById("grpcServiceMethod");
         if (selectElement && result?.services) {
-          selectElement.innerHTML = '<option value="">-- Pilih Service / Method --</option>';
+          selectElement.innerHTML = '<option value="">-- Choose Service / Method --</option>';
           let total = 0;
 
           result.services.forEach((item) => {
@@ -559,12 +559,12 @@ export class GrpcHandler {
   static async sendRequest(tab, resolveVars = (v) => v) {
     const payload = this.prepareRequestBody(tab, resolveVars);
     if (!payload || !payload.serviceMethod) {
-      throw new Error("gRPC Service / Method belum dipilih atau belum diisi!");
+      throw new Error("Select or enter a gRPC service and method.");
     }
     
     const endpoint = document.getElementById("url")?.value?.trim();
     if (!endpoint) {
-      throw new Error("gRPC Endpoint URL belum diisi!");
+      throw new Error("Enter a gRPC endpoint URL.");
     }
 
     try {

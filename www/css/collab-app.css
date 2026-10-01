@@ -524,7 +524,7 @@ pre {
 
     width: 100%;
     height: auto;
-    max-height: 48vh;
+    max-height: 60vh;
     overflow-y: auto;
 
     border-right: none;
@@ -532,9 +532,9 @@ pre {
   }
 
   #collectionList {
-    flex: 0 1 28vh;
-    min-height: 120px;
-    max-height: 28vh;
+    flex: 0 1 40vh;
+    min-height: 140px;
+    max-height: 40vh;
   }
 
   .container {

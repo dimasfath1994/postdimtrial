@@ -294,7 +294,7 @@ async createNewWorkspace() {
         
     } catch (err) { 
         console.error("Gagal buat workspace:", err);
-        alert("Gagal membuat workspace"); 
+        alert("Failed to create workspace.");
     }
 }
 

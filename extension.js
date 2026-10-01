@@ -80,18 +80,19 @@ async function invokeExtensionCommand(command, payload = {}) {
   }
   if (command === "show_prompt") {
     const result = await vscode.window.showInputBox({
-      prompt: payload.title || "Masukkan nilai:",
+      prompt: payload.title || "Enter a value:",
       value: payload.defaultText || ""
     });
     return { value: result ?? null };
   }
   if (command === "show_confirm") {
     const answer = await vscode.window.showWarningMessage(
-      payload.message || "Apakah Anda yakin?",
+      payload.message || "Are you sure?",
       { modal: true },
-      "Ya"
+      "Yes",
+      "No"
     );
-    return { confirm: answer === "Ya" };
+    return { confirm: answer === "Yes" };
   }
   if (command === "clipboard_read") {
     return { text: await vscode.env.clipboard.readText() };
@@ -155,7 +156,7 @@ async function invokeExtensionCommand(command, payload = {}) {
     });
   }
   if (command !== "http_request" && command !== "http_request_collabs") {
-    throw new Error(`Command '${command}' belum tersedia di VS Code extension.`);
+    throw new Error(`Command '${command}' is not available in the VS Code extension.`);
   }
 
   const method = String(payload.method || "GET").toUpperCase();

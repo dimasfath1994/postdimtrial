@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const workspaceId = window.COLLAB_STATE?.workspaceId;
 
         if (!workspaceId) {
-            alert("Gagal mengekspor: Workspace tidak aktif.");
+            alert("Failed to export: no active workspace.");
             return;
         }
 
@@ -38,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("[Export] Berhasil mengunduh workspace.");
         } catch (err) {
             console.error("[Export Error]", err);
-            alert("Terjadi kesalahan saat mengekspor data: " + err.message);
+            alert("An error occurred while exporting data: " + err.message);
         } finally {
             // Reset tombol ke keadaan semula
             exportBtn.disabled = false;

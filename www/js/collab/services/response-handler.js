@@ -2,6 +2,8 @@
  * ResponseHandler
  * Menangani perenderan hasil request ke DOM.
  */
+import { escapeHtml } from '../ui/html-escape.js';
+
 export class ResponseHandler {
     // --- TAMBAHAN: Fungsi untuk membersihkan seluruh area response ---
     static clear() {
@@ -27,12 +29,12 @@ export class ResponseHandler {
         }
 
         if (response.error) {
-            statusBar.innerHTML = `<span style="color:red;">Error: ${response.message}</span>`;
+            statusBar.innerHTML = `<span style="color:red;">Error: ${escapeHtml(response.message)}</span>`;
             return;
         }
 
         statusBar.innerHTML = `
-            <span>Status: <strong>${response.status} ${response.statusText}</strong></span>
+            <span>Status: <strong>${escapeHtml(response.status)} ${escapeHtml(response.statusText)}</strong></span>
             <span>Time: <strong>${response.time} ms</strong></span>
             <span>Size: <strong>${this.formatSize(response.size)}</strong></span>
         `;
@@ -92,7 +94,7 @@ export class ResponseHandler {
         // 2. Buat tabel
         let html = '<table style="width:100%">';
         for (const [key, val] of Object.entries(headers)) {
-            html += `<tr><td><strong>${key}:</strong></td><td>${val}</td></tr>`;
+            html += `<tr><td><strong>${escapeHtml(key)}:</strong></td><td>${escapeHtml(val)}</td></tr>`;
         }
         html += '</table>';
         

@@ -1,4 +1,5 @@
 import { FolderService } from "../folder-service.js";
+import { RequestService } from "../request-service.js";
 import { renderFolderChildren, showFolderContextMenu } from "../ui/folder-ui.js";
 import { RequestUI } from "../ui/request-ui.js"; // <--- TAMBAHKAN INI
 
@@ -39,6 +40,7 @@ export class FolderController {
 
     async init(collectionId) {
         this.collectionId = collectionId;
+        this.workspaceId = this.State.workspaceId || document.body.dataset.currentWsId || this.workspaceId;
         const folders = await FolderService.getByCollection(collectionId);
         this.State.folders = folders;
         
@@ -152,7 +154,7 @@ export class FolderController {
         // 3. Filter folder
         const subFolders = this.State.folders.filter(f => {
             const isTargetParent = (folderId === null) 
-                ? (f.parent_id === null) 
+                ? (f.parent_id === null || f.parent_id === undefined)
                 : (String(f.parent_id) === String(folderId));
             return isTargetParent && String(f.collection_id) === String(this.collectionId);
         });
@@ -182,12 +184,12 @@ export class FolderController {
             onOpenMenu: (e, folder) => showFolderContextMenu(e, folder, {
                 onRename: async (id) => { 
                     const name = await window.customPrompt("New name:", folder.name); 
-                    if (name) this.renameFolder(id, name); 
+                    if (name) await this.renameFolder(id, name);
                 },
                 onDelete: (id) => this.deleteFolder(id),
                 onAddFolder: async (parentId) => { 
                     const name = await window.customPrompt("Folder name:"); 
-                    if (name) this.createFolder(this.State.workspaceId, this.collectionId, parentId, name); 
+                    if (name) await this.createFolder(this.State.workspaceId || document.body.dataset.currentWsId || this.workspaceId, this.collectionId, parentId, name);
                 },
                     onAddRequest: async (fId, cId) => {
                         if (this.requestCtrl) {
@@ -245,18 +247,18 @@ export class FolderController {
         // 2. Definisi Handler
       const folderHandlers = {
         onRename: async (id) => {
-            const name = await window.customPrompt("New name:", this.State.folders.find(f => f.id === id)?.name);
-            if(name) this.renameFolder(id, name);
+            const name = await window.customPrompt("New name:", this.State.folders.find(f => String(f.id) === String(id))?.name);
+            if(name) await this.renameFolder(id, name);
         },
         onDelete: (id) => this.deleteFolder(id),
         onExpand: (id, el) => this.refreshFolderView(id, el),
         onAddFolder: async (parentId) => {
             const name = await window.customPrompt("Folder name:");
-            if(name) this.createFolder(this.workspaceId, this.collectionId, parentId, name);
+            if(name) await this.createFolder(this.State.workspaceId || document.body.dataset.currentWsId || this.workspaceId, this.collectionId, parentId, name);
         },
         onAddRequest: (fId, cId) => {
             const targetColId = cId || this.collectionId;
-            const wsId = this.workspaceId || (this.State && this.State.workspaceId);
+            const wsId = this.State.workspaceId || this.workspaceId;
             
             if (this.requestCtrl) {
                 this.requestCtrl.createRequest({
@@ -297,19 +299,24 @@ export class FolderController {
     }
 
     async createFolder(workspaceId, collectionId, parentId, name) {
+        const targetWorkspaceId = workspaceId || this.State.workspaceId || document.body.dataset.currentWsId || this.workspaceId;
         // 1. Resolve collectionId dengan aman
         let targetCollectionId = collectionId;
         if (!targetCollectionId && parentId) {
-            const parentFolder = this.State.folders.find(f => f.id == parentId);
+            const parentFolder = this.State.folders.find(f => String(f.id) === String(parentId));
             if (parentFolder) {
                 targetCollectionId = parentFolder.collection_id;
             }
+        }
+
+        if (!targetWorkspaceId || !targetCollectionId) {
+            throw new Error("An active workspace and collection are required to add a folder.");
         }
     
         console.log(`[DEBUG] Creating folder: Name=${name}, Parent=${parentId}, Collection=${targetCollectionId}`);
     
         try {
-            const newFolder = await FolderService.create(workspaceId, targetCollectionId, parentId, name);
+            const newFolder = await FolderService.create(targetWorkspaceId, targetCollectionId, parentId, name);
 
             if (newFolder && !this.State.folders.some(folder => String(folder.id) === String(newFolder.id))) {
                 this.State.folders.push(newFolder);
@@ -357,27 +364,52 @@ export class FolderController {
     async renameFolder(id, newName) {
         await FolderService.update(id, { name: newName });
         this.bc.postMessage({ type: 'FOLDER_UPDATED', data: { id, name: newName } });
-        const idx = this.State.folders.findIndex(f => f.id === id);
+        const idx = this.State.folders.findIndex(f => String(f.id) === String(id));
         if (idx !== -1) {
             this.State.folders[idx].name = newName;
-            this.render();
         }
+
+        const folderElement = document.querySelector(`.folder-item[data-id="${id}"]`);
+        const nameElement = folderElement?.querySelector('.folder-name');
+        if (nameElement) nameElement.textContent = `📁 ${newName}`;
     }
 
     async deleteFolder(id) {
-        const isConfirmed = await window.customConfirm("Delete this folder?");
+        const isConfirmed = await window.customConfirm("Delete this folder and all requests inside it?");
         if (!isConfirmed) return;
-        
-        // Simpan info parent sebelum dihapus dari state
-        const folder = this.State.folders.find(f => f.id === id);
-        const parentId = folder ? folder.parent_id : null;
-        
+
+        const folder = this.State.folders.find(item => String(item.id) === String(id));
+        const collectionId = folder?.collection_id || this.collectionId;
+        const [folders, requests] = await Promise.all([
+            FolderService.getByCollection(collectionId),
+            RequestService.getByCollection(collectionId)
+        ]);
+        const folderIds = new Set([String(id)]);
+        let foundDescendant = true;
+
+        while (foundDescendant) {
+            foundDescendant = false;
+            for (const item of folders) {
+                if (item.parent_id != null && folderIds.has(String(item.parent_id)) && !folderIds.has(String(item.id))) {
+                    folderIds.add(String(item.id));
+                    foundDescendant = true;
+                }
+            }
+        }
+
+        const requestsToDelete = requests.filter(request => folderIds.has(String(request.folder_id)));
+        for (const request of requestsToDelete) {
+            await RequestService.delete(request.id);
+            this.State.requests = this.State.requests.filter(item => String(item.id) !== String(request.id));
+            this.requestCtrl?.bc?.postMessage({ type: 'REQUEST_DELETED', request_id: request.id });
+            RequestUI.removeRequestElement(request.id);
+            const openTab = this.requestCtrl?.tabCtrl?.tabs.find(tab => String(tab.id) === String(request.id));
+            if (openTab) this.requestCtrl.tabCtrl.forceCloseTab(openTab.id);
+        }
+
         await FolderService.delete(id);
         this.bc.postMessage({ type: 'FOLDER_DELETED', folder_id: id });
-        this.State.folders = this.State.folders.filter(f => f.id !== id);
-        
-        // Cukup panggil render() saja. 
-        // Jika perlu update DOM spesifik, jangan hapus element container-nya.
-        this.render(); 
+        this.State.folders = this.State.folders.filter(item => !folderIds.has(String(item.id)));
+        document.querySelector(`.folder-item[data-id="${id}"]`)?.remove();
     }
 }

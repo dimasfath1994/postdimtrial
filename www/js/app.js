@@ -1153,7 +1153,7 @@ ui.send.onclick = async () => {
         
         // PASTIKAN PENGECEKAN KONDISI RESPONS INI ADA:
         if (!res) {
-          res = { status: "ERROR", data: "Tidak ada respons yang diterima dari server gRPC.", headers: {} };
+          res = { status: "ERROR", data: "No response was received from the gRPC server.", headers: {} };
         } else if (res.error) {
           res = { status: "FAIL", data: res.message || JSON.stringify(res), headers: {} };
         } else {

@@ -2,6 +2,7 @@
  * workspace-management.js
  */
 import { WorkspaceMemberService } from "../workspace-member-service.js";
+import { escapeHtml } from './html-escape.js';
 
 export function initWorkspaceModal() {
     // Inject modal ke body jika belum ada
@@ -83,7 +84,7 @@ export async function showWorkspaceModal(workspaceId) {
             const isOwner = m.role === 'Owner';
             html += `
                 <tr style="border-bottom: 1px solid #222;">
-                    <td style="padding: 10px 0;">${m.name}</td>
+                    <td style="padding: 10px 0;">${escapeHtml(m.name)}</td>
                     <td style="padding: 10px 0;">
                         ${isOwner ? '<span style="color: #ffd700;">Owner</span>' : `
                             <select onchange="updateMemberRole(${m.id}, ${m.workspace_id}, ${m.user_id}, this.value)" style="background: #333; color: white; border: none; padding: 2px;">

@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const password = document.getElementById("loginPassword").value;
 
       if (!email || !password) {
-        alert("Email / password wajib diisi");
+        alert("Email and password are required.");
         return;
       }
 
@@ -117,7 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const password = document.getElementById("regPassword").value;
 
       if (!name || !email || !password) {
-        alert("Semua field wajib diisi");
+        alert("All fields are required.");
         return;
       }
 

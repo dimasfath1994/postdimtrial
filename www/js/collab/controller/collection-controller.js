@@ -82,7 +82,7 @@ export class CollectionController {
                 const idx = this.State.collections.findIndex(c => c.id === data.id);
                 if (idx !== -1) {
                     this.State.collections[idx] = { ...this.State.collections[idx], ...data };
-                    this.render();
+                    this.updateCollectionNameUI(data.id, this.State.collections[idx].name);
                 }
                 break;
 
@@ -106,6 +106,12 @@ export class CollectionController {
             });
         }
         
+    }
+
+    updateCollectionNameUI(id, name) {
+        const collection = document.querySelector(`.collection-item[data-id="${id}"]`);
+        const label = collection?.querySelector('.col-name');
+        if (label) label.textContent = name;
     }
 
 
@@ -136,7 +142,7 @@ export class CollectionController {
             
         } catch (error) {
             console.error("[Export Error]", error);
-            alert("Gagal mengekspor koleksi. Silakan cek konsol.");
+            alert("Failed to export collection. Check the console for details.");
         }
     }
     
@@ -238,24 +244,24 @@ showContextMenu(e, col) {
         
         try {
             // 1. Update ke Backend
-            await CollectionService.update(id, { name: newName });
+            const updated = await CollectionService.update(id, { name: newName });
             
             // 2. Broadcast ke tab lain agar UI mereka juga update
             this.bc.postMessage({ 
                 type: 'COLLECTION_UPDATED', 
-                data: { id, name: newName } 
+                data: { id, name: updated?.name || newName }
             });
             
             // 3. Update State lokal agar UI langsung berubah tanpa refresh
-            const idx = this.State.collections.findIndex(c => c.id === id);
+            const idx = this.State.collections.findIndex(c => String(c.id) === String(id));
             if (idx !== -1) {
-                this.State.collections[idx].name = newName;
-                this.render(); // Panggil render UI
+                this.State.collections[idx].name = updated?.name || newName;
             }
+            this.updateCollectionNameUI(id, updated?.name || newName);
             
         } catch (err) {
             console.error("Gagal rename koleksi:", err);
-            alert("Gagal melakukan rename");
+            alert("Failed to rename collection.");
         }
     }
 
@@ -278,7 +284,7 @@ showContextMenu(e, col) {
             this.render();
         } catch (err) {
             console.error("Gagal delete koleksi:", err);
-            alert("Gagal menghapus koleksi");
+            alert("Failed to delete collection.");
         }
     }
 
@@ -306,7 +312,7 @@ showContextMenu(e, col) {
             // Pastikan kamu punya akses ke instance folderCtrl di sini
             // Biasanya kamu bisa menyimpannya di constructor atau via App context
             await this.folderCtrl.createFolder(
-                this.State.workspaceId, 
+                this.State.workspaceId || document.body.dataset.currentWsId,
                 collectionId, 
                 parentId, 
                 folderName
@@ -315,7 +321,7 @@ showContextMenu(e, col) {
             console.log("Folder created successfully in collection:", collectionId);
         } catch (err) {
             console.error("Gagal menambahkan folder:", err);
-            alert("Gagal menambahkan folder");
+            alert(`Failed to add folder: ${err.message || String(err)}`);
         }
     }
 }

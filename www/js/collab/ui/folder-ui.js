@@ -1,4 +1,5 @@
 import { RequestUI } from './request-ui.js';
+import { escapeHtml } from './html-escape.js';
 /**
  * Merender daftar folder/request ke dalam elemen container (child-list)
  * @param {HTMLElement} parentElement - Elemen tempat list akan disisipkan
@@ -32,6 +33,7 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
         // Jika sudah ada, cukup bersihkan isinya
         childList.innerHTML = '';
     }
+    childList.dataset.loaded = 'true';
 
     // 3. Jika folder dan request sama-sama kosong, abaikan
     if ((!folders || folders.length === 0) && (!requests || requests.length === 0)) {
@@ -61,7 +63,7 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
         item.innerHTML = `
             <div class="folder-header" style="cursor: pointer; display: flex; align-items: center; padding: 4px 0;">
                 <span class="toggle-icon" style="width: 20px;">▶</span>
-                <span class="folder-name" data-id="${folder.id}">📁 ${folder.name}</span>
+                <span class="folder-name" data-id="${escapeHtml(folder.id)}">📁 ${escapeHtml(folder.name)}</span>
             </div>
         `;
         
@@ -72,43 +74,26 @@ export function renderFolderChildren(parentElement, folders, requests, handlers)
         subChildList.style.display = 'none'; // Default tertutup sebelum di-expand
         item.appendChild(subChildList);
 
-        childList.appendChild(item);
-    });
+        item.querySelector('.folder-header').addEventListener('click', async (event) => {
+            event.stopPropagation();
+            const toggleIcon = item.querySelector('.toggle-icon');
+            const isHidden = subChildList.style.display === 'none';
+            subChildList.style.display = isHidden ? 'block' : 'none';
+            if (toggleIcon) toggleIcon.textContent = isHidden ? '▼' : '▶';
 
-    // 7. GLOBAL EVENT DELEGATION
-    if (!window.hasFolderGlobalListeners) {
-        document.addEventListener('click', (e) => {
-            const header = e.target.closest('.folder-header');
-            if (!header) return;
-            
-            const item = header.closest('.folder-item');
-            if (!item) return;
-
-            const existingSub = item.querySelector(':scope > .child-list');
-            const toggleIcon = header.querySelector('.toggle-icon');
-            
-            if (existingSub) {
-                const isHidden = existingSub.style.display === 'none';
-                existingSub.style.display = isHidden ? 'block' : 'none';
-                if (toggleIcon) toggleIcon.textContent = isHidden ? '▼' : '▶';
-            } else {
-                if (toggleIcon) toggleIcon.textContent = '▼';
-                handlers.onExpand(item.dataset.id, item);
+            if (isHidden && subChildList.dataset.loaded !== 'true' && handlers.onExpand) {
+                await handlers.onExpand(folder.id, item);
             }
         });
 
-        document.addEventListener('contextmenu', (e) => {
-            const nameEl = e.target.closest('.folder-name');
-            if (!nameEl) return;
-            e.preventDefault();
-            handlers.onOpenMenu(e, { 
-                id: nameEl.dataset.id, 
-                name: nameEl.textContent.replace('📁 ', '') 
-            });
+        item.querySelector('.folder-name').addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handlers.onOpenMenu(event, folder);
         });
 
-        window.hasFolderGlobalListeners = true;
-    }
+        childList.appendChild(item);
+    });
 }
 
 
@@ -153,21 +138,20 @@ export function showFolderContextMenu(e, folder, handlers) {
         }
     };
 
-    // 4. Binding Event dengan Closure yang benar
-    menu.querySelector('#ctx-rename').onclick = () => { 
-        handlers.onRename(folder.id); 
-        closeMenu(); 
+    // 4. Wait for each action so failures can be surfaced to the user.
+    const runAction = async (action) => {
+        try {
+            await action();
+        } catch (error) {
+            alert(`Action failed: ${error.message || String(error)}`);
+        } finally {
+            closeMenu();
+        }
     };
 
-    menu.querySelector('#ctx-add-folder').onclick = () => { 
-        handlers.onAddFolder(folder.id); 
-        closeMenu(); 
-    };
-
-    menu.querySelector('#ctx-delete').onclick = () => { 
-        handlers.onDelete(folder.id); 
-        closeMenu(); 
-    };
+    menu.querySelector('#ctx-rename').onclick = () => runAction(() => handlers.onRename(folder.id));
+    menu.querySelector('#ctx-add-folder').onclick = () => runAction(() => handlers.onAddFolder(folder.id));
+    menu.querySelector('#ctx-delete').onclick = () => runAction(() => handlers.onDelete(folder.id));
 
     menu.querySelector('#ctx-add-request').onclick = () => {
         // Menggunakan handler yang di-inject dari FolderController
@@ -176,7 +160,7 @@ export function showFolderContextMenu(e, folder, handlers) {
         } else {
             console.error("Handler onAddRequest tidak ditemukan!");
         }
-        closeMenu(); 
+        closeMenu();
     };
 
     // 5. Tutup jika klik di luar area menu
